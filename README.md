@@ -28,18 +28,59 @@ android/
 └── build.gradle
 ```
 
-## Build an APK
+## Development setup (VS Code or command line)
 
-Open `android/` in Android Studio. Install Android SDK platform 35 and use JDK 17. Let Gradle sync, then build an APK. The first build requires internet to download development dependencies; running the app does not.
+Android Studio is optional. You can edit, build, and install this app from VS Code and a terminal. You need:
 
-Command line, with the SDK location in `ANDROID_HOME` or `android/local.properties` (`sdk.dir=/your/android/sdk`):
+- **JDK 17**. The Android Gradle Plugin is 8.9.2 and this project compiles Java 17. On Ubuntu/Debian, install it with `sudo apt install openjdk-17-jdk`; check with `java -version`.
+- **Android SDK command-line tools**, including Android SDK **Platform 35** and **Build-Tools 35.0.0**. Install these with Android Studio's SDK Manager, or with Google's command-line tools and `sdkmanager`:
+
+  ```sh
+  sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+  sdkmanager --licenses
+  ```
+
+- **VS Code** (optional) and its **Extension Pack for Java** (optional, for Java editing and language support). Gradle itself is provided by the checked-in wrapper, so you do not need to install Gradle separately.
+- **Android Platform-Tools** (`adb`) to install the APK on a phone. An emulator is optional; for one, also install Android Emulator and a system image, then create/start an AVD with `avdmanager` / `emulator`.
+
+### Point Gradle to the Android SDK
+
+Set `ANDROID_HOME` to the SDK directory, or create `android/local.properties` containing its path. This file is machine-specific and ignored by Git. For example, on Linux with the SDK installed in the usual location:
+
+```sh
+cd android
+printf 'sdk.dir=%s\n' "$HOME/Android/Sdk" > local.properties
+```
+
+The file should look like this (replace the path if your SDK is elsewhere):
+
+```properties
+sdk.dir=/home/YOUR_USERNAME/Android/Sdk
+```
+
+On Windows, use forward slashes in the path, for example `sdk.dir=C:/Users/YOUR_USERNAME/AppData/Local/Android/Sdk`.
+
+### Build and install
+
+Open the repository folder in VS Code. In its integrated terminal, run:
 
 ```sh
 cd android
 ./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
-adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+On Windows, run `gradlew.bat assembleDebug`. The debug APK is created at `android/app/build/outputs/apk/debug/app-debug.apk`. The first build needs internet to download Gradle and Android dependencies; running the app does not.
+
+To install and launch on a USB-connected Android phone, enable Developer options and USB debugging, connect and authorize the phone, then run from `android/`:
+
+```sh
+adb devices
+./gradlew installDebug
+```
+
+The app will appear on the phone as **Pandastic Relay**. You can also transfer the APK above to the phone and install it. To use an emulator, start an AVD first; `emulator -list-avds` lists configured emulators and `emulator -avd NAME` starts one.
+
+If Gradle reports that the SDK location is missing, check that `android/local.properties` points to the SDK directory and that the directory contains `platforms/android-35`. If it warns that an SDK XML version is newer than the version it understands, update Android SDK Command-line Tools in SDK Manager, then retry.
 
 Minimum device OS: Android 6.0 (API 23). RAM alone does not establish compatibility: check the actual phone's Android version, microphone and ability to run its recording codec.
 
