@@ -22,13 +22,16 @@ The **small phone** may have very little RAM. It should capture or send a reques
 
 ## Current repository state
 
-- Android app in Java under `android/`.
-- Current client/server path is local HTTP over Wi-Fi/hotspot.
-- The small phone can record a short AAC clip and submit it to the strong phone.
-- The strong phone currently returns fixed demo text rendered through Android offline TTS.
+- React + TypeScript frontend under `frontend/`, with conversation UI, photo attachments, microphone recording, activity, model status, and a phone-line connection plan. Gradle bundles it into the Android APK and `FrontendActivity` launches it through WebView. It uses demo responses and does not connect to a model or carrier service. See `frontend/README.md`.
+- `make run` builds/installs/launches the React APK on an emulator; `make run-device` does the same on a USB-connected Samsung/Android phone. `make web` starts a computer-browser preview.
+
+- Android native wrapper and model/relay scaffolding in Java under `android/`; the user interface is React.
+- The legacy Java client/server path is local HTTP over Wi-Fi/hotspot; it is not connected to the React UI.
+- The legacy small-phone code records a short AAC clip and submits it to that HTTP server.
+- The legacy server returns fixed demo text rendered through Android offline TTS. The React UI separately returns demonstration text and can record/play back voice notes.
 - `SpeechPipeline` is an extension point; no real ASR, LLM, VLM, image understanding, or local knowledge store is implemented.
 - No carrier call, SMS, or MMS integration is implemented.
-- The README contains Android build and local-network prototype instructions. Those instructions describe the demo only, not the final connectivity requirement.
+- The README contains Android build instructions and describes the legacy local-network prototype code. That old Java screen is no longer the launcher, and its transport does not satisfy the final connectivity requirement.
 
 ## Recommended work order
 

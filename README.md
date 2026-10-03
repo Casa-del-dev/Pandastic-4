@@ -4,7 +4,7 @@ Pandastic is intended to let a person use a small, low-memory phone to reach AI 
 
 **A core requirement is that the two phones communicate over carrier phone service, such as a voice call or SMS/MMS, without internet access.** Local Wi-Fi or a hotspot does not meet the intended deployment constraint. The exact phone-line transport is still an open design question, especially how a normal call's audio can reach an app's local model on the strong phone.
 
-The current app is an early Android prototype whose small-phone-to-strong-phone transport uses local HTTP over Wi-Fi/hotspot. It is useful as a model and UI starting point, but it does not meet the phone-line requirement yet. Its response is fixed demo speech; it does not currently run speech recognition, an LLM/VLM, or image understanding. See [TODO.md](TODO.md) for the project context and next steps.
+The current APK launches a React interface bundled locally inside Android's WebView. It accepts text, pictures, and voice notes and shows demo responses. It does not yet run speech recognition, an LLM/VLM, image understanding, or carrier communication. Earlier Java code contains a local HTTP relay demo, but that screen is no longer the launcher. See [TODO.md](TODO.md) for the project context and next steps.
 
 ## Intended product
 
@@ -15,22 +15,38 @@ The current app is an early Android prototype whose small-phone-to-strong-phone 
 
 ## Current prototype
 
-- Native Android app, implemented in Java.
-- The strong phone runs a foreground HTTP server on port 8080 over local Wi-Fi/hotspot.
-- The small phone records up to 30 seconds of mono AAC audio and sends it to that server.
-- The strong phone returns a fixed demo reply using an installed offline English Android TTS voice.
-- No actual speech recognition, model inference, database retrieval, image input, cellular call integration, or SMS/MMS transport is implemented.
+The React + TypeScript frontend lives in [`frontend/`](frontend/README.md). Android's Gradle build automatically builds it and bundles its static output into the APK. `FrontendActivity` loads it locally, handles image selection/camera capture and microphone permissions, and blocks external web requests. No React dev server is needed on the phone.
+
+- React interface for text, picture attachments, voice-note recording/playback, and demo conversations.
+- Java native wrapper and legacy relay/model scaffolding.
+- No actual speech recognition, model inference, database retrieval, image understanding, cellular call integration, or SMS/MMS transport is implemented.
+
+From the repository root:
+
+```sh
+make run-device  # Build, install and launch on a USB-connected Samsung/Android phone
+make run         # Build, install and launch on an emulator
+make build       # Build the APK without installing it
+make web         # Preview React in the computer's browser (npm install first if needed)
+```
+
+For a physical phone, enable Developer options and USB debugging, connect by USB, and accept the authorization prompt. Check `adb devices` if the phone is not detected. With multiple phones, use `make run-device DEVICE=YOUR_SERIAL`.
 
 ## Folder structure
 
 ```text
+frontend/                         # React source; also usable as a browser preview
+├── src/
+├── package.json / package-lock.json
+└── vite.config.ts
 android/
 ├── app/
 │   ├── build.gradle
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       └── java/org/pandastic/relay/
-│           ├── MainActivity.java    # role controls, recording and playback
+│           ├── FrontendActivity.java # launcher: bundled React UI, camera and microphone
+│           ├── MainActivity.java    # legacy relay screen, no longer the launcher
 │           ├── RelayClient.java     # upload speech / download spoken reply
 │           ├── RelayServer.java     # bounded local HTTP server
 │           ├── SpeechPipeline.java  # replace demo with offline ASR + LLM
@@ -45,6 +61,7 @@ android/
 
 Android Studio is optional. You can edit, build, and install this app from VS Code and a terminal. You need:
 
+- **Node.js 20.19+ or 22.12+ and npm** to build the React assets. Ensure `node` and `npm` are on `PATH` for terminal and Android Studio builds.
 - **JDK 17**. The Android Gradle Plugin is 8.9.2 and this project compiles Java 17. On Ubuntu/Debian, install it with `sudo apt install openjdk-17-jdk`; check with `java -version`.
 - **Android SDK command-line tools**, including Android SDK **Platform 35** and **Build-Tools 35.0.0**. Install these with Android Studio's SDK Manager, or with Google's command-line tools and `sdkmanager`:
 
@@ -86,7 +103,7 @@ If your AVD has a different name, pass it like this:
 make run EMULATOR_NAME="Your AVD Name"
 ```
 
-The Makefile expects `adb` and `emulator` on `PATH`. If they are not, provide their locations with `ADB=/path/to/adb` and `EMULATOR=/path/to/emulator`. Stop the first running emulator with `make stop`. These targets use the debug build and do not alter Android SDK settings.
+The Makefile locates SDK tools using `ANDROID_HOME`, `ANDROID_SDK_ROOT`, or `android/local.properties`, falling back to tools on `PATH`. You can override paths with `SDK_DIR=/path/to/sdk`, `ADB=/path/to/adb`, and `EMULATOR=/path/to/emulator`. It reuses an existing emulator and waits up to 180 seconds for boot. Failed startup logs are in `/tmp/pandastic-emulator.log`. With multiple emulators use `DEVICE=emulator-5554` to select one. Stop it with `make stop` (and the same `DEVICE` if needed).
 
 On Windows, use forward slashes in the path, for example `sdk.dir=C:/Users/YOUR_USERNAME/AppData/Local/Android/Sdk`.
 
@@ -99,7 +116,7 @@ cd android
 ./gradlew assembleDebug
 ```
 
-On Windows, run `gradlew.bat assembleDebug`. The debug APK is created at `android/app/build/outputs/apk/debug/app-debug.apk`. The first build needs internet to download Gradle and Android dependencies; running the app does not.
+On Windows, run `gradlew.bat assembleDebug`. The debug APK is created at `android/app/build/outputs/apk/debug/app-debug.apk`. Gradle also runs `npm ci` and `npm run build` as needed and copies the React build into the APK. The first build needs internet to download Gradle, Android, and npm dependencies; running the app does not.
 
 To install and launch on a USB-connected Android phone, enable Developer options and USB debugging, connect and authorize the phone, then run from `android/`:
 
@@ -112,11 +129,11 @@ The app will appear on the phone as **Pandastic Relay**. You can also transfer t
 
 If Gradle reports that the SDK location is missing, check that `android/local.properties` points to the SDK directory and that the directory contains `platforms/android-35`. If it warns that an SDK XML version is newer than the version it understands, update Android SDK Command-line Tools in SDK Manager, then retry.
 
-Minimum device OS: Android 6.0 (API 23). RAM alone does not establish compatibility: check the actual phone's Android version, microphone and ability to run its recording codec.
+Minimum device OS: Android 6.0 (API 23). The React UI also needs a modern Android System WebView; update it before deployment. RAM alone does not establish compatibility: check the actual phone's Android version, WebView, microphone and recording support.
 
-## Connect the phones (prototype only)
+## Legacy relay code (prototype only)
 
-This section describes the current Wi-Fi demo, not the intended phone-line deployment.
+The earlier Java relay code uses Wi-Fi, not the intended phone-line deployment. It remains in the repository for reference; its `MainActivity` is no longer launched by `make run` and these controls are not part of the React screen.
 
 1. While internet is still available, install an **offline English TTS voice** on the strong phone through its Android text-to-speech settings. Models are not downloaded by this app.
 2. Create a hotspot on the strong phone and join it from the small phone, or connect both to the same Wi-Fi. Internet or mobile data is not needed. Some devices disable hotspots without mobile service; in that case use a local Wi-Fi router. Wi-Fi client isolation must be disabled.
@@ -141,8 +158,8 @@ Keep ASR, model runtime and database access behind separate classes. Put native 
 ## Scope and limitations
 
 - Local HTTP is unencrypted. The pairing code limits access but does not encrypt recordings. Use a trusted hotspot for the demo; production should add TLS and proper device pairing.
-- No cloud endpoints, automatic discovery, background service, persistent queue, speech recognition, model inference, local knowledge database or image support are included.
+- No cloud endpoints, automatic discovery, background service, persistent queue, speech recognition, model inference, local knowledge database or carrier communication are included. Picture capture/selection is supported; AI image understanding is not.
 - Offline speech output depends on the device's TTS engine and installed voice. The app selects a voice that reports it does not require a network connection and returns an error when none is available.
-- Low memory compatibility, sound quality and connectivity must be checked on the actual phones. No device testing or APK compilation has been completed in this workspace, which has no Java or Android SDK installed.
+- Low memory compatibility, sound quality and carrier connectivity must be checked on the actual phones. The APK build and `make run` succeeded in the emulator. Bundled React loading, typed demo requests, and WebView microphone recording were checked with airplane mode enabled. A physical Samsung has not yet been tested.
 
-Android references: [TTS API](https://developer.android.com/reference/android/speech/tts/TextToSpeech), [AGP 8.9 compatibility](https://developer.android.com/build/releases/agp-8-9-0-release-notes).
+Android references: [Load bundled content with WebViewAssetLoader](https://developer.android.com/develop/ui/views/layout/webapps/load-local-content), [TTS API](https://developer.android.com/reference/android/speech/tts/TextToSpeech), [AGP 8.9 compatibility](https://developer.android.com/build/releases/agp-8-9-0-release-notes).

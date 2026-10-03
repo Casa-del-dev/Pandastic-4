@@ -1,4 +1,32 @@
 plugins { id 'com.android.application' }
+
+// Keep React source separate; package its production build inside the APK.
+def frontendDirectory = rootProject.file('../frontend')
+def generatedFrontendAssets = layout.buildDirectory.dir('generated/frontendAssets')
+def npmCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
+
+def installFrontend = tasks.register('installFrontend', Exec) {
+    workingDir frontendDirectory
+    commandLine npmCommand, 'ci', '--no-audit', '--no-fund'
+    inputs.files(new File(frontendDirectory, 'package.json'), new File(frontendDirectory, 'package-lock.json'))
+    outputs.dir(new File(frontendDirectory, 'node_modules'))
+}
+
+def buildFrontend = tasks.register('buildFrontend', Exec) {
+    dependsOn installFrontend
+    workingDir frontendDirectory
+    commandLine npmCommand, 'run', 'build'
+    inputs.dir(new File(frontendDirectory, 'src'))
+    inputs.files(['package.json', 'package-lock.json', 'index.html', 'tsconfig.json', 'vite.config.ts'].collect { new File(frontendDirectory, it) })
+    outputs.dir(new File(frontendDirectory, 'dist'))
+}
+
+def syncFrontendAssets = tasks.register('syncFrontendAssets', Sync) {
+    dependsOn buildFrontend
+    from(new File(frontendDirectory, 'dist'))
+    into(generatedFrontendAssets.map { it.dir('pandastic') })
+}
+
 android {
     namespace 'org.pandastic.relay'
     compileSdk 35
@@ -13,4 +41,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    sourceSets.main.assets.srcDir(generatedFrontendAssets)
+}
+
+tasks.named('preBuild').configure { dependsOn syncFrontendAssets }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.15.0'
 }
