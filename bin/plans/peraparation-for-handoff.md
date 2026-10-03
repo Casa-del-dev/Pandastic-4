@@ -8,6 +8,7 @@ Below is the complete architectural handoff: how photos and questions reach the 
 > - The XGBoost image + weather fusion was dropped for coffee (no paired data). It is kept as a maize-only stretch goal on *Eyes on the Ground*.
 > - Dataset list rewritten (section 3). **WFP has no coffee prices.** The earlier "Coffee (Parchment)" row and `fair_price_floor` column were invented and have been removed.
 > - Knowledge base now comes from CABI PlantwisePlus and Access Agriculture instead of YouTube transcripts.
+> - Reasoner output is forced into valid JSON with a llama.cpp GBNF grammar, with enums for fixed labels, then checked in code (section 4).
 
 
 
@@ -231,6 +232,33 @@ Cover every decision type: diagnosis (all three crops), grain quality, planting 
 }
 ```
 Other statuses to cover: `UNCERTAIN` (low score/margin), `RETAKE` (bad photo), `ASK_CROP` (question and photo disagree), stale price, and grain mould (always "get it tested").
+
+#### Force valid JSON at decode time (GBNF grammar)
+Small models often wrap JSON in Markdown fences or add text around it. A September 2026 study of sub-2B models ([Shahriar & Mastoi, arXiv:2609.07370](https://arxiv.org/abs/2609.07370)) found that **only 5 of 1,000 responses were directly parseable as JSON**. Even the best model reached 79% only after a repair step removed the extra text. Those were older models than MiniCPM5-1B, but the risk applies to any model this size.
+
+So we don't parse and hope:
+* **Constrain decoding in llama.cpp.** Convert one JSON Schema to a GBNF grammar (llama.cpp's `json_schema_to_grammar`, or pass the schema directly) and apply it to every reasoner call. The model then cannot produce text outside the schema.
+* **Use enums for anything from a fixed list:** `status`, `crop`, and `condition` (exactly the classifier's label names plus `uncertain` / `not_supported`). The LLM can only name a condition the classifier knows, which is the brief's "fixed list of answers".
+* **One schema everywhere:** the LoRA training outputs (above) use the same schema as the grammar, so the fine-tune and the constraint agree.
+* **Still check the meaning in code.** The grammar guarantees valid syntax, not correct content. After decoding, verify that `condition` matches the photo report's label, that `escalate_to_officer` is `true` whenever status is not `CONFIDENT`, and that every `source` exists in SQLite. On any mismatch, return the "Not sure — ask a person" response.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "status":    {"enum": ["CONFIDENT", "UNCERTAIN", "UNSUPPORTED", "RETAKE", "ASK_CROP", "TEXT_ONLY"]},
+    "crop":      {"enum": ["coffee", "maize", "beans", "unknown"]},
+    "condition": {"enum": ["coffee_rust", "coffee_miner", "...all classifier labels...", "uncertain", "not_supported", "none"]},
+    "confidence":         {"type": "number"},
+    "advice":             {"type": "string"},
+    "price_advice":       {"type": "string"},
+    "source":             {"type": "string"},
+    "escalate_to_officer":{"type": "boolean"},
+    "referral":           {"type": "string"}
+  },
+  "required": ["status", "crop", "condition", "advice", "escalate_to_officer"]
+}
+```
 
 ---
 
