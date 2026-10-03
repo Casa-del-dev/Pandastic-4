@@ -1,12 +1,25 @@
 # Pandastic Relay
 
-A native Android APK skeleton for two phones communicating over local Wi-Fi or a phone hotspot, without internet during use. Install the **same APK** on both devices.
+Pandastic is intended to let a person use a small, low-memory phone to reach AI models running locally on a more capable Android phone. The strong phone should also accept pictures directly (for example, from its camera or gallery) and let its user query its local models.
 
-- **Small phone:** records up to 30 seconds of mono AAC audio, sends it to the stronger phone, and plays returned speech. No model runs here.
-- **Strong phone:** runs a foreground HTTP server on port 8080 and generates a spoken response with an installed offline English Android TTS voice.
-- **Current demo:** returns a fixed message acknowledging receipt. It does **not** recognize the user's speech or run an LLM/VLM. The pipeline interface is where those models will go.
+**A core requirement is that the two phones communicate over carrier phone service, such as a voice call or SMS/MMS, without internet access.** Local Wi-Fi or a hotspot does not meet the intended deployment constraint. The exact phone-line transport is still an open design question, especially how a normal call's audio can reach an app's local model on the strong phone.
 
-This is push-to-talk with a reply after recording, rather than a telephone call or simultaneous conversation. Photos are not included in this skeleton.
+The current app is an early Android prototype whose small-phone-to-strong-phone transport uses local HTTP over Wi-Fi/hotspot. It is useful as a model and UI starting point, but it does not meet the phone-line requirement yet. Its response is fixed demo speech; it does not currently run speech recognition, an LLM/VLM, or image understanding. See [TODO.md](TODO.md) for the project context and next steps.
+
+## Intended product
+
+- **Strong phone:** runs models locally, accepts typed, spoken, and picture inputs, and returns text and/or spoken answers. It is also the server/AI host for requests from the small phone.
+- **Small phone:** should be usable on a low-RAM device. It captures speech or a picture, sends the request over the supported phone-line channel, and presents the answer. Heavy models run on the strong phone.
+- **Connectivity:** carrier voice/SMS/MMS only in the target location, with no internet. Carrier coverage is still required. Whether images can be sent this way depends on the chosen SMS/MMS or call-based design and carrier support.
+- **Platform assumption:** Android is the current project platform. Confirm the actual phone models and Android versions before committing to telephony APIs or model runtimes.
+
+## Current prototype
+
+- Native Android app, implemented in Java.
+- The strong phone runs a foreground HTTP server on port 8080 over local Wi-Fi/hotspot.
+- The small phone records up to 30 seconds of mono AAC audio and sends it to that server.
+- The strong phone returns a fixed demo reply using an installed offline English Android TTS voice.
+- No actual speech recognition, model inference, database retrieval, image input, cellular call integration, or SMS/MMS transport is implemented.
 
 ## Folder structure
 
@@ -101,7 +114,9 @@ If Gradle reports that the SDK location is missing, check that `android/local.pr
 
 Minimum device OS: Android 6.0 (API 23). RAM alone does not establish compatibility: check the actual phone's Android version, microphone and ability to run its recording codec.
 
-## Connect the phones
+## Connect the phones (prototype only)
+
+This section describes the current Wi-Fi demo, not the intended phone-line deployment.
 
 1. While internet is still available, install an **offline English TTS voice** on the strong phone through its Android text-to-speech settings. Models are not downloaded by this app.
 2. Create a hotspot on the strong phone and join it from the small phone, or connect both to the same Wi-Fi. Internet or mobile data is not needed. Some devices disable hotspots without mobile service; in that case use a local Wi-Fi router. Wi-Fi client isolation must be disabled.
