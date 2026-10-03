@@ -9,6 +9,35 @@ Below is the complete architectural handoff: how photos and questions reach the 
 > - Dataset list rewritten (section 3). **WFP has no coffee prices.** The earlier "Coffee (Parchment)" row and `fair_price_floor` column were invented and have been removed.
 > - Knowledge base now comes from CABI PlantwisePlus and Access Agriculture instead of YouTube transcripts.
 
+
+
+
+
+### The Dual-Mode Architecture: How It Works
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │           THE HOUSEHOLD SETUP                │
+                     └──────────────────────────────────────────────┘
+                                        │
+           ┌────────────────────────────┴────────────────────────────┐
+           ▼                                                         ▼
+┌──────────────────────────────────────┐  ┌──────────────────────────────────────┐
+│ MODE 1: PHYSICAL ACCESS              │  │ MODE 2: REMOTE ACCESS                │
+│ (Evenings & Weekends at the House)   │  │ (Daytime: Noor on the Slopes)        │
+├──────────────────────────────────────┤  ├──────────────────────────────────────┤
+│ • Noor physically holds the          │  │ • Daughter's smartphone stays at     │
+│   daughter's smartphone.             │  │   the house (connected to a charger).│
+│ • Camera & Multimodal Vision:        │  │ • Noor is 2 km away on the coffee    │
+│   Noor scans diseased leaves offline.│  │   slope with her basic button phone. │
+│ • Airplane Mode = ON.                │  │ • Noor sends an SMS:                 │
+│   Zero wireless signals needed.      │  │   "Yellow spots under coffee leaves" │
+│ • Local AI (MiniCPM-V or MobileNet)  │  │ • Daughter's phone intercepts SMS,   │
+│   analyzes the leaf directly on the  │  │   runs the on-device Small AI,       │
+│   phone screen.                      │  │   and texts Noor back automatically! │
+└──────────────────────────────────────┘  └──────────────────────────────────────┘
+```
+
 ---
 
 ### 1. Image Handling: Photos Become Text for a Text-Only Reasoner
