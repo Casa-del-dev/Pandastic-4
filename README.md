@@ -42,6 +42,7 @@ Android Studio is optional. You can edit, build, and install this app from VS Co
 
 - **VS Code** (optional) and its **Extension Pack for Java** (optional, for Java editing and language support). Gradle itself is provided by the checked-in wrapper, so you do not need to install Gradle separately.
 - **Android Platform-Tools** (`adb`) to install the APK on a phone. An emulator is optional; for one, also install Android Emulator and a system image, then create/start an AVD with `avdmanager` / `emulator`.
+- **GNU Make** to use the optional root-level emulator shortcuts below. On Windows, use Make from WSL or install a Make-compatible environment.
 
 ### Point Gradle to the Android SDK
 
@@ -57,6 +58,22 @@ The file should look like this (replace the path if your SDK is elsewhere):
 ```properties
 sdk.dir=/home/YOUR_USERNAME/Android/Sdk
 ```
+
+### Run on an emulator with Make
+
+Create an Android Virtual Device (AVD) in Android Studio's Device Manager or with `avdmanager`. The Makefile defaults to an AVD named `Medium_Phone_API_37.0`; this is only a default name, and AVDs are local to each developer's machine. Start the app build, install and launch flow from the repository root with:
+
+```sh
+make run
+```
+
+If your AVD has a different name, pass it like this:
+
+```sh
+make run EMULATOR_NAME="Your AVD Name"
+```
+
+The Makefile expects `adb` and `emulator` on `PATH`. If they are not, provide their locations with `ADB=/path/to/adb` and `EMULATOR=/path/to/emulator`. Stop the first running emulator with `make stop`. These targets use the debug build and do not alter Android SDK settings.
 
 On Windows, use forward slashes in the path, for example `sdk.dir=C:/Users/YOUR_USERNAME/AppData/Local/Android/Sdk`.
 
