@@ -1,5 +1,7 @@
 # Testing Pandastic
 
+For sessions with people (task script, photo key, observation sheet), see [HUMAN-TEST.md](HUMAN-TEST.md).
+
 There are three levels, from fastest to most real. The commands run from the repo root.
 
 | What | Command | Needs | Time |
