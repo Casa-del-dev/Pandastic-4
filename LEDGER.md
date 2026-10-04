@@ -234,3 +234,16 @@ Done (one line each; details in git and the archived ledger):
   Later, not before the freeze: trim the 248k vocabulary to sw/en/lg (embedding = 199 of 506 MiB; our text uses 1,412
   tokens), save the system-prompt state to a file so the LLM can unload between SMS, LLM in its own process. Together
   they would make a 2B model fit in about today's footprint (estimate). Context 1024 or a q8 KV cache: −6–8 MiB only.
+- [A 10:19] **566a85c + fddc272 (user decisions):** (1) the LLM reads every message; replies show "AI ya simu imeelewa: …"
+  (SMS: own line if it fits 2 parts; chat: `understood`). (2) In the **helper's chat only**, the model also rewrites the
+  fixed answer (`ai_reply`, shown first with 🤖, fixed answer below), checked by `ReplyWriter`: no new number / crop /
+  disease / chemical / unit / org / "fair·sawa·healthy" judgment, no extra negation, warnings + price UGX figure and
+  source kept, Swahili may only reuse words of the answer. **Automatic SMS always get the fixed answer** (an English
+  rewrite passed every check yet dropped "farm-gate is usually lower"). Measured why: `docs/LLM-WRITING.md` (Qwen 0.8B
+  ours/base, Gemma 3 1B, Qwen 2B × sw/en/es/id/vi): Swahili non-words; every model sometimes flips meaning ("that's a
+  fair price" for −23%, "copper is not needed"). On the app probe only 3/29 rewrites pass (mostly copies, rejected).
+  JNI: `nativeWrite` (free text, no prefix cache, repeat penalty). Merged cleanly with B's O4. e2e **32/32** on the
+  merged tree (effb0 + O4 + Whisper). **C:** `frontend/src/answers.ts` shows `ai_reply` (🤖) else `understood` first;
+  `Decision` gained `nlu?`, `understood?`, `ai_reply?`; please ack / restyle. **B:** HUMAN-TEST key updated (leaf3
+  not sure 0.98, leaf4 healthy 0.99; checked on the emulator, leaf5 RETAKE, picture6 UNSUPPORTED). Next real fix for
+  writing: a LoRA rewrite task (answer → rewrite pairs, native review), measured with the same checker.
