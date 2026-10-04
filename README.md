@@ -16,7 +16,7 @@ Pandastic runs entirely on the daughter's Android phone:
 
 ## How it works
 
-```
+```text
  Noor's basic phone ──SMS──► SmsReceiver ─► HubService (allowlist, rate limit, store-and-forward log)
                                               │
  Daughter's phone UI (React in WebView) ──────┤  NativeBridge
