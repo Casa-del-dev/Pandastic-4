@@ -154,6 +154,18 @@ def reeval(labels: str, coffee_split: str, version: str) -> dict:
     return meta
 
 
+@app.function(image=image, volumes={"/data": data_volume}, cpu=16, memory=16384, timeout=3600)
+def photo_stats(tag: str, splits: list[str]) -> dict:
+    """QualityGate numbers (plant share, sharpness, luminance) of real dataset photos through the app path."""
+    from concurrent.futures import ProcessPoolExecutor
+    from leaf import data, photo_stats as ps
+    data_volume.reload()
+    rows = [r for r in data.read_manifest(DATA / f"manifest-{tag}.csv") if r["split"] in splits]
+    with ProcessPoolExecutor(16) as pool:
+        values = list(pool.map(ps.measure, [r["path"] for r in rows], chunksize=16))
+    return ps.summarise(rows, values)
+
+
 @app.function(image=image, cpu=8, memory=8192, timeout=1800)
 def smoke_test() -> str:
     """leaf/smoke.py for machines without torch: `modal run modal_app.py::smoke_test` (synthetic data, CPU)."""
@@ -191,6 +203,9 @@ def main(stage: str = "all", labels: str = "p0", coffee_split: str = "mix", epoc
     from leaf import config
     if stage == "reeval":
         print(json.dumps(reeval.remote(labels, coffee_split, version)["eval"], indent=2))
+        return
+    if stage == "photo-stats":
+        print(json.dumps(photo_stats.remote(_tag(labels, coffee_split), ["calib", "test"]), indent=1))
         return
     git_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     result = pipeline.remote(stage, labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size, seed)
