@@ -109,6 +109,8 @@ def extract(sources, raw_dir: Path, work_dir: Path, log=print) -> None:
                 # bsdtar exits non-zero on the truncated last entry; keep everything it could read.
                 subprocess.run(["bsdtar", "-xf", str(archive), "-C", str(dest)], check=False)
             for inner in sorted(dest.rglob("*.tar.gz")):  # Caltech-101 ships its images as a tar.gz inside the zip
+                if inner.name.startswith("._") or "__MACOSX" in inner.parts:  # macOS resource forks, not archives
+                    continue
                 with tarfile.open(inner) as t:
                     t.extractall(inner.parent)
             (dest / ".done").write_text("ok")
