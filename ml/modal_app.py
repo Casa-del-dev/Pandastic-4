@@ -54,7 +54,7 @@ def manifest(labels: str) -> dict:
     return stats
 
 
-@app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, gpu="L4", cpu=8,
+@app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, gpu="L4", cpu=16,
               memory=32768, timeout=4 * 3600)
 def train(labels: str, epochs: int, batch_size: int, lr: float, smoke: bool) -> dict:
     from datetime import datetime, timezone
@@ -64,7 +64,7 @@ def train(labels: str, epochs: int, batch_size: int, lr: float, smoke: bool) -> 
     stats = json.loads((DATA / f"manifest-{labels}.json").read_text())
     version = f"leaf-{labels}-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M") + ("-smoke" if smoke else "")
     meta = trainer.run(rows, _labels(labels), MODELS / "leaf" / version, stats, epochs=1 if smoke else epochs,
-                       batch_size=batch_size, lr=lr, device="cuda", workers=8, max_steps=30 if smoke else None,
+                       batch_size=batch_size, lr=lr, device="cuda", workers=14, max_steps=30 if smoke else None,
                        version=version)
     models_volume.commit()
     return meta

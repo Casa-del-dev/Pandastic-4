@@ -244,14 +244,37 @@ def onnx_parity(model, path: Path, samples: torch.Tensor) -> float:
 
 # ---------------------------------------------------------------- full run
 
+def readable(path: str) -> bool:
+    try:
+        with Image.open(path) as im:
+            im.verify()
+        return True
+    except Exception:
+        return False
+
+
+def drop_unreadable(rows, log=print, workers=32):
+    """Some dataset files are not images at all (e.g. JMuBEN2 healthy/2 (691).jpg); one crashed evaluation
+    after 12 epochs. Check every file once, before training."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(workers) as pool:
+        ok = list(pool.map(readable, [r["path"] for r in rows]))
+    bad = [r["path"] for r, good in zip(rows, ok) if not good]
+    if bad:
+        log(f"dropped {len(bad)} unreadable files, e.g. {bad[:3]}")
+    return [r for r, good in zip(rows, ok) if good]
+
+
 def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size=64, lr=1e-3, pretrained=True,
         device=None, workers=4, max_steps=None, target_accuracy=0.90, version=None, log=print) -> dict:
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     out_dir.mkdir(parents=True, exist_ok=True)
+    rows = drop_unreadable(rows, log)
     version = version or "leaf-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     log(f"{version}: {sum(r['split'] == 'train' for r in rows)} train rows on {device}, labels {labels}")
 
     model, history = train_model(rows, labels, epochs, batch_size, lr, pretrained, device, workers, max_steps, log)
+    torch.save(model.state_dict(), out_dir / "model_best.pt")  # survives a crash in calibration or export
     split = lambda name: [r for r in rows if r["split"] == name]
     val_logits, val_y = predict_logits(model, split("val"), labels, device, workers=workers)
     temperature = fit_temperature(val_logits, val_y)
