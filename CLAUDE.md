@@ -1,6 +1,6 @@
 # Pandastic: project memory for Claude sessions
 
-Maintained by agent B (ledger task T50); last updated 2026-10-04 06:36 UTC. **`LEDGER.md` is the source of truth for
+Maintained by agent B (ledger task T50); last updated 2026-10-04 08:05 UTC. **`LEDGER.md` is the source of truth for
 live work: read it after every pull.** Details live in `docs/`. Update this file when the codebase changes in a way
 that makes something here wrong.
 
@@ -69,10 +69,12 @@ Data:  knowledge.sqlite (cited advice EN+SW, prices, lexicon) ◄── Resolver
 - **HubPolicy:** the helper auto-replies only to farming SMS (menu request, or a price/problem/planting question the
   keywords recognised, or the LLM recognised with a keyword crop). Personal messages from the same allowed numbers
   ("Habari mwanangu, shule inaendaje?") get no reply; they stay in the normal SMS app and the log keeps only `personal`,
-  not the text. Plain greetings and "nisaidie" currently get no reply either (B suggested menu triggers to A).
+  not the text. A message that is only a help request gets the menu ("nisaidie", "what can you do"; a farming word
+  next to it counts), but "nisaidie pesa ya ada" stays personal; plain greetings get no reply (214928a).
 - **Phone modes:** *Basic* (SMS chat + Settings, no models) and *Capable* (chat with on-phone questions,
   camera/gallery, Models page with file import and the opt-in download, opt-in automatic SMS replies to allowlisted
-  numbers, contacts chosen from a search dropdown, read-aloud, dictation).
+  numbers, contacts chosen from a search dropdown, read-aloud, dictation). Dictation is offline on both: Whisper Tiny
+  Q5_1 (32 MB, whisper.cpp, bundled; fetched at build by `scripts/fetch-whisper-tiny.mjs`, needs `node` + CMake).
 - **Bridge additions (additive, A):** `modelDownload('start'|'cancel')` → `{ok, error}`; `modelStatus().download` =
   `{state: none|queued|running|paused|verifying|done|failed, bytes, total, name, reason?, error?}`, `pandastic:models`
   events every 1.5 s while it runs. `make e2e` reads the method list from `type Native` in `frontend/src/native.ts`.
@@ -104,39 +106,44 @@ scripts/                             android-emulator.sh, bridge-e2e.mjs, sms-la
 
 ## Models in the app
 
-**Leaf classifier `leaf-p2-mix-ens3-0483c29f`** (installed in cff9e12):
+**Leaf classifier `leaf-p2-mix-efficientnetb0-ens3-a16129a8`** (installed by B for O1 after the emulator check, a6845f7):
 
-- 3 × MobileNetV4-Conv-Small (timm, ImageNet-pretrained, 3 seeds) averaged inside one ONNX file. Weights stored as
-  int8, compute in fp32, 7.7 MB. Same I/O contract: `input` [1,3,224,224], direct bilinear resize, ImageNet
-  mean/std, output `logits` [1,14]. The app sets ORT `session.disable_quant_qdq` (5 ms vs 15 ms per photo, laptop).
+- 3 × EfficientNet-B0 (timm, ImageNet-pretrained, 3 seeds) averaged inside one ONNX file. Weights stored as int8,
+  compute in fp32, 12.7 MB. Same I/O contract: `input` [1,3,224,224], direct bilinear resize, ImageNet mean/std,
+  output `logits` [1,14]. The app sets ORT `session.disable_quant_qdq`.
 - Labels: coffee `healthy rust miner cercospora phoma`, maize `healthy leaf_blight leaf_spot fall_armyworm
-  streak_virus`, bean `healthy angular_leaf_spot rust`, `other`. Temperature 0.914, `min_prob` 0.40, `min_margin`
-  0.05, `per_class_min_prob` coffee_healthy 0.99, maize_healthy 0.99, bean_healthy 0.65 (chosen on calib for
-  precision: a false "healthy" is the worst answer).
+  streak_virus`, bean `healthy angular_leaf_spot rust`, `other`. Temperature 0.933, `min_prob` 0.40, `min_margin` 0,
+  `per_class_min_prob` coffee_healthy 0.99, maize_healthy 0.98, other maize labels 0.82, bean_healthy 0.54. These
+  were **chosen on calib photos run through the app on the emulator** (each crop ≥ 90% right; each healthy label ≥ 99%
+  precision), because the app's photo path shifts this model's probabilities (see below).
 - Training data: BRACOL (Brazil), JMuBEN (Kenya close-ups), RoCoLe (Ecuador phone photos, split by plant, half
   trained on), CCMT (Ghana maize), iBean (Uganda beans), PlantDoc, Caltech-101 (non-plant `other`, split by
   category). Licences: `docs/DATA.md`.
-- Held-out results: RoCoLe test plants through the app path: answers 63%, 96.9% of answers right, rust called
-  healthy 4/161. iBean 100% answered / 97.7% right. CCMT maize 96% / 86% right, or 93% leading to the right advice
-  (half the errors swap blight ↔ grey leaf spot, same advice). Other plants accepted 1.6%; unseen Caltech
-  non-plants 1.1%; random everyday photos: 3/117 confident, 0 with the plant gate. On the emulator, 20/20 non-plant
-  photos are turned away.
-- Measured and not shipped: input 288/320/384 px, int8 activations (−3 pts), flip TTA (+0.6 pt for 3× compute),
-  MobileNetV4-Conv-Medium (worse).
-- **Candidate, waiting for A's emulator check (branch `b/leaf-effb0-ens3`):** `leaf-p2-mix-efficientnetb0-ens3-a16129a8`,
-  3 × EfficientNet-B0, 12.7 MB, + per-crop maize floor 0.85 (`ml/leaf/crop_floors.py`: each crop ≥ 90% right on calib).
-  Test: 96.3% right at 91% answered; RoCoLe app path 91% answered / 97.3% right / rust→healthy 5; maize 92.2% at 81%;
-  other plants 0.5%. Costs: ~3.5× compute (29 vs 8 ms on a laptop), 1/117 random photos passes the gate confidently.
-  Fallback (branch `b/leaf-ens3-maize`): keep ens3, JSON-only maize floor 0.75. A checks the candidate on the emulator
-  before 08:30.
+- Held-out test photos **through the real app on the emulator** (`scripts/photo-eval.mjs`), answered / right when
+  answered / sick called healthy, vs the previous ens3: coffee RoCoLe 360 photos 65.0% / 97.4% / 0 (ens3 59.4% /
+  96.7% / 3); maize CCMT 336 79.2% / 90.6% / 0 (89.9% / 87.1% / 0); beans iBean 129 100% / 96.1% / 1 (96.9% / 96.8% /
+  0); non-crop photos 1/137 answered (0). `checkPhoto` 80 ms median in the page on the emulator (ens3 45 ms).
+- **App path ≠ laptop path for this model:** `LeafClassifier` resizes 640 → 224 px with
+  `Bitmap.createScaledBitmap(…, true)` (no antialiasing); training uses PIL's antialiased resize. ens3 matched the
+  laptop within ±0.01, EfficientNet did not: with the floors as trained, 8/161 rust leaves were called healthy in the
+  app (laptop estimate: 5). Judge future leaf models with `scripts/photo-eval.mjs` on an emulator. Not tried: an
+  antialiased resize in the app (would need both models re-checked).
+- Previous model `leaf-p2-mix-ens3-0483c29f` (3 × MobileNetV4-Conv-Small, 7.7 MB): in git at cff9e12. Measured and not
+  shipped: input 288/320/384 px, int8 activations (−3 pts), flip TTA (+0.6 pt for 3× compute), MobileNetV4-Conv-Medium
+  (worse), the JSON-only ens3 maize floor (branch `b/leaf-ens3-maize`).
 - Coffee does not transfer across countries: a model never trained on RoCoLe answers 1.2% of its photos.
 
 **SMS understanding:** `KeywordNlu` (`data/lexicon.csv`; function words pick sw/en, default sw; crop-aware
 symptoms) + optional **Qwen3.5-0.8B Q4_K_M** via llama.cpp + GBNF (`LlmNlu`, 20 s budget, NLU only, never writes
 text). Prefers the LoRA file `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf` (542 MB) over the base `Qwen3.5-0.8B-Q4_K_M.gguf`
-(533 MB). Side-loaded, imported from a file, or downloaded in the app; never committed. Policy: the model gives the
-intent only when no intent keyword matched, and a symptom only if it is the fine-tune, the SMS reports a problem, the keywords found the crop, `crop_symptom` is a real label
-and it is not "healthy". Crop, offer, language and commodity always come from keywords. "Same reply" on held-out /
+(533 MB). Side-loaded, imported from a file, or downloaded in the app; never committed. **The model reads every
+message** (user decision, fddc272) and each reply ends with one template line "AI ya simu imeelewa: bei, kahawa,
+12,000." naming only what it read too (`decision.understood`, `decision.nlu`). Which reading wins is unchanged: the
+model's intent only when no intent keyword matched, and a symptom only if it is the fine-tune, the SMS reports a
+problem, the keywords found the crop, `crop_symptom` is a real label and not "healthy". Crop, offer, language and
+commodity always come from keywords. Generation stops after the symptom (O4, 661c39a: grammar cut at `,"`, JSON
+closed in Java): 35% fewer tokens, 220/220 eval SMS read the same (`ml/reports/llm_stop_after_symptom_*.md`); 4.2–5 s
+per LLM call on the emulator. "Same reply" on held-out /
 fresh / fresh2 (fresh2 = the honest set): **98% / 95% / 93%**, keywords alone 76% / 88% / 83% (held-out found the
 "p1 13000" fix, so it is no longer untouched for that rule). Retrieval (BM25, e5-small, RAG) was measured and not shipped; the RetrievalNlu fallback was dropped by the user (`DATA.md` §2.4).
 
@@ -151,17 +158,20 @@ make run | run-device | release | web | stop
 make e2e                       # every bridge call inside the running app
 make sms-setup / sms-relay / sms-test   # SMS lab on two emulators (sms-test 17/17)
 make human-test                # reset both phones + test photos (docs/HUMAN-TEST.md)
-cd android && ./gradlew testDebugUnitTest            # 68 JVM tests (Windows: gradlew.bat); -Pnollm builds without llama.cpp
+cd android && ./gradlew testDebugUnitTest            # 75 JVM tests (Windows: gradlew.bat); -Pnollm builds without llama.cpp
+node scripts/photo-eval.mjs photos.csv [out.csv]     # held-out photos (path,label) through the real app on an emulator
 python ml/build_knowledge.py                          # rebuild + validate knowledge.sqlite
 
 cd ml   # leaf pipeline (Modal, L4); same args resume; run id = hash(manifest, hparams, code)
 modal run --detach modal_app.py --stage all --labels p2 [--coffee-split mix|xc] [--seed N] [--input-size N] [--arch timm_name] [--lr X]
 modal run modal_app.py --stage ensemble --labels p2 --version m1,m2,m3
 modal run modal_app.py --stage reeval|probs|photo-stats --labels p2 [--version v]   # probs → artifacts/<v>/probs.json
-python -m leaf.crop_floors artifacts/<v> [--write]   # per-crop minimum probability from probs.json
+python -m leaf.crop_floors artifacts/<v> [--write]   # per-crop minimum probability from probs.json (laptop path)
+python -m leaf.app_floors CALIB.csv [TEST.csv]       # floors from photo-eval CSVs (the app's own path; used for install)
 modal volume get pandastic-models leaf/<version> ./artifacts/ && python -m leaf.install artifacts/<version>
 python -m leaf.smoke | leaf.probe_photos <dir> | leaf.probe_nonplant <dir>... | leaf.class_thresholds <dir> --label L --precision P [--write]
 python ml/llm/eval_llm.py --rescore                   # NLU eval from saved predictions (needs NluEvalTest output)
+python ml/llm/stop_eval.py --server llama-server --model x.gguf   # full vs cut grammar on all eval SMS (O4)
 modal run modal_lora.py                               # Qwen LoRA (A100) → GGUF + eval
 ```
 
@@ -177,19 +187,21 @@ native, JS bridge · D6 confidence only from calibrated classifiers; text sympto
 prices · D7 training on Modal (user) · D8 phone = 4 GB RAM, all models < ~1 GB peak (user) · D9 freeze 10:30 UTC,
 submission ~13:00 UTC (user). The hub replies in the SMS's own language (`lang = null`).
 
-## Status (compacted ledger, 06:29 UTC)
+## Status (08:05 UTC)
 
 - **Done:** SMS hub (T01), resolver/templates/keyword NLU (T02), ONNX runner + gate + bridge (T03), knowledge base
-  (T11), stub → real classifier (T10/T13/T15, now ens3), Qwen JNI + LoRA policy (T30/T31), connector tests (T41),
+  (T11), stub → real classifier (T10/T13/T15), Qwen JNI + LoRA policy (T30/T31), connector tests (T41),
   model management UI (T42), browser phone pair + launcher (T43/T46/T47), TTS (T44), human-test kit (T45),
   dictation/read-aloud/Qwen install (T48), contacts + own number (T49), photo + words judged together (cff9e12),
   helper answers only farming SMS (HubPolicy, 1d24063), opt-in LLM download native side (6122039), contact search
-  dropdown + immediate allowlist confirm (T51/T52, C), "P1 13000" read as a price code (91a8e16).
-- **Open:** leaf candidate effb0-ens3 vs JSON-only fallback (A's emulator check, install decision by 08:30);
-  **download UI** (C, requested by A 06:28: ask once on a Capable phone without a model, ~540 MB of mobile data;
+  dropdown + immediate allowlist confirm (T51/T52, C), "P1 13000" read as a price code (91a8e16), help-only SMS get
+  the menu + README/DEMO refresh (O3/O5, A, 214928a), LLM reads every message (fddc272), offline Whisper dictation
+  (58c200c, C), LLM stops after the symptom (O4, B, 661c39a), **EfficientNet-B0 leaf model installed after the
+  emulator check (O1, B, a6845f7)**.
+- **Open:** **download UI** (C, requested by A 06:28: ask once on a Capable phone without a model, ~540 MB of mobile data;
   Models page button, progress, cancel, plain errors; add `modelDownload` to `type Native`); UI refactor (T40/T04, C); demo script + video (T20, `docs/DEMO.md`); human-test sessions (were waiting on
-  T49, now landed); optional LLM stop-after-symptom speed-up (~30% generation, queued by A); README's leaf
-  classifier row and "Limits" are stale (A's file, flagged); `CLAUDE.md` upkeep (T50, B). T14 dropped; T32 stretch.
+  T49, now landed); antialiased 640 → 224 resize in `LeafClassifier` (optional, A; would need both models
+  re-checked); `CLAUDE.md` upkeep (T50, B). T14 dropped; T32 stretch.
 - **Not validated:** real carrier SMS (delays, multipart, Ugandan filtering), speed and memory on a real 4 GB phone,
   the hub surviving Doze/OEM battery killers overnight, Basic mode on a 0.5–1 GB phone, Android < 15 on a real device.
   The Swahili text is machine-written and needs a native speaker's review.
