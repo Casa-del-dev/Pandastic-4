@@ -25,12 +25,6 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     private static final int TIME_BUDGET_MS = 20_000;
     private static final Set<String> INTENTS = new HashSet<>(Arrays.asList("diagnose", "price", "planting", "help", "other"));
     private static final Set<String> CROPS = new HashSet<>(Arrays.asList("coffee", "maize", "bean"));
-    /** crop_symptom pairs the classifier and the advice table know; any other pair drops the symptom. */
-    private static final Set<String> LABELS = new HashSet<>(Arrays.asList("coffee_rust", "coffee_miner",
-        "coffee_cercospora", "coffee_phoma", "maize_fall_armyworm", "maize_leaf_blight", "maize_streak_virus",
-        "maize_lethal_necrosis", "maize_leaf_spot", "bean_rust", "bean_angular_leaf_spot"));
-    private static final Set<String> COMMODITIES = new HashSet<>(Arrays.asList("coffee_arabica_parchment",
-        "coffee_arabica_drugar", "coffee_robusta_kiboko", "coffee_robusta_faq", "maize_grain", "beans_dry"));
 
     private static final String DEFAULT_SYSTEM = "You read one short SMS from a smallholder farmer in Uganda. "
         + "It may be Swahili, English or Luganda, and may be misspelled. Reply with JSON only. "
@@ -89,25 +83,19 @@ public final class LlmNlu implements Nlu, AutoCloseable {
         this.modelPath = modelPath;
     }
 
+    /**
+     * Hybrid policy measured by B (ml/reports/nlu_eval.md, held-out SMS: keywords 68%, Qwen alone 34%,
+     * hybrid 78%): keywords first; the model only fills the intent and the crop the keywords missed.
+     * It is never trusted for the symptom, the offer, the language or the commodity.
+     */
     @Override public Slots parse(String text, String lang) {
         Slots slots = keywords.parse(text, lang);
-        // Keywords are exact; ask the model only when they leave something open.
-        boolean intentOpen = slots.intent == null || "other".equals(slots.intent);
-        if (!intentOpen && slots.crop != null) return slots;
+        if (slots.intentProb > 0 && slots.crop != null) return slots;
         JSONObject json = complete(text);
         if (json == null) return slots;
         String intent = json.optString("intent", null), crop = json.optString("crop", null);
-        String symptom = json.optString("symptom", null), commodity = json.optString("commodity", null);
-        if (intentOpen && INTENTS.contains(intent)) { slots.intent = intent; slots.intentProb = 0.8f; }
-        if (slots.lang == null && ("sw".equals(json.optString("lang")) || "en".equals(json.optString("lang")))) slots.lang = json.optString("lang");
+        if (slots.intentProb == 0 && INTENTS.contains(intent)) { slots.intent = intent; slots.intentProb = 0.8f; }
         if (slots.crop == null && CROPS.contains(crop)) slots.crop = crop;
-        // Symptoms are not taken from the model: on vague text ("my coffee is sick") it named one anyway.
-        // Only the keyword lexicon (exact words) may suggest a condition. LABELS stays for logging.
-        if (symptom != null && !"null".equals(symptom) && slots.symptom == null)
-            Log.i(TAG, "Ignored model symptom " + (LABELS.contains(slots.crop + "_" + symptom) ? slots.crop + "_" + symptom : symptom));
-        if (slots.commodity == null && COMMODITIES.contains(commodity)) slots.commodity = commodity;
-        // Prices stay deterministic: a model-read offer is used only if the text contains digits at all.
-        if (slots.offer == null && json.optLong("offer", 0) > 0 && text.matches(".*\\d.*")) slots.offer = (double) json.optLong("offer");
         return slots;
     }
 
