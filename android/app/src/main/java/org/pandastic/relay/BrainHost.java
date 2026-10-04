@@ -22,6 +22,7 @@ import org.pandastic.relay.brain.LeafClassifier;
 import org.pandastic.relay.brain.LlmNlu;
 import org.pandastic.relay.brain.QualityGate;
 import org.pandastic.relay.brain.SmsFormatter;
+import org.pandastic.relay.brain.Templates;
 import org.pandastic.relay.hub.Responder;
 import org.pandastic.relay.hub.HubPolicy;
 import org.pandastic.relay.hub.HubPrefs;
@@ -45,6 +46,8 @@ public final class BrainHost {
     private volatile Brain brain;
     private Knowledge knowledge;
     private volatile LlmNlu llm;
+    /** Optional larger model that only writes the helper's chat replies (LlmNlu.WRITER). */
+    private volatile LlmNlu writer;
     private volatile KeywordNlu keywords;
     /** LLM loads queued or running. A count, not a flag: a load for an unloaded Brain finishing must not
      *  report "not loading" while the next one is still queued (e2e caught info() saying llm=null, done). */
@@ -72,8 +75,9 @@ public final class BrainHost {
             try { classifier.close(); } catch (Exception e) { Log.w(TAG, "Classifier close failed"); }
         }
         if (llm != null) llm.close();
+        if (writer != null) writer.close();
         if (knowledge != null) knowledge.close();
-        classifier = null; llm = null; knowledge = null; brain = null; keywords = null;
+        classifier = null; llm = null; writer = null; knowledge = null; brain = null; keywords = null;
         classifierError = null; brainError = null;
     }
 
@@ -152,7 +156,7 @@ public final class BrainHost {
             if (line != null) decision.put("understood", line);
         }
         // The model then says the classifier's answer in its own words, checked against that answer (ReplyWriter).
-        String written = issue == null && result != null ? ReplyWriter.write(llm, text, SmsFormatter.facts(answer), answer) : null;
+        String written = issue == null && result != null ? ReplyWriter.write(chatModel(), text, SmsFormatter.facts(answer), answer) : null;
         if (written != null) decision.put("ai_reply", written);
         return decision.put("stub", model != null && model.stub)
             .put("plant_share", Math.round(plantShare * 100) / 100.0).put("not_a_plant", notAPlant).toString();
@@ -188,7 +192,18 @@ public final class BrainHost {
         if (line != null) json.put("understood", line);
         // In the chat the model also says the fixed answer in its own words; every word is checked (ReplyWriter)
         // and the fixed answer is always shown under it.
-        String written = write && farming ? ReplyWriter.write(llm, text, SmsFormatter.facts(decision), decision) : null;
+        String written = null;
+        if (write && farming && "HELP".equals(decision.status))  // "what can you do?": plain capabilities, not codes
+            written = ReplyWriter.write(chatModel(), text, "en".equals(decision.lang) ? CAN_DO_EN : CAN_DO_SW, decision);
+        else if (write && farming) written = ReplyWriter.write(chatModel(), text, SmsFormatter.facts(decision), decision);
+        else if (write) {  // chit-chat or off-topic in the chat: answer with the menu, in the model's words
+            String help = Templates.help(decision.lang);
+            json.put("status", "HELP").put("intent", "help").put("title", "Pandastic").put("message", help)
+                .put("label", JSONObject.NULL).put("candidates", new org.json.JSONArray()).remove("understood");
+            Decision menu = new Decision();
+            menu.status = "HELP"; menu.lang = decision.lang; menu.message = help;
+            written = ReplyWriter.write(chatModel(), text, "en".equals(decision.lang) ? CAN_DO_EN : CAN_DO_SW, menu);
+        }
         if (written != null) json.put("ai_reply", written);
         return new Responder.Reply(SmsFormatter.withTail(SmsFormatter.format(decision), line), json.toString(), farming);
     }
@@ -196,6 +211,20 @@ public final class BrainHost {
     private String nluSource() {
         LlmNlu model = llm;
         return model != null ? model.lastSource : llmLoads.get() > 0 ? "keywords_model_loading" : "keywords_no_model";
+    }
+
+    /** What the helper can do, as facts for the chat writer's answer to "hi" or an off-topic message. */
+    private static final String CAN_DO_EN = "Pandastic helps with coffee, maize and beans. Take a photo of a leaf "
+        + "with the + button and it checks it for leaf diseases on this phone. Or ask about a buyer's price: send P, "
+        + "the crop number (1 coffee, 2 maize, 3 beans) and the price, for example P 1 12000. It only helps with farming.";
+    private static final String CAN_DO_SW = "Pandastic inasaidia kwa kahawa, mahindi na maharage. Piga picha ya jani "
+        + "kwa kitufe cha + na itaangalia ugonjwa wa majani kwenye simu hii. Au uliza bei ya mnunuzi: tuma P, namba ya "
+        + "zao (1 kahawa, 2 mahindi, 3 maharage) na bei, mfano P 1 12000. Inasaidia kwa kilimo tu.";
+
+    /** The chat writer if one is loaded, else the reading model. */
+    private LlmNlu chatModel() {
+        LlmNlu chat = writer;
+        return chat != null ? chat : llm;
     }
 
     private boolean farming(String text, String intent, String lang) {
@@ -228,6 +257,7 @@ public final class BrainHost {
             .put("classifierError", classifierError == null ? JSONObject.NULL : classifierError)
             .put("brain", brain != null)
             .put("llm", llm == null ? JSONObject.NULL : llm.modelName())
+            .put("chatModel", writer == null ? JSONObject.NULL : writer.modelName())
             .put("brainError", brainError == null ? JSONObject.NULL : brainError)
             .put("loading", loading);
     }
@@ -236,12 +266,14 @@ public final class BrainHost {
     private synchronized void startLlmLoad(Brain owner, KeywordNlu keywords) {
         llmLoads.incrementAndGet();
         llmLoad = llmLoader.submit(() -> {
-            LlmNlu loaded = null;
+            LlmNlu loaded = null, chat = null;
             try { loaded = LlmNlu.open(context, keywords); }
             catch (Throwable e) { Log.e(TAG, "LLM unavailable; keywords only", e); }
+            try { if (loaded != null) chat = LlmNlu.openWriter(context, keywords); }
+            catch (Throwable e) { Log.e(TAG, "Chat writer unavailable; the reading model writes", e); }
             synchronized (this) {  // unload() may have run meanwhile (Basic phone): then free it again
-                if (brain == owner) llm = loaded;
-                else if (loaded != null) loaded.close();
+                if (brain == owner) { llm = loaded; writer = chat; }
+                else { if (loaded != null) loaded.close(); if (chat != null) chat.close(); }
                 llmLoads.decrementAndGet();
             }
         });

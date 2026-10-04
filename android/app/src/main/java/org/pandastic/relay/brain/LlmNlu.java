@@ -254,8 +254,29 @@ public final class LlmNlu implements Nlu, AutoCloseable {
 
     /** The fine-tuned file if present, else the base one; internal files first, then the USB-reachable folder. */
     public static File find(Context context) {
+        return find(context, FINE_TUNED, MODEL_NAME);
+    }
+
+    /**
+     * Optional larger chat writer (Qwen3.5-2B, 1.28 GB): it writes the helper's chat replies in English, where it is
+     * much better than the 0.8B (docs/LLM-WRITING.md); reading SMS stays with the measured fine-tuned model.
+     */
+    public static final String WRITER = "Qwen3.5-2B-Q4_K_M.gguf";
+
+    public static LlmNlu openWriter(Context context, Nlu keywords) {
+        if (!libraryLoaded) return null;
+        File model = find(context, WRITER);
+        if (model == null) return null;
+        int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors() - 2));
+        long handle = nativeLoad(model.getAbsolutePath(), 2048, threads);
+        if (handle == 0) return null;
+        Log.i(TAG, "Chat writer loaded: " + WRITER);
+        return new LlmNlu(handle, keywords, DEFAULT_SYSTEM, DEFAULT_GRAMMAR, model.getAbsolutePath());
+    }
+
+    private static File find(Context context, String... names) {
         File external = context.getExternalFilesDir(null);
-        for (String name : new String[]{FINE_TUNED, MODEL_NAME}) {
+        for (String name : names) {
             File[] places = {new File(context.getFilesDir(), "models/" + name),
                 external == null ? null : new File(external, "models/" + name)};
             for (File place : places) {

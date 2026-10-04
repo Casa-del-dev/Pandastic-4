@@ -45,6 +45,13 @@ public final class ReplyWriter {
         "not", "no", "never", "don't", "dont", "isn't", "aren't", "doesn't", "cannot", "can't", "without", "unless",
         "si", "sio", "hapana", "hakuna", "bila"));
     private static final Pattern NUMBER = Pattern.compile("\\d[\\d,.]*");
+    private static final Set<String> CROPS = new HashSet<>(Arrays.asList(
+        "kahawa", "coffee", "mahindi", "maize", "maharage", "bean"));
+    private static final Pattern UNSURE = Pattern.compile(
+        "not sure|unsure|not certain|can't (confirm|tell|be sure)|cannot (confirm|tell|be sure)|hard to (say|tell)");
+    /** "do not spray yet" kept: "don't / won't / not … spray", or "before spraying". */
+    private static final Pattern NO_SPRAY = Pattern.compile(
+        "(\\b(not|no|never|don't|dont|won't|can't|cannot)\\b[^.!?]{0,40}\\bspray)|before spraying");
     private static final Pattern SOURCE = Pattern.compile("\\(([A-Z][A-Za-z/]+)\\)");
     private static final Set<String> EN_WORDS = new HashSet<>(Arrays.asList(
         "the", "is", "your", "you", "and", "to", "of", "not", "please", "leaves", "it", "a", "are", "with"));
@@ -80,11 +87,11 @@ public final class ReplyWriter {
 
     static String system(boolean en) {
         String language = en ? "English" : "Swahili";
-        return "You are Pandastic, a farm helper on a phone in Uganda. Rewrite the FACTS as a short, warm SMS reply in "
-            + language + " to the farmer. Use 1 or 2 short sentences. Use only the FACTS: keep every number, price, "
-            + "unit, source and name exactly as written, and add nothing else: no new disease, pest, chemical, dose, "
-            + "price or advice. If the FACTS say not sure, do not spray yet, or ask the extension officer, say that too. "
-            + "Write only the reply, in " + language + ".";
+        return "You are Pandastic, a friendly farm helper chatting with a smallholder farmer in Uganda. Answer the "
+            + "farmer's message in " + language + " in 1 or 2 short, warm sentences, using only the FACTS: keep every "
+            + "number, price, unit, source and name exactly as written, and add nothing else: no new disease, pest, "
+            + "chemical, dose, price or advice. If the FACTS say not sure, do not spray yet, or ask the extension "
+            + "officer, say that too. Write only the reply, in " + language + ".";
     }
 
     /** Why the last check failed, for logcat and tests (model thread only). */
@@ -109,18 +116,19 @@ public final class ReplyWriter {
 
         Set<String> words = new HashSet<>(Arrays.asList(lower.split("[^\\p{L}0-9%]+")));
         Set<String> factWords = new HashSet<>(Arrays.asList(factsLower.split("[^\\p{L}0-9%]+")));
+        String asked = question == null ? "" : question.toLowerCase(Locale.ROOT);
         for (String term : GUARDED) {
             boolean said = term.length() <= 3 ? words.contains(term) : lower.contains(term);
             boolean given = term.length() <= 3 ? factWords.contains(term) : factsLower.contains(term);
-            if (said && !given) return fail("new term " + term);
+            // Naming the crop the farmer asked about is fine ("your coffee"); every other term must be in the facts.
+            if (said && !given && !(CROPS.contains(term) && asked.contains(term))) return fail("new term " + term);
         }
 
         // The facts' warnings must survive the rewrite.
         if (factsLower.contains("usinyunyizie") && !lower.contains("usinyunyizie")) return fail("dropped: usinyunyizie");
-        if (factsLower.contains("do not spray") && !(lower.contains("not spray") || lower.contains("don't spray")))
-            return fail("dropped: do not spray");
+        if (factsLower.contains("do not spray") && !NO_SPRAY.matcher(lower).find()) return fail("dropped: do not spray");
         if (factsLower.contains("sina uhakika") && !lower.contains("uhakika")) return fail("dropped: sina uhakika");
-        if (factsLower.contains("not sure") && !lower.contains("not sure")) return fail("dropped: not sure");
+        if (factsLower.contains("not sure") && !UNSURE.matcher(lower).find()) return fail("dropped: not sure");
         if (factsLower.contains("afisa ugani") && !(lower.contains("afisa") || lower.contains("uliza"))) return fail("dropped: afisa");
         if (factsLower.contains("extension officer") && !(words.contains("officer") || words.contains("ask"))) return fail("dropped: officer");
         if ("PRICE".equals(status) || "PRICE_STALE".equals(status)) {
