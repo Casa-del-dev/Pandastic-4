@@ -48,6 +48,9 @@ modal run --detach modal_app.py --stage train --labels p2 --seed 14             
 modal run modal_app.py --stage ensemble --labels p2 --version leaf-...,leaf-...,leaf-...   # average them into one ONNX
 modal run modal_app.py --stage photo-stats --labels p2   # the app's QualityGate numbers on every test photo
 python -m leaf.class_thresholds <dir> --label coffee_healthy --precision 0.98 --write   # stricter healthy floor (calib)
+modal run modal_app.py --stage probs --labels p2 --version <v>   # calib+test probabilities -> artifacts/<v>/probs.json
+python -m leaf.crop_floors <dir> --write                  # per-crop floor: each crop >= 90% right on calib (maize)
+modal run --detach modal_app.py --stage train --labels p2 --arch efficientnet_b0.ra_in1k [--seed N]   # other backbone
 python -m leaf.probe_nonplant <dir> [<dir> ...]           # CONFIDENT answers on random everyday photos
 python -m leaf.quantize <dir>                             # int8 check (not shipped: -3 pts top-1)
 ```
