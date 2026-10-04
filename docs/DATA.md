@@ -122,14 +122,15 @@ The app works without it (the model is a side-loaded 530 MB file).
 **The fine-tuned model (LoRA on 3,000 synthetic SMS, `ml/reports/nlu_eval_lora.md`) is different.** Alone it scores
 94% on the held-out set, but that number is optimistic: **24 of the 50 held-out SMS have a near-copy** (≥ 60% of
 words shared) among its training SMS, against 3 of 40 in the fresh set. On fresh2, which it never saw, it scores 90%
-alone. It also stops inventing symptoms, so it may fill a **symptom** the keywords missed (only if it fits the crop;
-a text symptom is still never CONFIDENT), as well as the intent:
+alone. It also stops inventing symptoms, so it may fill a **symptom** the keywords missed (only for a problem
+report whose crop the keywords found, and only if the pair is a real label; a text symptom is still never
+CONFIDENT), as well as the intent:
 
 | | held-out | fresh | fresh2 |
 | :-- | --: | --: | --: |
 | Keywords alone | 72% | 88% | 83% |
 | Keywords + fine-tune, intent only | 80% | 88% | 80% |
-| **Keywords + fine-tune, intent + symptom** | **94%** | **90%** | **93%** |
+| **Keywords + fine-tune, intent + symptom** (the app) | **94%** | **95%** | **93%** |
 | Keywords + base model, intent + symptom | 82% | 85% | 73% |
 
 The model is called for about a third of the SMS (no intent keyword, or a diagnosis without a symptom), median
@@ -146,18 +147,22 @@ with all slots right, keywords first and the extra source filling only a missing
 | Extra source after the keywords | held-out | fresh | fresh2 | Right of 120 | Memory on the phone | Time per SMS (laptop) |
 | :-- | --: | --: | --: | --: | :-- | :-- |
 | None (keywords alone) | 72% | 88% | 83% | 96 | 0 | < 1 ms |
-| Nearest SMS by BM25 (words + 4-letter pieces), no model | 94% | 82% | 90% | 107 | ~1 MB index | ~5 ms |
-| Nearest SMS by multilingual-e5-small, no LLM | 94% | 85% | 97% | 110 | 118 MB (int8) + 4.6 MB index | ~6 ms |
-| Same, vocabulary trimmed to our SMS (936 tokens) | 92% | 80% | 97% | 107 | ~22–30 MB | ~6 ms |
-| Base Qwen, no examples | 82% | 85% | 73% | 97 | 530 MB | 0.9 s |
-| Base Qwen + 4 retrieved examples in the prompt | 96% | 85% | 93% | 110 | 530 MB + 1 MB | 2.0 s |
-| **Fine-tuned Qwen, no examples (the app)** | 94% | 90% | 93% | **111** | 530 MB | 1.5–2 s |
+| Nearest SMS by BM25 (words + 4-letter pieces), no model | 94% | 90% | 90% | **110** | ~1 MB index | ~5 ms |
+| Nearest SMS by multilingual-e5-small, no LLM | 94% | 92% | 97% | **113** | 118 MB (int8) + 4.6 MB index | ~6 ms |
+| Same, vocabulary trimmed to our SMS (936 tokens) | 92% | 88% | 97% | 110 | ~22–30 MB | ~6 ms |
+| Base Qwen, no examples | 82% | 90% | 77% | 100 | 530 MB | 0.9 s |
+| Base Qwen + 4 retrieved examples in the prompt | 96% | 90% | 93% | 112 | 530 MB + 1 MB | 2.0 s |
+| **Fine-tuned Qwen, no examples (the app)** | 94% | 95% | 93% | **113** | 530 MB | 1.5–2 s |
 
-- **Retrieval does make the base Qwen smarter**: 4 similar SMS in the prompt lift it from 97 to 110 right, about as
-  much as fine-tuning did. But the prompt grows from ~200 cached tokens to ~850 uncached ones, so it is twice as
+All rows use the app's rule (LlmNlu, af9e490): the extra source names the intent only when no intent keyword
+matched, and a symptom only for a problem report whose crop the keywords found, if the pair is a real label.
+
+- **Retrieval does make the base Qwen smarter**: 4 similar SMS in the prompt lift it from 100 to 112 right, about
+  as much as fine-tuning did. But the prompt grows from ~200 cached tokens to ~850 uncached ones, so it is twice as
   slow (≈ 6–10 s on a phone), and the fine-tuned model already gets there without it.
-- **Retrieval alone almost replaces the LLM**: BM25 needs no model and gets 107 of 120; the fine-tuned Qwen gets 111
-  with a 530 MB model. That matters for phones that cannot load Qwen and for the seconds while it loads.
+- **Retrieval alone almost replaces the LLM**: BM25 needs no model and gets 110 of 120; e5-small gets 113, the same
+  as the fine-tuned Qwen, with a quarter of its memory. That matters for phones that cannot load Qwen and for the
+  seconds while it loads.
 - **Qwen's own embeddings** (no extra weights) are the weakest retriever: the nearest SMS has the right crop in only
   63% of fresh2, against 90% for BM25 and 97% for e5. A vector-database engine is unnecessary at this size: a
   brute-force search over 3,000 vectors takes under a millisecond.
