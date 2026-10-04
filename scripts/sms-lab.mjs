@@ -69,7 +69,7 @@ function lastSentId(serial) {
 }
 /** Delivers one SMS into an emulator as if it came from `from` (the emulator splits long text into parts). */
 function deliver(serial, from, body) {
-  adbFor(serial)('emu', 'sms', 'send', digits(from), body.replace(/\s*\n\s*/g, ' '))
+  adbFor(serial)('emu', 'sms', 'send', String(from).replace(/[^0-9+]/g, ''), body.replace(/\s*\n\s*/g, ' '))
 }
 
 /**
@@ -82,17 +82,21 @@ function startCarrier({ onVirtual = () => {}, log = console.log } = {}) {
   const phones = [{ serial: HUB, number: NUMBER.hub },
     ...(online(BASIC) && !relayPid ? [{ serial: BASIC, number: NUMBER.basic }] : [])]
   for (const p of phones) p.last = lastSentId(p.serial)
-  let stopped = false
+  let stopped = false, round = 0
   ;(async () => {
     while (!stopped) {
+      round++
       for (const p of phones) {
+        // A wiped SMS history (human-test reset) restarts the ids: follow it down, or new SMS would be missed.
+        if (round % 8 === 0) { const top = lastSentId(p.serial); if (top < p.last) p.last = top }
         for (const sms of sentSince(p.serial, p.last)) {
           p.last = sms.id
           const target = phones.find(q => q !== p && same(q.number, sms.to))
           if (relayPid && same(sms.to, NUMBER.basic)) continue  // the running relay delivers this one
           if (target) {
             log(`  [carrier] ${nameOf(p.number)} -> ${nameOf(target.number)}: ${oneLine(sms.body)}`)
-            deliver(target.serial, p.number, sms.body)
+            try { deliver(target.serial, p.number, sms.body) }
+            catch (e) { log(`  [carrier] could not deliver to ${target.serial}: ${e.message.split('\n')[0]}`) }
           } else onVirtual({ from: p.number, to: sms.to, body: sms.body, at: Date.now() })
         }
       }
@@ -102,6 +106,53 @@ function startCarrier({ onVirtual = () => {}, log = console.log } = {}) {
   return () => { stopped = true }
 }
 const oneLine = text => text.replace(/\s+/g, ' ').slice(0, 160)
+
+// ---- phone-level identity and Contacts (not the app's settings) -----------------------------------------
+
+/** Names in each phone's own Contacts app: the helper is the daughter's phone, the Basic phone is Noor's. */
+const CONTACT_NAME = { [HUB]: 'Mama Noor', [BASIC]: 'Amani (binti)' }
+
+/**
+ * What a real phone already has before Pandastic is installed: its SIM number (lab-only file the debug build
+ * reads, since the emulator's SIM number is generic) and the other person in its Contacts app. Never touches
+ * the app's own settings, so a tester still sets up Pandastic from its first screen.
+ */
+function seedPhone(serial) {
+  const adb = adbFor(serial)
+  const own = serial === HUB ? NUMBER.hub : NUMBER.basic
+  const peer = serial === HUB ? NUMBER.basic : NUMBER.hub
+  const label = CONTACT_NAME[serial]
+  adb('shell', 'run-as', 'org.pandastic.relay', 'mkdir', '-p', 'shared_prefs')
+  execFileSync(ADB, ['-s', serial, 'shell', 'run-as', 'org.pandastic.relay', 'tee', 'shared_prefs/pandastic_lab.xml'], {
+    input: `<?xml version="1.0" encoding="utf-8"?><map><string name="own_number">${own}</string></map>`, stdio: ['pipe', 'ignore', 'pipe'],
+  })
+  const rows = adb('shell', 'content', 'query', '--uri', 'content://com.android.contacts/data/phones',
+    '--projection', 'raw_contact_id:data1:display_name')
+  const existing = rows.split('\n').map(line => line.match(/raw_contact_id=(\d+), data1=([^,]*), display_name=(.*)$/)).find(m => m && same(m[2], peer))
+  if (existing) {
+    if (existing[3] !== label) {  // older lab runs used other names: keep one entry, with the story's name
+      // Clear the old given/family parts too, or the provider rebuilds the display name from them.
+      adb('shell', 'content', 'update', '--uri', 'content://com.android.contacts/data', '--bind', shellQuote(`data1:s:${label}`),
+        ...['data2', 'data3', 'data4', 'data5', 'data6'].flatMap(column => ['--bind', `${column}:n:`]),
+        '--where', shellQuote(`raw_contact_id=${existing[1]} AND mimetype='vnd.android.cursor.item/name'`))
+    }
+    return
+  }
+  adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/raw_contacts', '--bind', 'account_type:n:', '--bind', 'account_name:n:')
+  const inserted = adb('shell', 'content', 'query', '--uri', 'content://com.android.contacts/raw_contacts', '--projection', '_id', '--sort', '"_id DESC"')
+  const rawId = inserted.match(/_id=(\d+)/)?.[1]
+  if (!rawId) { console.warn(`${serial}: add ${label} (${peer}) in Contacts by hand.`); return }
+  adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/data', '--bind', `raw_contact_id:l:${rawId}`, '--bind', 'mimetype:s:vnd.android.cursor.item/name', '--bind', shellQuote(`data1:s:${label}`))
+  adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/data', '--bind', `raw_contact_id:l:${rawId}`, '--bind', 'mimetype:s:vnd.android.cursor.item/phone_v2', '--bind', `data1:s:${peer}`, '--bind', 'data2:i:2')
+}
+
+/** `seed`: phone identity + Contacts on both emulators, nothing in the app (human-test resets use this). */
+async function seed() {
+  for (const serial of [HUB, BASIC].filter(online)) {
+    seedPhone(serial)
+    console.log(`${serial}: ${serial === HUB ? NUMBER.hub : NUMBER.basic}, Contacts has ${CONTACT_NAME[serial]} (${serial === HUB ? NUMBER.basic : NUMBER.hub})`)
+  }
+}
 
 // ---- setup ---------------------------------------------------------------------------------------
 
@@ -121,34 +172,13 @@ async function setup() {
       try { adb('shell', 'pm', 'grant', 'org.pandastic.relay', `android.permission.${p}`) } catch { /* older Android */ }
     }
     try { adb('shell', 'dumpsys', 'deviceidle', 'whitelist', '+org.pandastic.relay') } catch { /* no battery prompt */ }
-    if (/^emulator-\d+$/.test(serial)) {
-      // The carrier's assigned identities differ from the emulator image's generic SIM number.
-      // Debug emulator builds read this private lab-only file; real devices use their SIM.
-      const own = serial === HUB ? NUMBER.hub : NUMBER.basic
-      const peer = serial === HUB ? NUMBER.basic : NUMBER.hub
-      const label = serial === HUB ? 'Noor (Basic phone)' : 'Pandastic helper'
-      adb('shell', 'run-as', 'org.pandastic.relay', 'mkdir', '-p', 'shared_prefs')
-      execFileSync(ADB, ['-s', serial, 'shell', 'run-as', 'org.pandastic.relay', 'tee', 'shared_prefs/pandastic_lab.xml'], {
-        input: `<?xml version="1.0" encoding="utf-8"?><map><string name="own_number">${own}</string></map>`, stdio: ['pipe', 'ignore', 'pipe'],
-      })
-      // Seed one genuine local Contacts entry, without duplicating it on repeated launches.
-      const known = adb('shell', 'content', 'query', '--uri', 'content://com.android.contacts/data/phones', '--projection', 'data1')
-      if (!known.includes(peer)) {
-        adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/raw_contacts', '--bind', 'account_type:n:', '--bind', 'account_name:n:')
-        const inserted = adb('shell', 'content', 'query', '--uri', 'content://com.android.contacts/raw_contacts', '--projection', '_id', '--sort', '"_id DESC"')
-        const rawId = inserted.match(/_id=(\d+)/)?.[1]
-        if (rawId) {
-          adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/data', '--bind', `raw_contact_id:l:${rawId}`, '--bind', 'mimetype:s:vnd.android.cursor.item/name', '--bind', shellQuote(`data1:s:${label}`))
-          adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/data', '--bind', `raw_contact_id:l:${rawId}`, '--bind', 'mimetype:s:vnd.android.cursor.item/phone_v2', '--bind', `data1:s:${peer}`, '--bind', 'data2:i:2')
-        } else console.warn(`${serial}: add ${label} (${peer}) in Contacts to try suggestions.`)
-      }
-    }
+    if (/^emulator-\d+$/.test(serial)) seedPhone(serial)
   }
 
   const hub = await connectApp(HUB, 9333)
   await hub.evaluate(`PandasticNative.setPhoneMode('capable')`)
   await hub.evaluate(`PandasticNative.setHubContacts(${JSON.stringify(JSON.stringify([
-    { name: 'Noor (Basic phone)', number: NUMBER.basic }, { name: 'Noor (kabambe)', number: NUMBER.phone },
+    { name: 'Mama Noor', number: NUMBER.basic }, { name: 'Noor (kabambe)', number: NUMBER.phone },
     { name: 'Juma (kabambe)', number: NUMBER.phone2 }]))})`)
   await hub.evaluate(`PandasticNative.setHubLang('${process.argv.includes('--en') ? 'en' : 'sw'}')`)  // Swahili first
   await hub.evaluate(`PandasticNative.setHubEnabled(true)`)
@@ -316,9 +346,9 @@ async function test() {
 
 const keepAlive = setInterval(() => {}, 1000)  // Node's WebSocket alone does not keep the process alive
 const command = process.argv[2]
-const commands = { setup, relay, phone, test }
+const commands = { setup, seed, relay, phone, test }
 if (!commands[command]) {
-  console.log('usage: node scripts/sms-lab.mjs setup | relay | phone [number] | test [--keep-history]')
+  console.log('usage: node scripts/sms-lab.mjs setup | seed | relay | phone [number] | test [--keep-history]')
   process.exit(2)
 }
 try {

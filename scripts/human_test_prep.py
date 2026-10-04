@@ -5,6 +5,7 @@
   python3 scripts/human_test_prep.py --fresh    # also wipe the app on both phones (first-run screens), then
                                                 # put the side-loaded language model back on the helper phone
                                                 # (= make human-test; run it before each tester)
+  python3 scripts/human_test_prep.py --fresh --no-model   # same, without the model: the tester downloads it
 
 Test photos: 4 RoCoLe leaves from plants the classifier never trained on (2 rust, 2 healthy, recomputed with the
 same seed as ml/leaf/data.py), 1 blurred copy (should ask for a retake) and 1 picture that is not a plant.
@@ -99,7 +100,13 @@ def push_photos(serial, files):
 
 def fresh(serial):
     adb(serial, "shell", "pm", "clear", PACKAGE)
-    if serial != HUB:
+    # Old SMS threads would confuse the next tester. Wiping them needs root, which only non-Play-Store emulator
+    # images allow (the Basic phone's); the helper phone's Messages keeps its history.
+    if "cannot run as root" not in adb(serial, "root", check=False):
+        subprocess.run([ADB, "-s", serial, "wait-for-device"], check=False)
+        adb(serial, "shell", "content", "delete", "--uri", "content://sms", check=False)
+        print(f"{serial}: SMS history cleared")
+    if serial != HUB or "--no-model" in sys.argv:
         return
     staged = adb(serial, "shell", "ls", "/data/local/tmp", check=False)
     restored = [m for m in MODELS if m in staged]
@@ -119,16 +126,19 @@ def main():
         if "--fresh" in sys.argv:
             fresh(serial)
         push_photos(serial, files)
+    # What a real phone already has: its own number and the other person in its Contacts app (not in Pandastic).
+    subprocess.run(["node", str(ROOT / "scripts/sms-lab.mjs"), "seed"], check=False)
+    for serial in devices:
         # Open the app so the tester starts on its first screen.
         adb(serial, "shell", "am", "start", "-W", "-S", "-n", f"{PACKAGE}/.FrontendActivity", check=False)
     print("\nPhotos in each gallery (Pictures/PandasticTest). Facilitator key, do not show testers:")
     for path, label, source in files:
         print(f"  {path.name:13s} {label:18s} {source}")
     print("""
-Lab numbers (SMS between the phones needs the carrier: ./run.sh keeps it running):
-  helper phone  emulator-5554  +256 772 000 001   (Capable phone; allow +256 772 000 002 in SMS settings)
-  Basic phone   emulator-5556  +256 772 000 002   (Basic phone; sends to +256 772 000 001)
-  kabambe       terminal       +256 772 000 003   (`make sms-phone`)
+Phones (the SMS carrier from ./run.sh must keep running):
+  helper phone = Amani's (the daughter's) phone  emulator-5554  +256 772 000 001  Contacts: Mama Noor
+  Noor's phone (use Messages, the normal SMS app) emulator-5556  +256 772 000 002  Contacts: Amani (binti)
+  a kabambe in this terminal: make sms-phone            +256 772 000 003
 Ready for the next tester: follow docs/HUMAN-TEST.md. Reset between testers: make human-test""")
 
 
