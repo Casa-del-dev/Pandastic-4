@@ -51,6 +51,7 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     private static native long nativeLoad(String path, int nCtx, int nThreads);
     private static native String nativeComplete(long handle, String prompt, String grammar, int maxTokens, int timeoutMs);
     private static native boolean nativeSetPrefix(long handle, String prefix);
+    private static native String nativeWrite(long handle, String prompt, int maxTokens, int timeoutMs);
     private static native void nativeFree(long handle);
 
     private long handle;
@@ -137,8 +138,10 @@ public final class LlmNlu implements Nlu, AutoCloseable {
             + " -> " + lastSource + " (final: " + slots.intent + ", " + slots.crop + ", " + slots.symptom + ")");
         if (filled || sameIntent) {
             lastRead = copy(slots);
-            // Say only what the model read too: a crop it named differently came from the keywords alone.
+            // Say only what the model read too: a crop or symptom it named differently came from the keywords
+            // alone (probe 07:15: "worms inside" maize = fall armyworm by keywords, leaf blight by the model).
             if (!sameCrop) { lastRead.crop = null; lastRead.symptom = null; }
+            if (lastRead.symptom != null && !lastRead.symptom.equals(json.optString("symptom", null))) lastRead.symptom = null;
         }
         return slots;
     }
@@ -229,6 +232,20 @@ public final class LlmNlu implements Nlu, AutoCloseable {
         if (output == null) return null;
         try { return new JSONObject(closeJson(output)); }
         catch (Exception e) { return null; }
+    }
+
+    /**
+     * Free text from the same model (no grammar), for the grounded reply writer: the caller gives the facts and
+     * checks every word that comes back. Same thread as parse(). Null on timeout or failure.
+     */
+    public String write(String system, String user, int maxTokens, int timeoutMs) {
+        String prompt = "<|im_start|>system\n" + system + "<|im_end|>\n<|im_start|>user\n" + user.replace("<|", "< |")
+            + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
+        long started = System.currentTimeMillis();
+        String output = nativeWrite(handle, prompt, maxTokens, timeoutMs);
+        Log.i(TAG, "LLM wrote " + (output == null ? "nothing" : output.length() + " chars") + " in "
+            + (System.currentTimeMillis() - started) + " ms");
+        return output;
     }
 
     public static boolean runtimeAvailable() { return libraryLoaded; }

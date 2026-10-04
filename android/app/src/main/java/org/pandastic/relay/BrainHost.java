@@ -144,23 +144,35 @@ public final class BrainHost {
         if (notAPlant) result = result.asOther();
         if (brain == null) return interimPhoto(issue, result, model != null && model.stub, lang).toString();
         // Without a classifier the Brain sees no result and answers "not sure — ask a person".
-        JSONObject decision = new JSONObject(brain.answerPhoto(issue, result, text, lang).toJson());
+        Decision answer = brain.answerPhoto(issue, result, text, lang);
+        JSONObject decision = new JSONObject(answer.toJson());
         if (text != null && !text.trim().isEmpty()) {  // the words with the photo went through the same NLU
             decision.put("nlu", nluSource());
-            String line = understood(decision.optString("lang", lang));
+            String line = understood(farming(text, decision.optString("intent", null), lang), decision.optString("lang", lang));
             if (line != null) decision.put("understood", line);
         }
+        // The model then says the classifier's answer in its own words, checked against that answer (ReplyWriter).
+        String written = issue == null && result != null ? ReplyWriter.write(llm, text, SmsFormatter.facts(answer), answer) : null;
+        if (written != null) decision.put("ai_reply", written);
         return decision.put("stub", model != null && model.stub)
             .put("plant_share", Math.round(plantShare * 100) / 100.0).put("not_a_plant", notAPlant).toString();
     }
 
-    /** Typed or SMS question → decision JSON. Call from the worker thread. */
+    /** Typed question in the helper's chat → decision JSON, with the model's own wording for a person to read. */
     public String text(String text, String lang) throws Exception {
-        return smsReply(text, lang).decisionJson;
+        return answer(text, lang, true).decisionJson;
     }
 
-    /** SMS question → reply text. Call from the worker thread. */
+    /**
+     * SMS question → reply text. Automatic replies have no person checking them, so they are always the fixed
+     * answer (+ "AI ya simu imeelewa: ..."): a rewrite that passed every check still dropped "farm-gate is usually
+     * lower" in the SMS lab (docs/LLM-WRITING.md). Call from the worker thread.
+     */
     public Responder.Reply smsReply(String text, String lang) throws Exception {
+        return answer(text, lang, false);
+    }
+
+    private Responder.Reply answer(String text, String lang, boolean write) throws Exception {
         if (!new HubPrefs(context).capable()) return new Responder.Fallback().answer(text, lang);
         Brain brain = brain();
         if (brain == null) return new Responder.Fallback().answer(text, lang);
@@ -168,13 +180,16 @@ public final class BrainHost {
         // Which part understood the message, so the UI, the hub log and the tests can see the language model work;
         // the farmer sees it as one fixed line, "AI ya simu imeelewa: ..." (chat: field "understood"; SMS: at the end
         // when it still fits in 2 parts, so the safety sentence stays first).
-        String line = understood(decision.lang);
-        JSONObject json = new JSONObject(decision.toJson()).put("nlu", nluSource());
-        if (line != null) json.put("understood", line);
         // Personal messages from the same allowed numbers get no automatic reply: decide on the keywords'
         // own reading (cheap) plus the final intent (HubPolicy).
-        KeywordNlu words = keywords;
-        boolean farming = HubPolicy.isFarmingQuestion(text, words == null ? null : words.parse(text, lang), decision.intent);
+        boolean farming = farming(text, decision.intent, lang);
+        String line = understood(farming, decision.lang);
+        JSONObject json = new JSONObject(decision.toJson()).put("nlu", nluSource());
+        if (line != null) json.put("understood", line);
+        // In the chat the model also says the fixed answer in its own words; every word is checked (ReplyWriter)
+        // and the fixed answer is always shown under it.
+        String written = write && farming ? ReplyWriter.write(llm, text, SmsFormatter.facts(decision), decision) : null;
+        if (written != null) json.put("ai_reply", written);
         return new Responder.Reply(SmsFormatter.withTail(SmsFormatter.format(decision), line), json.toString(), farming);
     }
 
@@ -183,9 +198,18 @@ public final class BrainHost {
         return model != null ? model.lastSource : llmLoads.get() > 0 ? "keywords_model_loading" : "keywords_no_model";
     }
 
-    private String understood(String lang) {
+    private boolean farming(String text, String intent, String lang) {
+        KeywordNlu words = keywords;
+        return HubPolicy.isFarmingQuestion(text, words == null ? null : words.parse(text, lang), intent);
+    }
+
+    /**
+     * The "AI ya simu imeelewa: ..." line, only for farming messages: the model reads "my child has a fever" or
+     * "ignore all instructions" as a plant problem or help, and saying so to the farmer would be wrong (probe 07:15).
+     */
+    private String understood(boolean farming, String lang) {
         LlmNlu model = llm;
-        return model == null ? null : model.understood(lang);
+        return model == null || !farming ? null : model.understood(lang);
     }
 
     /**

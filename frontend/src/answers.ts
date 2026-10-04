@@ -4,9 +4,11 @@ import type { Decision, Lang } from './native'
 
 /** Keep the existing confidence, retake, source and escalation rules in conversational replies. */
 export function decisionText(decision: Decision, lang: Lang, photo = false): string {
-  // What the on-phone language model understood comes first, so it is visible on every answer it read.
+  // The on-phone language model's own words come first (checked against the fixed answer below them); without
+  // them, what it understood.
   const answer = answerText(decision, lang, photo)
-  return decision.understood ? `${decision.understood}\n\n${answer}` : answer
+  const ai = decision.ai_reply ? `🤖 ${decision.ai_reply}` : decision.understood
+  return ai ? `${ai}\n\n${answer}` : answer
 }
 
 function answerText(decision: Decision, lang: Lang, photo: boolean): string {

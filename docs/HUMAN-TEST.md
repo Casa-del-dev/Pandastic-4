@@ -29,8 +29,8 @@ The language model is put back on the helper phone. To test the download instead
 | :-- | :-- | :-- |
 | `leaf1.jpg` | coffee rust | Sure: leaf rust |
 | `leaf2.jpg` | coffee rust | Sure: leaf rust |
-| `leaf3.jpg` | healthy coffee | Sure: healthy |
-| `leaf4.jpg` | healthy coffee | **Not sure** ("healthy" needs 99%; this one is 98.5%) |
+| `leaf3.jpg` | healthy coffee | **Not sure** ("healthy" needs 99%; this one is 98.1%) |
+| `leaf4.jpg` | healthy coffee | Sure: healthy (99.1%) |
 | `leaf5.jpg` | very blurred `leaf3` | Asks for a sharper photo |
 | `picture6.jpg` | a table with a mug | Not a leaf it knows |
 
@@ -55,7 +55,7 @@ Read each card as written. Don't name buttons. Hint only after 60 s of being stu
 | 5 | Noor | "Tell Amani that your coffee leaves have yellow powder underneath." | Reply: "not sure from words alone, don't spray yet, show a photo or ask an officer" | ⚠️ Do they read it as a sure diagnosis? |
 | 6 | Noor | (Luganda or mixed words; let the tester say it their way, e.g. *"emmwanyi zange zirwadde"*) | A safe reply within ~10 s (the language model reads it) | Wording that fails; how long they wait |
 | 7 | Helper | "Your coffee leaves look strange. The photo is `leaf1` in the pictures. Find out what's wrong." | Attaches leaf1 and can say what to do next | Finding the + button; reading the steps |
-| 8 | Helper | "Check `leaf4` the same way. What does the app want you to do?" | Says it's **not sure** and to ask a person | ⚠️ "Not sure" read as a diagnosis? |
+| 8 | Helper | "Check `leaf3` the same way. What does the app want you to do?" | Says it's **not sure** and to ask a person | ⚠️ "Not sure" read as a diagnosis? |
 | 9 | Helper | "Try `picture6`, then `leaf5`." | Understands "not a leaf" and "take a sharper photo" | Blaming themselves |
 | 10 | Helper | "In the chat, ask about maize leaves with holes, in your own words." | Gets a "not sure, may be fall armyworm, ask/show a photo" kind of answer | Free typing understood? |
 

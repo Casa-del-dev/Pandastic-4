@@ -51,7 +51,7 @@ These are browser previews; carrier SMS is available in the Android app.
 | Part | What | Size |
 | :-- | :-- | :-- |
 | Leaf classifier | 3 × EfficientNet-B0 averaged in one ONNX file (int8 weights), 14 labels: coffee, maize and bean leaf problems, healthy leaves, and "not a leaf". Trained on photos from Brazil, Kenya, Ecuador, Ghana and Uganda; temperature-calibrated, with stricter floors for "healthy" chosen on calibration photos run through the app. A plant-share and blur gate runs first. Held-out, in the app: coffee phone photos 97.4% right when it answers, no rust leaf called healthy ([docs/DATA.md](docs/DATA.md) §2.2). | 12.7 MB |
-| Language model | Qwen3.5-0.8B Q4_K_M (Apache-2.0, multilingual), fine-tuned with LoRA on farmer SMS, via llama.cpp under a GBNF grammar. It reads every message; its reading is used only where the keywords found nothing (the intent, and a symptom under strict conditions), and each reply ends with one fixed line saying what it understood ("AI ya simu imeelewa: bei, kahawa, 12,000."). It never writes advice. | 542 MB, optional: downloaded once in the app (opt-in) or imported from a file |
+| Language model | Qwen3.5-0.8B Q4_K_M (Apache-2.0, multilingual), fine-tuned with LoRA on farmer SMS, via llama.cpp under a GBNF grammar. It reads every message (its reading is used only where the keywords found nothing: the intent, and a symptom under strict conditions), and in the helper's chat also says the fixed, cited answer in its own words (code checks every word; automatic SMS always get the fixed answer). It never invents advice. | 542 MB, optional: downloaded once in the app (opt-in) or imported from a file |
 | Knowledge base | SQLite: cited advice (EN + SW), UCDA/MAAIF coffee farm-gate prices, WFP maize and bean prices, SW/EN lexicon | 360 KB |
 | App | Java + React (bundled, offline). The INTERNET permission is used for one thing, the opt-in model download; questions, photos and answers never go online, and the WebView blocks every network load. | ~40 MB (arm64 release) |
 
@@ -59,7 +59,7 @@ Peak memory with the language model loaded is under 1 GB (the model file is memo
 
 ## Guardrails (the brief's pass/fail criterion)
 
-- **Fixed list of answers.** Every user-facing sentence is a template or a cited advice row. Models only choose labels and slots, which are checked in code.
+- **Fixed list of answers.** Every fact the farmer reads comes from a template or a cited advice row; models choose labels and slots, which are checked in code. In the helper's chat the on-phone model may also reword the answer for the person reading it (`ReplyWriter`; automatic SMS always get the fixed answer), and code rejects any rewrite that adds a number, crop, disease, chemical, unit, organisation or "healthy" claim, drops a warning ("not sure", "don't spray yet", "ask the officer") or a price's UGX figure and source, or, in Swahili, uses a word that is not in the answer. Then the fixed answer is sent. The chat always shows the fixed answer under the model's words. Why: phone-sized models write Swahili non-words and, in every language we tried, sometimes reverse the meaning ("that's a fair price" for an offer 23% below): [docs/LLM-WRITING.md](docs/LLM-WRITING.md).
 - **"Not sure — ask a person."**
   - A blurry photo, a low-confidence result or an unknown object leads to "ask a person, don't spray yet".
   - Text alone is never treated as a diagnosis.

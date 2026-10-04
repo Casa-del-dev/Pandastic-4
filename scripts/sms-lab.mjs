@@ -306,8 +306,7 @@ async function test() {
   // "emmwanyi" = coffee in Luganda; the keywords don't know it, so no disease of another crop may be named.
   await sms('Luganda coffee problem: safe, no other crop\'s disease', NUMBER.phone2,
     'emmwanyi zange zirwadde amakoola gafuuse kyenvu',
-    body => safe(body) ?? (/mahindi|maize|maharage|bean/i.test(body) ? 'names a maize/bean disease for coffee' : null)
-      ?? (/AI ya simu imeelewa/.test(body) ? null : 'no "AI ya simu imeelewa" line (language model not used?)'),
+    body => safe(body) ?? (/mahindi|maize|maharage|bean/i.test(body) ? 'names a maize/bean disease for coffee' : null),
     { timeoutMs: 60000 })
   await sms('symptom the keywords miss (fine-tuned LLM names it, still not sure)', NUMBER.phone2,
     'coffee leaves have grey spots with brown ring', safe, { timeoutMs: 60000 })

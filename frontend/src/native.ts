@@ -55,6 +55,8 @@ export type Decision = {
   nlu?: string
   /** One fixed line, e.g. "AI ya simu imeelewa: bei, kahawa, 12,000." Present only when the on-phone language model read the words. */
   understood?: string
+  /** The on-phone model's own wording of this answer, checked word by word against it (ReplyWriter.java). */
+  ai_reply?: string
   quality?: string
   error?: string
 }

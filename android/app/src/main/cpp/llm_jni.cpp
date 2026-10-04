@@ -82,18 +82,15 @@ Java_org_pandastic_relay_brain_LlmNlu_nativeLoad(JNIEnv *env, jclass, jstring pa
     return reinterpret_cast<jlong>(llm);
 }
 
-extern "C" JNIEXPORT jstring JNICALL
-Java_org_pandastic_relay_brain_LlmNlu_nativeComplete(JNIEnv *env, jclass, jlong handle, jstring jprompt,
-                                                     jstring jgrammar, jint maxTokens, jint timeoutMs) {
-    auto *llm = reinterpret_cast<Llm *>(handle);
-    if (llm == nullptr) return nullptr;
-    const std::string prompt = toString(env, jprompt);
-    const std::string grammar = toString(env, jgrammar);
+namespace {
+/** One greedy completion; usePrefix restores the cached system prompt (SMS reading), otherwise the prompt is whole. */
+jstring complete(JNIEnv *env, Llm *llm, const std::string &prompt, const std::string &grammar, int maxTokens,
+                 int timeoutMs, bool usePrefix) {
 
     // A slow phone must never hold up an SMS reply: past the deadline the caller falls back to keywords.
     llm->deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
     llama_memory_clear(llama_get_memory(llm->ctx), true);
-    bool restored = !llm->prefixState.empty()
+    bool restored = usePrefix && !llm->prefixState.empty()
         && llama_state_seq_set_data(llm->ctx, llm->prefixState.data(), llm->prefixState.size(), 0) > 0;
     // With a cached prefix only the SMS part is evaluated; otherwise the whole prompt.
     std::vector<llama_token> tokens = tokenize(llm, prompt, !restored);
@@ -106,6 +103,8 @@ Java_org_pandastic_relay_brain_LlmNlu_nativeComplete(JNIEnv *env, jclass, jlong 
         llama_sampler *constrained = llama_sampler_init_grammar(llm->vocab, grammar.c_str(), "root");
         if (constrained == nullptr) { LOGE("Invalid grammar"); llama_sampler_free(sampler); return nullptr; }
         llama_sampler_chain_add(sampler, constrained);
+    } else {  // free text: a small model left greedy repeats itself
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(llama_vocab_n_tokens(llm->vocab), 64, 1.15f, 0.0f, 0.0f));
     }
     llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
 
@@ -124,6 +123,24 @@ Java_org_pandastic_relay_brain_LlmNlu_nativeComplete(JNIEnv *env, jclass, jlong 
     llama_sampler_free(sampler);
     if (!ok || Clock::now() >= llm->deadline) { LOGE("LLM stopped: %s", ok ? "time budget" : "decode failed"); return nullptr; }
     return env->NewStringUTF(trimUtf8(output).c_str());
+}
+}  // namespace
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_pandastic_relay_brain_LlmNlu_nativeComplete(JNIEnv *env, jclass, jlong handle, jstring jprompt,
+                                                     jstring jgrammar, jint maxTokens, jint timeoutMs) {
+    auto *llm = reinterpret_cast<Llm *>(handle);
+    if (llm == nullptr) return nullptr;
+    return complete(env, llm, toString(env, jprompt), toString(env, jgrammar), maxTokens, timeoutMs, true);
+}
+
+/** Free text from a whole prompt (no grammar, no cached prefix): the grounded reply writer. */
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_pandastic_relay_brain_LlmNlu_nativeWrite(JNIEnv *env, jclass, jlong handle, jstring jprompt, jint maxTokens,
+                                                  jint timeoutMs) {
+    auto *llm = reinterpret_cast<Llm *>(handle);
+    if (llm == nullptr) return nullptr;
+    return complete(env, llm, toString(env, jprompt), std::string(), maxTokens, timeoutMs, false);
 }
 
 /** Evaluates the fixed prompt prefix once and keeps the resulting memory for later completions. */

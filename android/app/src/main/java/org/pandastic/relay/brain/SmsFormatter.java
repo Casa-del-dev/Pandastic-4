@@ -27,6 +27,9 @@ public final class SmsFormatter {
         return cut(text);
     }
 
+    /** The reply text without the "Pandastic: " prefix: the facts the grounded writer may rephrase. */
+    public static String facts(Decision d) { return format(d).substring(PREFIX.length()); }
+
     /** Adds a short line after the reply only if it still fits MAX_SEGMENTS; the reply itself is never cut for it. */
     public static String withTail(String sms, String tail) {
         if (tail == null || tail.isEmpty()) return sms;

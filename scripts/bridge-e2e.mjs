@@ -186,6 +186,17 @@ await check('ask: the language model reads every message and the answer says wha
   return `Luganda: ${d.nlu}, "${d.understood}"; "P 1 12000": ${price.nlu}, "${price.understood}"`
 })
 
+// The model also says the fixed answer in its own words, checked word by word (ReplyWriter); greedy, so stable.
+await check('ask: a model-written reply, if any, keeps the warnings', async () => {
+  if (!info.llm) return 'SKIP: no language model on this phone'
+  const d = await ask('my coffee leaves have orange powder underneath', 'en')
+  expectDecision(d, 'rust in words')
+  // A rewrite is optional (the fixed answer is used when one fails a check); when present it keeps the warnings.
+  if (d.ai_reply === undefined) return 'no rewrite passed the checks: fixed answer used'
+  expect(/spray/i.test(d.ai_reply) && /not sure/i.test(d.ai_reply), `ai_reply ${d.ai_reply}`)
+  return `"${d.ai_reply}"`
+})
+
 await check('ask: SMS price code "P 1 12000"', async () => {
   const d = await ask('P 1 12000', 'sw')
   expectDecision(d, 'P 1 12000')
