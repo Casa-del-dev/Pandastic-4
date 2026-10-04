@@ -96,6 +96,18 @@
   }
  },
  {
+  "label": "maize_streak_virus",
+  "source_id": "plantwise-ke015-maize-streak-virus",
+  "en": {
+   "sms": "Maize streak virus. No spray cures it. Pull out sick young plants early. Plant a resistant variety next season.",
+   "long": "Maize streak virus: yellow and light green streaks along the leaf veins; plants attacked early stay small and yield little. It is spread by a small brownish-white leafhopper; the more leafhoppers, the faster it spreads. 1) Walk the field often while the maize is small. 2) Pull out infected plants as soon as you see them and put them in a sack, so the insects do not move to healthy plants; they can be fed to animals. 3) If it was bad, plant a resistant variety next season: ask the extension officer or seed seller which ones. No spray cures the virus."
+  },
+  "sw": {
+   "sms": "Virusi vya michirizi. Hakuna dawa ya kuponya. Ng'oa mimea michanga iliyougua mapema. Panda aina sugu msimu ujao.",
+   "long": "Virusi vya michirizi ya mahindi: michirizi ya njano na kijani hafifu kando ya mishipa ya jani; mimea inayoshambuliwa mapema hubaki midogo na kuzaa kidogo. Huenezwa na mdudu mdogo wa kahawia-mweupe anayeruka (leafhopper); wakiwa wengi, ugonjwa huenea haraka. 1) Kagua shamba mara kwa mara mahindi yakiwa madogo. 2) Ng'oa mimea iliyougua mara unapoiona na uiweke kwenye gunia, ili wadudu wasihamie mimea yenye afya; inaweza kulishwa mifugo. 3) Ikiwa ulikuwa mbaya, panda aina sugu msimu ujao: uliza afisa ugani au muuzaji wa mbegu. Hakuna dawa inayoponya virusi."
+  }
+ },
+ {
   "label": "maize_leaf_spot",
   "source_id": "plantwise-zm013-maize-grey-leaf-spot",
   "en": {

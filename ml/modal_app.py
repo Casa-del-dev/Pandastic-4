@@ -5,7 +5,8 @@ Run from ml/ (needs `modal token new` once):
   modal run modal_app.py --stage manifest              # labels, pHash de-duplication, splits (CPU)
   modal run modal_app.py --stage train --epochs 12     # GPU training + calibration + ONNX export
   modal run modal_app.py --stage all                   # all three
-  --labels p1 adds maize + bean classes (T13). --smoke runs a 30-step training to test the GPU path cheaply.
+  --labels p1 adds maize blight/grey leaf spot + bean classes; --labels p2 also healthy maize, fall armyworm and
+  streak virus from CCMT (Ghana). --smoke runs a 30-step training to test the GPU path cheaply.
 
 Then fetch the artifacts and install them into the app:
   modal volume get pandastic-models leaf/<version> ./artifacts/
@@ -22,7 +23,7 @@ image = (
     .apt_install("libarchive-tools")  # bsdtar: reads BRACOL's zip, which has no central directory
     .pip_install("torch==2.14.1", "torchvision==0.29.1", "timm==1.0.30", "onnx==1.23.1", "onnxruntime==1.30.0",
                  "pillow==12.3.0", "imagehash==4.3.2", "numpy==2.5.3", "requests")
-    .add_local_python_source("leaf")
+    .add_local_python_source("leaf", ignore=["**/__pycache__", "**/*.pyc"])  # also ships leaf/ccmt_files.csv
 )
 data_volume = modal.Volume.from_name("pandastic-data", create_if_missing=True)
 models_volume = modal.Volume.from_name("pandastic-models", create_if_missing=True)
@@ -31,13 +32,13 @@ DATA, MODELS = Path("/data"), Path("/models")
 
 def _labels(name: str):
     from leaf import config
-    return config.P1_LABELS if name == "p1" else config.P0_LABELS
+    return config.LABEL_SETS[name]
 
 
 @app.function(image=image, volumes={"/data": data_volume}, cpu=4, memory=8192, timeout=3 * 3600)
 def fetch(sources: list[str]) -> None:
     from leaf import data
-    data.download(sources, DATA / "raw")
+    data.download(sources, DATA / "raw", work_dir=DATA / "work")
     data_volume.commit()
     data.extract(sources, DATA / "raw", DATA / "work")
     data_volume.commit()
@@ -73,7 +74,7 @@ def train(labels: str, epochs: int, batch_size: int, lr: float, smoke: bool) -> 
 def main(stage: str = "all", labels: str = "p0", epochs: int = 12, batch_size: int = 64, lr: float = 1e-3,
          smoke: bool = False):
     from leaf import config
-    sources = ["bracol", "jmuben", "jmuben2", "plantdoc", "ibean"]
+    sources = ["bracol", "jmuben", "jmuben2", "plantdoc", "ibean", "ccmt"]
     if stage in ("fetch", "all"):
         fetch.remote(sources)
         print("fetched + extracted:", ", ".join(f"{s} ({config.SOURCES[s]['licence']})" for s in sources))

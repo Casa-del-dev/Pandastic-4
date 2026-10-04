@@ -23,9 +23,44 @@ IMAGE_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
 # ---------------------------------------------------------------- download + extract
 
-def download(sources, raw_dir: Path, log=print) -> None:
+def _download_file_list(name: str, work_dir: Path, log=print, limit: int = None) -> None:
+    """Sources published as one file per image (CCMT): fetch every listed S3 URL straight into the work dir."""
+    import requests
+    from concurrent.futures import ThreadPoolExecutor
+    listing = Path(__file__).resolve().parent / config.SOURCES[name]["file_list"]
+    with open(listing, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))[:limit]
+    dest = work_dir / name
+    if (dest / ".done").exists():
+        return
+    log(f"download {name}: {len(rows)} files")
+
+    def fetch_one(row):
+        target = dest / row["folder"] / row["filename"]
+        if target.exists() and target.stat().st_size > 0:
+            return 0
+        target.parent.mkdir(parents=True, exist_ok=True)
+        for attempt in range(4):
+            try:
+                r = requests.get(row["s3_url"], timeout=120)
+                r.raise_for_status()
+                target.write_bytes(r.content)
+                return 1
+            except requests.RequestException:
+                if attempt == 3:
+                    raise
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        fetched = sum(pool.map(fetch_one, rows))
+    (dest / ".done").write_text("ok")
+    log(f"  {name}: {fetched} new files")
+
+
+def download(sources, raw_dir: Path, log=print, work_dir: Path = None) -> None:
     import requests
     for name in sources:
+        if "file_list" in config.SOURCES[name]:
+            _download_file_list(name, work_dir or raw_dir.parent / "work", log)
+            continue
         for filename, url in config.SOURCES[name]["files"].items():
             target = raw_dir / name / filename
             if target.exists() and target.stat().st_size > 0:
@@ -49,7 +84,7 @@ def download(sources, raw_dir: Path, log=print) -> None:
 def extract(sources, raw_dir: Path, work_dir: Path, log=print) -> None:
     """zipfile first; archives without a central directory (BRACOL) fall back to bsdtar's streaming reader."""
     for name in sources:
-        for filename in config.SOURCES[name]["files"]:
+        for filename in config.SOURCES[name].get("files", {}):  # file-list sources need no extraction
             archive = raw_dir / name / filename
             dest = work_dir / name / Path(filename).stem
             if (dest / ".done").exists():
@@ -137,6 +172,14 @@ def _jmuben_rows(work_dir: Path, labels, workers):
     return rows
 
 
+def _ccmt_rows(work_dir: Path, labels, workers):
+    """CCMT raw maize photos: folder name -> label (see leaf/resolve_ccmt.py); duplicate groups by pHash."""
+    from .resolve_ccmt import FOLDERS
+    paths = [str(p) for p in _images(work_dir / "ccmt") if FOLDERS.get(p.parent.name) in labels]
+    groups = phash_groups(paths, workers) if paths else {}
+    return [{"path": p, "label": FOLDERS[Path(p).parent.name], "source": "ccmt", "group": "ccmt:" + groups[p]} for p in paths]
+
+
 def _other_rows(work_dir: Path, labels):
     rows = []
     for name, p1_map in (("plantdoc", config.PLANTDOC_P1), ("ibean", config.IBEAN_P1)):
@@ -194,7 +237,11 @@ def build_manifest(work_dir: Path, labels, seed: int = 13, max_test_per_class: i
     other = _other_rows(work_dir, labels)
     _split_by_group(other, [("train", 0.7), ("val", 0.1), ("calib", 0.1), ("test", 0.1)], seed)
 
-    rows = bracol + capped + other
+    # Maize from CCMT (Ghana): same-source split (there is no second maize source for these classes).
+    ccmt = _ccmt_rows(work_dir, labels, workers)
+    _split_by_group(ccmt, [("train", 0.7), ("val", 0.1), ("calib", 0.1), ("test", 0.1)], seed)
+
+    rows = bracol + capped + other + ccmt
     stats = {
         "counts": {f"{s}/{l}": c for (s, l), c in sorted(Counter((r["split"], r["label"]) for r in rows).items())},
         "by_source": {f"{s}/{src}": c for (s, src), c in sorted(Counter((r["split"], r["source"]) for r in rows).items())},

@@ -26,6 +26,7 @@ slope, the AI runs on the daughter's phone at the house, and there is no data bu
 | Maize and dry bean retail prices by market | [WFP food prices for Uganda, via HDX](https://data.humdata.org/dataset/wfp-food-prices-for-uganda) | **CC BY-IGO** | 2,138 market-month rows, Jan 2024 – Aug 2026; plus 64 national 25th–75th percentile rows, marked `derived=1` | Maize and bean price checks |
 | Coffee leaf rust advice | [CABI Plantwise factsheet RW014 (Rwanda Agriculture Board)](https://plantwiseplusknowledgebank.org/doi/10.1079/PWKB.20127801774) | CC BY-SA 4.0 | 1 condition | Advice text (paraphrased, cited) |
 | Maize grey leaf spot advice | [CABI Plantwise factsheet ZM013 (Zambia Ministry of Agriculture)](https://plantwiseplusknowledgebank.org/doi/full/10.1079/pwkb.20147801404) | CC BY-SA 4.0 | 1 condition | Advice text (paraphrased, cited) |
+| Maize streak virus advice | [CABI Plantwise factsheet KE015 (CABI Africa, Kenya)](https://factsheetadmin.plantwise.org/Uploads/PDFs/20117800551.pdf) | CC BY-SA 4.0 | 1 condition | Advice text (paraphrased, cited) |
 | Brown eye spot, fall armyworm, northern leaf blight, bean rust, angular leaf spot | [Pacific Pests, Pathogens & Weeds fact sheets](https://apps.lucidcentral.org/ppp/) (ACIAR / SPC) | Free online fact sheets; reuse terms still to confirm | 5 conditions | Advice text (paraphrased, cited) |
 | Coffee leaf miner | [Dantas et al., *Insects* 12(12):1130, 2021](https://doi.org/10.3390/insects12121130) | CC BY 4.0 | 1 condition | Advice text |
 | Phoma leaf spot | [Pereira & Reis, Revista Cultivar, 2024](https://revistacultivar.com/articles/phoma-spot-or-ascochyta-spot-of-coffee) | Publisher copyright; paraphrased and cited | 1 condition | Advice text |
@@ -41,7 +42,8 @@ Every advice and price row carries a `source_id`; the build fails if one is miss
 | [BRACOL](https://data.mendeley.com/datasets/yy2k5y8mxg/1) | Arabica leaves, Espírito Santo, **Brazil**, white background | CC BY 4.0 | 1,747 labelled leaves; **the published zip is truncated**, so ~1,400 are readable, of which 1,343 have a single stress (healthy 142, miner 254, rust 465, Phoma 346, Cercospora 136) | Train / validation |
 | [JMuBEN](https://data.mendeley.com/datasets/t2r6rszp5c/1) + [JMuBEN2](https://data.mendeley.com/datasets/tgv3zb82nd/1) | Arabica leaves, Kirinyaga, **Kenya**, 128 px crops | CC BY 4.0 | 58,555 images, mostly rotated/flipped copies: the 8,336 rust images are **632 distinct leaves** | Cross-country calibration + test, after rotation/flip-invariant de-duplication |
 | [PlantDoc](https://github.com/pratikkayal/PlantDoc-Dataset) | Web-scraped field photos, 13 species, no coffee | CC BY 4.0 | ~2,600 images | `other` (not a supported leaf) |
-| [iBean (Makerere AI Lab)](https://huggingface.co/datasets/AI-Lab-Makerere/beans) | Bean leaves, **Uganda** field photos | MIT | ~1,300 images | `other` now; bean classes later |
+| [iBean (Makerere AI Lab)](https://huggingface.co/datasets/AI-Lab-Makerere/beans) | Bean leaves, **Uganda** field photos | MIT | ~1,300 images | `other` (P0); bean classes (P1, P2) |
+| [CCMT (Crop Pest and Disease Detection)](https://data.mendeley.com/datasets/bwh3zbpkpv/1), raw maize photos | Maize leaves from local farms in **Ghana** | CC BY 4.0 | 3,472 images used: fall armyworm 285, healthy 208, leaf blight 1,000, leaf spot 1,000, streak virus 979 (grasshopper and leaf-beetle folders not used) | Maize classes (P2); listed per image with its public S3 URL in `ml/leaf/ccmt_files.csv` |
 | timm `mobilenetv4_conv_small` ImageNet weights | Pretrained backbone | Apache-2.0 | 3.8 M parameters | Starting point |
 
 How it is evaluated: thresholds are chosen on half of the de-duplicated Kenyan images, and accuracy, coverage and
@@ -77,12 +79,13 @@ The base model invents symptoms, so the app never takes a symptom from it.
 - Arabica only, no Robusta. Leaves with several stresses at once are excluded from training.
 - `other` is made of other crops' leaves; hands, soil, walls or blurry shots are handled by the quality gate and
   thresholds, not learned.
-- Maize fall armyworm and healthy maize have **no training source** in the pipeline yet, so the first model is coffee + `other`.
+- Maize photos come from one source (CCMT, Ghana) and bean photos from one source (iBean, Uganda), so maize and bean
+  results are measured on held-out photos **from the same source**, not another country. Only 208 healthy-maize and
+  285 fall-armyworm photos exist, far fewer than for the other classes.
 
 **Advice**
-- Advice covers 12 conditions. Maize streak virus and lethal necrosis have none yet, so the app sends the farmer
-  to the extension officer.
-- Sources are from Rwanda, Zambia, the Pacific, Brazil and a review paper, not Ugandan extension material. Uganda's pesticide
+- Advice covers 13 conditions. Maize lethal necrosis has none yet, so the app sends the farmer to the extension officer.
+- Sources are from Rwanda, Zambia, Kenya, the Pacific, Brazil and a review paper, not Ugandan extension material. Uganda's pesticide
   registration list was not checked, so the advice never gives doses and always says "ask the officer before spraying".
 - Swahili text is machine translated by the team; there is no Luganda advice.
 

@@ -6,6 +6,9 @@
 P0_LABELS = ["coffee_healthy", "coffee_rust", "coffee_miner", "coffee_cercospora", "coffee_phoma", "other"]
 P1_LABELS = P0_LABELS[:-1] + [
     "maize_leaf_blight", "maize_leaf_spot", "bean_healthy", "bean_angular_leaf_spot", "bean_rust", "other"]
+# P2 adds the maize classes from CCMT (Ghana field photos): healthy maize, fall armyworm and streak virus.
+P2_LABELS = P1_LABELS[:-1] + ["maize_healthy", "maize_fall_armyworm", "maize_streak_virus", "other"]
+LABEL_SETS = {"p0": P0_LABELS, "p1": P1_LABELS, "p2": P2_LABELS}
 
 MEAN = [0.485, 0.456, 0.406]   # ImageNet; matches timm mobilenetv4 pretrained config
 STD = [0.229, 0.224, 0.225]
@@ -39,6 +42,13 @@ SOURCES = {
         },
         "licence": "CC BY 4.0", "country": "Kenya", "role": "test",
         "page": "https://data.mendeley.com/datasets/tgv3zb82nd/1",
+    },
+    # Maize classes (P2). Ghana field photos from local farms (CCMT raw data), one file per image. Mendeley blocks
+    # cloud IPs, so leaf/ccmt_files.csv lists each image's public S3 URL (made by leaf/resolve_ccmt.py).
+    "ccmt": {
+        "file_list": "ccmt_files.csv",
+        "licence": "CC BY 4.0", "country": "Ghana", "role": "maize",
+        "page": "https://data.mendeley.com/datasets/bwh3zbpkpv/1",
     },
     # `other` (P0) and maize classes (P1). Web-scraped field photos, 13 species, no coffee.
     "plantdoc": {

@@ -32,6 +32,7 @@ cd ml
 modal token new                                          # once per machine
 modal run modal_app.py --stage all --labels p0           # fetch -> manifest -> train on an L4 GPU
 modal run modal_app.py --stage train --smoke             # cheap 30-step GPU check first, if you prefer
+modal run modal_app.py --stage all --labels p2           # + maize from CCMT (Ghana): healthy, fall armyworm, streak virus
 modal volume get pandastic-models leaf/<version> ./artifacts/
 ../ml/.venv/Scripts/python -m leaf.install artifacts/<version>   # replaces the stub, copies reports to ml/reports/
 ```
@@ -39,7 +40,9 @@ modal volume get pandastic-models leaf/<version> ./artifacts/
 What the pipeline does (`ml/leaf/`):
 
 - **Data** (`config.py`, `data.py`): BRACOL (Brazil, CC BY 4.0) for training; JMuBEN + JMuBEN2 (Kenya, CC BY 4.0)
-  as the **cross-country** test; PlantDoc (CC BY 4.0) and iBean (Uganda, MIT) as `other`. JMuBEN is full of rotated
+  as the **cross-country** test; PlantDoc (CC BY 4.0) and iBean (Uganda, MIT) as `other` (P0) or bean/maize classes
+  (P1); CCMT raw maize photos (Ghana, CC BY 4.0) for P2. CCMT is one file per image and Mendeley blocks cloud IPs,
+  so `leaf/resolve_ccmt.py` (run once from a normal connection) lists each image's public S3 URL in `leaf/ccmt_files.csv`. JMuBEN is full of rotated
   and flipped copies (the 8,336 rust images are 632 distinct leaves), so images are grouped by a rotation/flip-invariant
   perceptual hash, one image per leaf is kept, and groups never cross splits. BRACOL's published zip is truncated
   (no central directory): about 1,400 of its 1,747 leaf images can be read, and the "mixed stress" class is excluded.
