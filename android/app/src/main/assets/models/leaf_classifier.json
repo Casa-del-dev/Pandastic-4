@@ -1,7 +1,7 @@
 {
-  "version": "leaf-p2-mix-eff20277",
+  "version": "leaf-p2-mix-ens3-0483c29f",
   "stub": false,
-  "arch": "mobilenetv4_conv_small.e2400_r224_in1k",
+  "arch": "ensemble of 3 x mobilenetv4_conv_small.e2400_r224_in1k",
   "input_size": 224,
   "resize": "direct_bilinear",
   "mean": [
@@ -30,119 +30,128 @@
     "maize_streak_virus",
     "other"
   ],
-  "temperature": 0.6761,
+  "temperature": 0.9143,
   "thresholds": {
     "min_prob": 0.4,
-    "min_margin": 0.3
+    "min_margin": 0.05
   },
   "per_class_min_prob": {
-    "coffee_healthy": 0.95
+    "coffee_healthy": 0.99,
+    "bean_healthy": 0.65,
+    "maize_healthy": 0.99
   },
   "eval": {
     "test_set": "held-out images from training sources: CCMT (Ghana), iBean (Uganda), JMuBEN (Kenya, lesion close-ups), PlantDoc, RoCoLe (Ecuador, smartphone photos on the plant); + held-out `other`",
-    "n": 1364,
-    "accuracy": 0.9216,
-    "coverage_at_threshold": 0.9462,
-    "selective_accuracy": 0.9422,
-    "other_false_accept": 0.0476,
+    "n": 1999,
+    "accuracy": 0.9485,
+    "coverage_at_threshold": 0.9656,
+    "selective_accuracy": 0.9378,
+    "other_false_accept": 0.0162,
     "thresholds_met_target": true,
     "target_selective_accuracy": 0.9,
+    "non_plant_false_accept": 0.011,
+    "non_plant_test_n": 635,
     "by_crop": {
       "coffee": {
         "n_plant": 640,
-        "accuracy": 0.946,
+        "accuracy": 0.9688,
         "coverage_at_threshold": 0.9625,
-        "selective_accuracy": 0.9675
+        "selective_accuracy": 0.974
       },
       "maize": {
         "n_plant": 364,
-        "accuracy": 0.884,
-        "coverage_at_threshold": 0.9066,
-        "selective_accuracy": 0.8909
+        "accuracy": 0.9398,
+        "coverage_at_threshold": 0.9588,
+        "selective_accuracy": 0.8596
       },
       "bean": {
         "n_plant": 129,
-        "accuracy": 0.9361,
-        "coverage_at_threshold": 0.9767,
-        "selective_accuracy": 0.9524
+        "accuracy": 0.9759,
+        "coverage_at_threshold": 1.0,
+        "selective_accuracy": 0.9767
       }
     },
     "by_source": {
       "ccmt": {
         "n_plant": 338,
-        "accuracy": 0.8893,
-        "coverage_at_threshold": 0.9172,
-        "selective_accuracy": 0.8871
+        "accuracy": 0.9435,
+        "coverage_at_threshold": 0.9586,
+        "selective_accuracy": 0.8642
       },
       "ibean": {
         "n_plant": 129,
-        "accuracy": 0.9361,
-        "coverage_at_threshold": 0.9767,
-        "selective_accuracy": 0.9524
+        "accuracy": 0.9759,
+        "coverage_at_threshold": 1.0,
+        "selective_accuracy": 0.9767
       },
       "jmuben": {
         "n_plant": 280,
-        "accuracy": 0.9589,
-        "coverage_at_threshold": 0.975,
-        "selective_accuracy": 0.9963
+        "accuracy": 0.9799,
+        "coverage_at_threshold": 0.9893,
+        "selective_accuracy": 1.0
       },
       "plantdoc": {
         "n_plant": 26,
-        "accuracy": 0.9144,
-        "coverage_at_threshold": 0.7692,
-        "selective_accuracy": 0.95
+        "accuracy": 0.9697,
+        "coverage_at_threshold": 0.9615,
+        "selective_accuracy": 0.8
       },
       "rocole": {
         "n_plant": 360,
-        "accuracy": 0.9289,
-        "coverage_at_threshold": 0.9528,
-        "selective_accuracy": 0.9446
+        "accuracy": 0.9633,
+        "coverage_at_threshold": 0.9417,
+        "selective_accuracy": 0.9528
       }
     },
     "per_class_min_prob_check": {
       "label": "coffee_healthy",
-      "target_precision": 0.95,
+      "target_precision": 0.98,
       "chosen_on": "RoCoLe calib plants (mix)",
       "pipeline": "640 px JPEG q0.88 then 224 bilinear, as the app",
       "before": {
         "n": 360,
-        "coverage": 0.9528,
-        "selective_accuracy": 0.9417,
-        "coffee_healthy_answered": 207,
-        "coffee_healthy_precision": 0.9179,
+        "coverage": 0.9472,
+        "selective_accuracy": 0.9472,
+        "coffee_healthy_answered": 199,
+        "coffee_healthy_precision": 0.9246,
         "wrongly_called_coffee_healthy": {
-          "coffee_rust": 17
+          "coffee_rust": 15
         }
       },
       "after": {
         "n": 360,
-        "coverage": 0.7722,
-        "selective_accuracy": 0.964,
-        "coffee_healthy_answered": 142,
-        "coffee_healthy_precision": 0.9507,
+        "coverage": 0.6278,
+        "selective_accuracy": 0.969,
+        "coffee_healthy_answered": 84,
+        "coffee_healthy_precision": 0.9524,
         "wrongly_called_coffee_healthy": {
-          "coffee_rust": 7
+          "coffee_rust": 4
         }
       }
     }
   },
   "training": {
     "train_set": "BRACOL (Brazil) + CCMT (Ghana) + iBean (Uganda) + JMuBEN (Kenya, lesion close-ups) + PlantDoc + RoCoLe (Ecuador, smartphone photos on the plant); PlantDoc/iBean other classes as `other`",
-    "epochs_run": 12,
-    "pretrained": true,
-    "trained_at": "2026-10-04T02:55:41+00:00",
-    "epochs_max": 12,
-    "batch_size": 64,
-    "lr": 0.001,
-    "early_stop_patience": 4
+    "members": [
+      "leaf-p2-mix-d10b68b6",
+      "leaf-p2-mix-s14-67b6e3b1",
+      "leaf-p2-mix-s15-2c7b74f8"
+    ],
+    "member_temperatures": [
+      0.6863,
+      0.6742,
+      0.6896
+    ],
+    "weights": "int8 per output channel (DequantizeLinear), computed in fp32",
+    "trained_at": "2026-10-04T04:49:24+00:00"
   },
   "lineage": {
-    "manifest_sha256": "0df3ba6986eb27ccfb42419c0dbb3e818bbf981ed7c826b5ab44f6e9c01cce5e",
-    "config_sha256": "065db23a8a408ccaf8abfae4b9e53d52fb698989bac29ab2fe854324cba708ec",
-    "manifest": "manifest-p2-mix-cached.csv",
-    "git_sha": "e205e9a",
-    "seed": 13,
-    "torch": "2.14.1+cu130",
-    "timm": "1.0.30"
+    "members": [
+      "leaf-p2-mix-d10b68b6",
+      "leaf-p2-mix-s14-67b6e3b1",
+      "leaf-p2-mix-s15-2c7b74f8"
+    ],
+    "git_sha": "92ffd17",
+    "manifest": "manifest-p2-mix-cached.csv"
   }
 }
