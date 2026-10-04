@@ -5,7 +5,8 @@ temperature 0, thinking disabled, and scores the slots exactly like NluEvalTest 
 default when a price question names none). Latency is measured on this computer's CPU; a phone is slower.
 
 Sets: dev (used to tune the lexicon), heldout (written before any results), fresh (written after the LoRA was
-trained, in phrasings unlike its templates; the honest test for a fine-tuned model).
+trained, in phrasings unlike its templates; after its first measurement its errors were used to fix KeywordNlu),
+fresh2 (written before those fixes and never used to make them: the honest test for keywords and fine-tunes).
 
 Usage (from the repo root; first run NluEvalTest, which writes android/app/build/nlu-eval/kw_{dev,heldout,fresh}.csv):
   python ml/llm/eval_llm.py --server path/to/llama-server --model path/to/model.gguf
@@ -24,7 +25,7 @@ import requests
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-SETS = {"dev": "eval_sms.csv", "heldout": "eval_sms_heldout.csv", "fresh": "eval_sms_fresh.csv"}
+SETS = {"dev": "eval_sms.csv", "heldout": "eval_sms_heldout.csv", "fresh": "eval_sms_fresh.csv", "fresh2": "eval_sms_fresh2.csv"}
 KW_DIR = ROOT / "android/app/build/nlu-eval"
 POLICIES = ("keyword", "qwen", "hybrid_intent", "hybrid_intent_crop", "llm_first", "hybrid_fill")
 SLOTS = ["lang", "intent", "crop", "symptom", "commodity", "offer"]
@@ -45,9 +46,17 @@ def effective(pred: dict) -> dict:
     return out
 
 
+def same_reply(gold: dict, pred: dict) -> bool:
+    """Would the app send the same reply? Brain answers `help` and `other` with the same menu (Resolver.help), so
+    those two intents are one; every other slot must match."""
+    menu = lambda intent: "help" if intent in ("help", "other", "") else intent
+    return menu(gold["intent"] or "") == menu(pred.get("intent") or "") and all(
+        (gold[k] or "") == (pred.get(k) or "") for k in SLOTS if k != "intent")
+
+
 def score(gold_rows, predictions) -> dict:
     correct = {k: 0 for k in SLOTS}
-    exact, misses = 0, []
+    exact, replies, misses = 0, 0, []
     for row in gold_rows:
         pred = predictions.get(row["id"])
         if pred is None:
@@ -60,8 +69,10 @@ def score(gold_rows, predictions) -> dict:
                 ok = False
                 misses.append(f"{row['id']} `{row['text']}` {k}: want `{row[k]}` got `{pred.get(k)}`")
         exact += ok
+        replies += same_reply(row, pred)
     n = len(gold_rows)
-    return {"n": n, **{k: round(correct[k] / n, 3) for k in SLOTS}, "all_slots": round(exact / n, 3), "misses": misses}
+    return {"n": n, **{k: round(correct[k] / n, 3) for k in SLOTS}, "all_slots": round(exact / n, 3),
+            "same_reply": round(replies / n, 3), "misses": misses}
 
 
 def hybrid(kw: dict, qwen: dict, fill: str) -> dict:
@@ -124,17 +135,21 @@ def write_report(results: dict, threads: int, report: str = "nlu_eval") -> None:
     lines = ["# SMS understanding: KeywordNlu vs Qwen3.5-0.8B (GBNF)", "",
              "Synthetic SMS written by the team (labelled synthetic). `dev` was used to tune the keyword lexicon;",
              "`heldout` was written before any results and never used for tuning; `fresh` was written after the LoRA was",
-             "trained, in phrasings unlike its templates, and is not used to tune anything. Qwen: Q4_K_M via llama.cpp,",
+             "trained, in phrasings unlike its templates (first keyword score 68%; its errors were then used to fix",
+             "KeywordNlu); `fresh2` was written before those fixes and never used to make them (keywords 80% before, the",
+             "row below after). `fresh2` is the honest test. Qwen: Q4_K_M via llama.cpp,",
              f"temperature 0, thinking off, {threads} CPU threads on a laptop (a phone is slower).", "",
-             "| Set | Model | n | lang | intent | crop | symptom | commodity | offer | all slots |",
-             "| :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: |"]
+             "| Set | Model | n | lang | intent | crop | symptom | commodity | offer | all slots | same reply |",
+             "| :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: | --: |"]
     sets = {name: r for name, r in results.items() if name != "meta"}
     for name, r in sets.items():
         for model in POLICIES:
             if model in r:
                 s = r[model]
-                lines.append(f"| {name} | {model} | {s['n']} | " + " | ".join(f"{s[k]:.0%}" for k in SLOTS + ["all_slots"]) + " |")
-    lines += ["", "Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent",
+                lines.append(f"| {name} | {model} | {s['n']} | " + " | ".join(f"{s[k]:.0%}" for k in SLOTS + ["all_slots"]) + f" | {s.get('same_reply', 0):.0%} |")
+    lines += ["", "`same reply` treats `help` and `other` as one intent, because the app answers both with the same menu;",
+              "it is the share of SMS that get exactly the reply the gold slots would give.",
+              "", "Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent",
               "keyword matched (KeywordNlu intentProb 0). `hybrid_intent_crop`: also the crop when none was found (LlmNlu",
               "as of 01:00 UTC); it names coffee/maize for crops we don't support (cassava, tomato, tea), which keywords",
               "correctly leave empty. `hybrid_fill` also lets it fill symptom and offer: the base model invents symptoms.",
@@ -254,7 +269,7 @@ def main():
             results[name]["hybrid_fill" if fill == "all" else f"hybrid_{fill}"] = score(
                 rows, {i: hybrid(kw[i], llm[i], fill) for i in kw})
         results[name]["llm_first"] = score(rows, {i: llm_first(kw[i], llm[i]) for i in kw})
-        print(name, {m: results[name][m]["all_slots"] for m in POLICIES})
+        print(name, {m: (results[name][m]["all_slots"], results[name][m]["same_reply"]) for m in POLICIES})
 
     write_report(results, args.threads, args.report_name)
 

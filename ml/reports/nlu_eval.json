@@ -9,6 +9,7 @@
       "commodity": 0.84,
       "offer": 0.97,
       "all_slots": 0.31,
+      "same_reply": 0.34,
       "misses": [
         "3 `madoa ya machungwa chini ya majani ya kahawa` symptom: want `rust` got `miner`",
         "4 `unga wa machungwa kwenye majani` crop: want `` got `coffee`",
@@ -124,11 +125,11 @@
       ]
     },
     "latency_s": {
-      "median": 0.92,
-      "max": 4.3
+      "median": 1.0,
+      "max": 4.54
     },
-    "prompt_ms_median": 170,
-    "gen_ms_median": 722,
+    "prompt_ms_median": 190,
+    "gen_ms_median": 792,
     "failures": 0,
     "keyword": {
       "n": 100,
@@ -139,6 +140,7 @@
       "commodity": 1.0,
       "offer": 1.0,
       "all_slots": 1.0,
+      "same_reply": 1.0,
       "misses": []
     },
     "hybrid_intent": {
@@ -150,6 +152,7 @@
       "commodity": 1.0,
       "offer": 1.0,
       "all_slots": 0.99,
+      "same_reply": 1.0,
       "misses": [
         "83 `nimefika nyumbani` intent: want `other` got `help`"
       ]
@@ -163,6 +166,7 @@
       "commodity": 0.98,
       "offer": 1.0,
       "all_slots": 0.93,
+      "same_reply": 0.94,
       "misses": [
         "4 `unga wa machungwa kwenye majani` crop: want `` got `coffee`",
         "25 `armyworms everywhere` crop: want `` got `maize`",
@@ -184,6 +188,7 @@
       "commodity": 0.98,
       "offer": 1.0,
       "all_slots": 0.81,
+      "same_reply": 0.82,
       "misses": [
         "4 `unga wa machungwa kwenye majani` crop: want `` got `coffee`",
         "25 `armyworms everywhere` crop: want `` got `maize`",
@@ -219,6 +224,7 @@
       "commodity": 0.85,
       "offer": 1.0,
       "all_slots": 0.71,
+      "same_reply": 0.75,
       "misses": [
         "4 `unga wa machungwa kwenye majani` crop: want `` got `coffee`",
         "25 `armyworms everywhere` crop: want `` got `maize`",
@@ -278,6 +284,7 @@
       "commodity": 0.86,
       "offer": 1.0,
       "all_slots": 0.34,
+      "same_reply": 0.38,
       "misses": [
         "h3 `majani ya buni yana vumbi la njano` crop: want `coffee` got `maize`",
         "h3 `majani ya buni yana vumbi la njano` symptom: want `rust` got `streak_virus`",
@@ -337,21 +344,22 @@
       ]
     },
     "latency_s": {
-      "median": 0.94,
-      "max": 1.1
+      "median": 1.01,
+      "max": 1.23
     },
-    "prompt_ms_median": 184,
-    "gen_ms_median": 726,
+    "prompt_ms_median": 209,
+    "gen_ms_median": 786,
     "failures": 0,
     "keyword": {
       "n": 50,
       "lang": 1.0,
-      "intent": 0.8,
+      "intent": 0.84,
       "crop": 0.96,
       "symptom": 0.86,
       "commodity": 0.96,
       "offer": 1.0,
-      "all_slots": 0.68,
+      "all_slots": 0.72,
+      "same_reply": 0.76,
       "misses": [
         "h3 `majani ya buni yana vumbi la njano` symptom: want `rust` got ``",
         "h6 `mdudu anatoboa ndani ya jani la kahawa` symptom: want `miner` got ``",
@@ -370,10 +378,8 @@
         "h29 `P2 1000` intent: want `price` got `other`",
         "h29 `P2 1000` crop: want `maize` got ``",
         "h29 `P2 1000` commodity: want `maize_grain` got ``",
-        "h41 `best time to plant beans` intent: want `planting` got `other`",
         "h44 `nisaidie` intent: want `help` got `other`",
-        "h45 `salaam` intent: want `help` got `other`",
-        "h50 `miti ya kahawa inakufa` intent: want `diagnose` got `other`"
+        "h45 `salaam` intent: want `help` got `other`"
       ]
     },
     "hybrid_intent": {
@@ -385,6 +391,7 @@
       "commodity": 0.96,
       "offer": 1.0,
       "all_slots": 0.78,
+      "same_reply": 0.82,
       "misses": [
         "h3 `majani ya buni yana vumbi la njano` symptom: want `rust` got ``",
         "h6 `mdudu anatoboa ndani ya jani la kahawa` symptom: want `miner` got ``",
@@ -410,6 +417,7 @@
       "commodity": 0.96,
       "offer": 1.0,
       "all_slots": 0.78,
+      "same_reply": 0.82,
       "misses": [
         "h3 `majani ya buni yana vumbi la njano` symptom: want `rust` got ``",
         "h6 `mdudu anatoboa ndani ya jani la kahawa` symptom: want `miner` got ``",
@@ -435,6 +443,7 @@
       "commodity": 0.96,
       "offer": 1.0,
       "all_slots": 0.66,
+      "same_reply": 0.7,
       "misses": [
         "h3 `majani ya buni yana vumbi la njano` symptom: want `rust` got `streak_virus`",
         "h10 `ncha za matawi ya kahawa zimekauka baada ya baridi` symptom: want `phoma` got `rust`",
@@ -466,6 +475,7 @@
       "commodity": 0.86,
       "offer": 1.0,
       "all_slots": 0.6,
+      "same_reply": 0.66,
       "misses": [
         "h3 `majani ya buni yana vumbi la njano` crop: want `coffee` got `maize`",
         "h3 `majani ya buni yana vumbi la njano` symptom: want `rust` got ``",
@@ -508,6 +518,7 @@
       "commodity": 0.775,
       "offer": 0.9,
       "all_slots": 0.325,
+      "same_reply": 0.375,
       "misses": [
         "f1 `Habari, naomba ushauri. Kahawa yangu majani yamejaa unga wa rangi ya machungwa upande wa chini` intent: want `diagnose` got `help`",
         "f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `rust`",
@@ -561,107 +572,84 @@
       ]
     },
     "latency_s": {
-      "median": 0.95,
-      "max": 1.19
+      "median": 1.01,
+      "max": 1.28
     },
-    "prompt_ms_median": 199,
-    "gen_ms_median": 725,
+    "prompt_ms_median": 225,
+    "gen_ms_median": 765,
     "failures": 0,
     "keyword": {
       "n": 40,
-      "lang": 0.95,
-      "intent": 0.85,
+      "lang": 1.0,
+      "intent": 1.0,
       "crop": 1.0,
-      "symptom": 0.825,
+      "symptom": 0.875,
       "commodity": 1.0,
       "offer": 1.0,
-      "all_slots": 0.675,
+      "all_slots": 0.875,
+      "same_reply": 0.875,
       "misses": [
-        "f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `streak_virus`",
         "f4 `coffee leaf got brown circles with grey middle like an eye` symptom: want `cercospora` got ``",
-        "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` intent: want `diagnose` got `other`",
         "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got ``",
-        "f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` symptom: want `streak_virus` got `miner`",
         "f8 `corn leaves have long cigar shaped grey brown lesions` symptom: want `leaf_blight` got ``",
         "f9 `maharagwe yangu majani yana vidoa vya kahawia vyenye kona kona` symptom: want `angular_leaf_spot` got ``",
-        "f11 `Shamba la mahindi limeharibika sana mwaka huu sijui ni nini` intent: want `diagnose` got `other`",
-        "f12 `my coffee is not doing well this season` intent: want `diagnose` got `planting`",
-        "f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``",
-        "f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` lang: want `sw` got `en`",
-        "f32 `should i plant my maize before the rains start` intent: want `planting` got `help`",
-        "f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `other`",
-        "f36 `how does this work` lang: want `en` got `sw`",
-        "f36 `how does this work` intent: want `help` got `other`"
+        "f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``"
       ]
     },
     "hybrid_intent": {
       "n": 40,
-      "lang": 0.95,
-      "intent": 0.9,
+      "lang": 1.0,
+      "intent": 0.975,
       "crop": 1.0,
-      "symptom": 0.825,
+      "symptom": 0.875,
       "commodity": 1.0,
       "offer": 1.0,
-      "all_slots": 0.675,
+      "all_slots": 0.85,
+      "same_reply": 0.85,
       "misses": [
-        "f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `streak_virus`",
         "f4 `coffee leaf got brown circles with grey middle like an eye` symptom: want `cercospora` got ``",
         "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got ``",
-        "f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` symptom: want `streak_virus` got `miner`",
         "f8 `corn leaves have long cigar shaped grey brown lesions` symptom: want `leaf_blight` got ``",
         "f9 `maharagwe yangu majani yana vidoa vya kahawia vyenye kona kona` symptom: want `angular_leaf_spot` got ``",
-        "f12 `my coffee is not doing well this season` intent: want `diagnose` got `planting`",
         "f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``",
-        "f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` lang: want `sw` got `en`",
-        "f32 `should i plant my maize before the rains start` intent: want `planting` got `help`",
-        "f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `diagnose`",
-        "f36 `how does this work` lang: want `en` got `sw`",
         "f40 `jua ni kali sana leo shambani` intent: want `other` got `diagnose`"
       ]
     },
     "hybrid_intent_crop": {
       "n": 40,
-      "lang": 0.95,
-      "intent": 0.9,
+      "lang": 1.0,
+      "intent": 0.975,
       "crop": 0.925,
-      "symptom": 0.825,
+      "symptom": 0.875,
       "commodity": 1.0,
       "offer": 1.0,
-      "all_slots": 0.625,
+      "all_slots": 0.8,
+      "same_reply": 0.8,
       "misses": [
-        "f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `streak_virus`",
         "f4 `coffee leaf got brown circles with grey middle like an eye` symptom: want `cercospora` got ``",
         "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got ``",
-        "f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` symptom: want `streak_virus` got `miner`",
         "f8 `corn leaves have long cigar shaped grey brown lesions` symptom: want `leaf_blight` got ``",
         "f9 `maharagwe yangu majani yana vidoa vya kahawia vyenye kona kona` symptom: want `angular_leaf_spot` got ``",
-        "f12 `my coffee is not doing well this season` intent: want `diagnose` got `planting`",
         "f13 `mihogo yangu ina majani yaliyojikunja` crop: want `` got `coffee`",
         "f14 `tomato leaves have black spots` crop: want `` got `maize`",
         "f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``",
-        "f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` lang: want `sw` got `en`",
-        "f32 `should i plant my maize before the rains start` intent: want `planting` got `help`",
-        "f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `diagnose`",
-        "f36 `how does this work` lang: want `en` got `sw`",
         "f40 `jua ni kali sana leo shambani` intent: want `other` got `diagnose`",
         "f40 `jua ni kali sana leo shambani` crop: want `` got `coffee`"
       ]
     },
     "hybrid_fill": {
       "n": 40,
-      "lang": 0.95,
-      "intent": 0.9,
+      "lang": 1.0,
+      "intent": 0.975,
       "crop": 0.925,
-      "symptom": 0.65,
+      "symptom": 0.7,
       "commodity": 1.0,
       "offer": 1.0,
-      "all_slots": 0.55,
+      "all_slots": 0.7,
+      "same_reply": 0.7,
       "misses": [
-        "f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `streak_virus`",
         "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got `streak_virus`",
-        "f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` symptom: want `streak_virus` got `miner`",
         "f11 `Shamba la mahindi limeharibika sana mwaka huu sijui ni nini` symptom: want `` got `lethal_necrosis`",
-        "f12 `my coffee is not doing well this season` intent: want `diagnose` got `planting`",
         "f12 `my coffee is not doing well this season` symptom: want `` got `leaf_blight`",
         "f13 `mihogo yangu ina majani yaliyojikunja` crop: want `` got `coffee`",
         "f13 `mihogo yangu ina majani yaliyojikunja` symptom: want `` got `leaf_blight`",
@@ -670,13 +658,9 @@
         "f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got `lethal_necrosis`",
         "f16 `msee kahawa yangu iko na shida ya majani` symptom: want `` got `leaf_blight`",
         "f17 `Bei ya kahawa parchment pale Kapchorwa ni kiasi gani leo?` symptom: want `` got `phoma`",
-        "f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` lang: want `sw` got `en`",
         "f23 `maharage elfu tatu na mia tano kwa kilo ni bei nzuri?` symptom: want `` got `leaf_spot`",
         "f28 `Sokoni bei ya mahindi imeshuka?` symptom: want `` got `leaf_blight`",
         "f31 `Ni wakati gani mzuri wa kupanda maharage msimu huu wa mvua?` symptom: want `` got `leaf_blight`",
-        "f32 `should i plant my maize before the rains start` intent: want `planting` got `help`",
-        "f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `diagnose`",
-        "f36 `how does this work` lang: want `en` got `sw`",
         "f40 `jua ni kali sana leo shambani` intent: want `other` got `diagnose`",
         "f40 `jua ni kali sana leo shambani` crop: want `` got `coffee`",
         "f40 `jua ni kali sana leo shambani` symptom: want `` got `leaf_blight`"
@@ -684,19 +668,18 @@
     },
     "llm_first": {
       "n": 40,
-      "lang": 0.95,
+      "lang": 1.0,
       "intent": 0.6,
       "crop": 0.9,
-      "symptom": 0.825,
+      "symptom": 0.875,
       "commodity": 0.8,
       "offer": 1.0,
-      "all_slots": 0.35,
+      "all_slots": 0.425,
+      "same_reply": 0.475,
       "misses": [
         "f1 `Habari, naomba ushauri. Kahawa yangu majani yamejaa unga wa rangi ya machungwa upande wa chini` intent: want `diagnose` got `help`",
-        "f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `streak_virus`",
         "f4 `coffee leaf got brown circles with grey middle like an eye` symptom: want `cercospora` got ``",
         "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got ``",
-        "f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` symptom: want `streak_virus` got `miner`",
         "f8 `corn leaves have long cigar shaped grey brown lesions` symptom: want `leaf_blight` got ``",
         "f9 `maharagwe yangu majani yana vidoa vya kahawia vyenye kona kona` symptom: want `angular_leaf_spot` got ``",
         "f13 `mihogo yangu ina majani yaliyojikunja` crop: want `` got `coffee`",
@@ -705,7 +688,6 @@
         "f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``",
         "f17 `Bei ya kahawa parchment pale Kapchorwa ni kiasi gani leo?` intent: want `price` got `diagnose`",
         "f17 `Bei ya kahawa parchment pale Kapchorwa ni kiasi gani leo?` commodity: want `coffee_arabica_parchment` got ``",
-        "f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` lang: want `sw` got `en`",
         "f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` intent: want `price` got `diagnose`",
         "f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` commodity: want `coffee_robusta_kiboko` got ``",
         "f21 `mahindi wananunua 850 kwa kilo` intent: want `price` got `diagnose`",
@@ -724,11 +706,204 @@
         "f31 `Ni wakati gani mzuri wa kupanda maharage msimu huu wa mvua?` intent: want `planting` got `diagnose`",
         "f32 `should i plant my maize before the rains start` intent: want `planting` got `diagnose`",
         "f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `diagnose`",
-        "f36 `how does this work` lang: want `en` got `sw`",
         "f38 `asante kwa ushauri wako` intent: want `other` got `help`",
         "f39 `ok got it` intent: want `other` got `help`",
         "f40 `jua ni kali sana leo shambani` intent: want `other` got `diagnose`",
         "f40 `jua ni kali sana leo shambani` crop: want `` got `coffee`"
+      ]
+    }
+  },
+  "fresh2": {
+    "qwen": {
+      "n": 30,
+      "lang": 0.733,
+      "intent": 0.633,
+      "crop": 0.9,
+      "symptom": 0.533,
+      "commodity": 0.833,
+      "offer": 0.933,
+      "all_slots": 0.267,
+      "same_reply": 0.3,
+      "misses": [
+        "g3 `maharage yangu yana vipele vya kahawia chini ya jani` lang: want `sw` got `en`",
+        "g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got `leaf_blight`",
+        "g5 `funza wamevamia mahindi yote shambani` symptom: want `fall_armyworm` got `leaf_blight`",
+        "g7 `kahawa yangu ina tatizo, majani yanakauka` symptom: want `` got `leaf_blight`",
+        "g8 `beans dying in the field what is the problem` symptom: want `` got `lethal_necrosis`",
+        "g9 `ndizi zangu zina ugonjwa` crop: want `` got `coffee`",
+        "g9 `ndizi zangu zina ugonjwa` symptom: want `` got `miner`",
+        "g10 `coffee leaves have grey spots with brown ring` lang: want `en` got `sw`",
+        "g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got `leaf_blight`",
+        "g11 `mahindi yana madoa ya kijivu marefu kama sigara` lang: want `sw` got `en`",
+        "g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got `streak_virus`",
+        "g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got `leaf_blight`",
+        "g13 `bei ya kahawa kiboko leo sokoni ni ngapi` intent: want `price` got `diagnose`",
+        "g13 `bei ya kahawa kiboko leo sokoni ni ngapi` symptom: want `` got `leaf_blight`",
+        "g13 `bei ya kahawa kiboko leo sokoni ni ngapi` commodity: want `coffee_robusta_kiboko` got ``",
+        "g14 `buyer wants to pay 13,500 for parchment` lang: want `en` got `sw`",
+        "g15 `wanataka kununua mahindi kwa shilingi 750` intent: want `price` got `diagnose`",
+        "g15 `wanataka kununua mahindi kwa shilingi 750` commodity: want `maize_grain` got ``",
+        "g15 `wanataka kununua mahindi kwa shilingi 750` offer: want `750` got ``",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` lang: want `sw` got `en`",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` intent: want `price` got `diagnose`",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` symptom: want `` got `leaf_blight`",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` commodity: want `beans_dry` got ``",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` offer: want `4000` got ``",
+        "g19 `P 3 2700` crop: want `bean` got `coffee`",
+        "g19 `P 3 2700` commodity: want `beans_dry` got `coffee_arabica_parchment`",
+        "g20 `drugar inauzwa bei gani mwezi huu` intent: want `price` got `diagnose`",
+        "g20 `drugar inauzwa bei gani mwezi huu` symptom: want `` got `leaf_blight`",
+        "g20 `drugar inauzwa bei gani mwezi huu` commodity: want `coffee_arabica_drugar` got ``",
+        "g22 `bei ya mihogo` intent: want `price` got `help`",
+        "g23 `nipande mahindi lini mwaka huu` lang: want `sw` got `en`",
+        "g23 `nipande mahindi lini mwaka huu` intent: want `planting` got `diagnose`",
+        "g23 `nipande mahindi lini mwaka huu` symptom: want `` got `leaf_blight`",
+        "g24 `is it time to sow beans` intent: want `planting` got `diagnose`",
+        "g25 `msimu wa kupanda kahawa ni lini` intent: want `planting` got `diagnose`",
+        "g25 `msimu wa kupanda kahawa ni lini` symptom: want `` got `leaf_blight`",
+        "g26 `hello, what can you do` lang: want `en` got `sw`",
+        "g27 `msaada tafadhali` intent: want `help` got `diagnose`",
+        "g27 `msaada tafadhali` crop: want `` got `coffee`",
+        "g27 `msaada tafadhali` symptom: want `` got `leaf_blight`",
+        "g29 `nashukuru sana` intent: want `other` got `help`",
+        "g30 `the rain was heavy yesterday` lang: want `en` got `sw`",
+        "g30 `the rain was heavy yesterday` intent: want `other` got `help`"
+      ]
+    },
+    "latency_s": {
+      "median": 1.02,
+      "max": 1.19
+    },
+    "prompt_ms_median": 218,
+    "gen_ms_median": 774,
+    "failures": 0,
+    "keyword": {
+      "n": 30,
+      "lang": 0.967,
+      "intent": 0.967,
+      "crop": 1.0,
+      "symptom": 0.867,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.833,
+      "same_reply": 0.833,
+      "misses": [
+        "g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got ``",
+        "g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got ``",
+        "g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got ``",
+        "g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got ``",
+        "g28 `good morning` lang: want `en` got `sw`",
+        "g28 `good morning` intent: want `help` got `other`"
+      ]
+    },
+    "hybrid_intent": {
+      "n": 30,
+      "lang": 0.967,
+      "intent": 0.933,
+      "crop": 1.0,
+      "symptom": 0.867,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.767,
+      "same_reply": 0.833,
+      "misses": [
+        "g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got ``",
+        "g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got ``",
+        "g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got ``",
+        "g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got ``",
+        "g28 `good morning` lang: want `en` got `sw`",
+        "g29 `nashukuru sana` intent: want `other` got `help`",
+        "g30 `the rain was heavy yesterday` intent: want `other` got `help`"
+      ]
+    },
+    "hybrid_intent_crop": {
+      "n": 30,
+      "lang": 0.967,
+      "intent": 0.933,
+      "crop": 0.933,
+      "symptom": 0.867,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.7,
+      "same_reply": 0.767,
+      "misses": [
+        "g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got ``",
+        "g9 `ndizi zangu zina ugonjwa` crop: want `` got `coffee`",
+        "g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got ``",
+        "g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got ``",
+        "g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got ``",
+        "g27 `msaada tafadhali` crop: want `` got `coffee`",
+        "g28 `good morning` lang: want `en` got `sw`",
+        "g29 `nashukuru sana` intent: want `other` got `help`",
+        "g30 `the rain was heavy yesterday` intent: want `other` got `help`"
+      ]
+    },
+    "hybrid_fill": {
+      "n": 30,
+      "lang": 0.967,
+      "intent": 0.933,
+      "crop": 0.933,
+      "symptom": 0.567,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.467,
+      "same_reply": 0.533,
+      "misses": [
+        "g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got `leaf_blight`",
+        "g7 `kahawa yangu ina tatizo, majani yanakauka` symptom: want `` got `leaf_blight`",
+        "g8 `beans dying in the field what is the problem` symptom: want `` got `lethal_necrosis`",
+        "g9 `ndizi zangu zina ugonjwa` crop: want `` got `coffee`",
+        "g9 `ndizi zangu zina ugonjwa` symptom: want `` got `miner`",
+        "g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got `leaf_blight`",
+        "g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got `streak_virus`",
+        "g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got `leaf_blight`",
+        "g13 `bei ya kahawa kiboko leo sokoni ni ngapi` symptom: want `` got `leaf_blight`",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` symptom: want `` got `leaf_blight`",
+        "g20 `drugar inauzwa bei gani mwezi huu` symptom: want `` got `leaf_blight`",
+        "g23 `nipande mahindi lini mwaka huu` symptom: want `` got `leaf_blight`",
+        "g25 `msimu wa kupanda kahawa ni lini` symptom: want `` got `leaf_blight`",
+        "g27 `msaada tafadhali` crop: want `` got `coffee`",
+        "g27 `msaada tafadhali` symptom: want `` got `leaf_blight`",
+        "g28 `good morning` lang: want `en` got `sw`",
+        "g29 `nashukuru sana` intent: want `other` got `help`",
+        "g30 `the rain was heavy yesterday` intent: want `other` got `help`"
+      ]
+    },
+    "llm_first": {
+      "n": 30,
+      "lang": 0.967,
+      "intent": 0.633,
+      "crop": 0.9,
+      "symptom": 0.867,
+      "commodity": 0.833,
+      "offer": 1.0,
+      "all_slots": 0.4,
+      "same_reply": 0.467,
+      "misses": [
+        "g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got ``",
+        "g9 `ndizi zangu zina ugonjwa` crop: want `` got `coffee`",
+        "g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got ``",
+        "g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got ``",
+        "g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got ``",
+        "g13 `bei ya kahawa kiboko leo sokoni ni ngapi` intent: want `price` got `diagnose`",
+        "g13 `bei ya kahawa kiboko leo sokoni ni ngapi` commodity: want `coffee_robusta_kiboko` got ``",
+        "g15 `wanataka kununua mahindi kwa shilingi 750` intent: want `price` got `diagnose`",
+        "g15 `wanataka kununua mahindi kwa shilingi 750` commodity: want `maize_grain` got ``",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` intent: want `price` got `diagnose`",
+        "g17 `nimeambiwa bei ya maharage ni elfu nne` commodity: want `beans_dry` got ``",
+        "g19 `P 3 2700` crop: want `bean` got `coffee`",
+        "g19 `P 3 2700` commodity: want `beans_dry` got `coffee_arabica_parchment`",
+        "g20 `drugar inauzwa bei gani mwezi huu` intent: want `price` got `diagnose`",
+        "g20 `drugar inauzwa bei gani mwezi huu` commodity: want `coffee_arabica_drugar` got ``",
+        "g22 `bei ya mihogo` intent: want `price` got `help`",
+        "g23 `nipande mahindi lini mwaka huu` intent: want `planting` got `diagnose`",
+        "g24 `is it time to sow beans` intent: want `planting` got `diagnose`",
+        "g25 `msimu wa kupanda kahawa ni lini` intent: want `planting` got `diagnose`",
+        "g27 `msaada tafadhali` intent: want `help` got `diagnose`",
+        "g27 `msaada tafadhali` crop: want `` got `coffee`",
+        "g28 `good morning` lang: want `en` got `sw`",
+        "g29 `nashukuru sana` intent: want `other` got `help`",
+        "g30 `the rain was heavy yesterday` intent: want `other` got `help`"
       ]
     }
   },
@@ -737,7 +912,8 @@
     "train_overlap": {
       "dev": 51,
       "heldout": 24,
-      "fresh": 3
+      "fresh": 3,
+      "fresh2": 7
     }
   }
 }

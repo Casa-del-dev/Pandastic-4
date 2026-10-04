@@ -66,11 +66,9 @@ sw,shida,intent,diagnose,prefix
 en,planting,intent,planting,token
 en,when to plant,intent,planting,substring
 en,sow,intent,planting,prefix
-en,season,intent,planting,prefix
 sw,kupanda,intent,planting,token
 sw,nipande,intent,planting,token
 sw,tupande,intent,planting,token
-sw,msimu,intent,planting,prefix
 en,?,intent,help,token
 en,help,intent,help,prefix
 en,menu,intent,help,token
@@ -177,3 +175,15 @@ sw,njia nyeupe,symptom,miner,substring
 en,white trails,symptom,miner,substring
 en,holes,symptom,fall_armyworm,token
 sw,matundu,symptom,fall_armyworm,prefix
+en,plant,intent,planting,token
+sw,otesha,intent,planting,substring
+sw,miche,intent,planting,token
+sw,meliwa,intent,diagnose,substring
+sw,haribika,intent,diagnose,substring
+en,not doing well,intent,diagnose,substring
+en,how does this,intent,help,substring
+en,how to use,intent,help,substring
+sw,mistari,symptom,miner,prefix
+sw,michirizi,symptom,streak_virus,prefix
+sw,nakufa,intent,diagnose,substring
+sw,mekufa,intent,diagnose,substring

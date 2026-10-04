@@ -1,10 +1,13 @@
 package org.pandastic.relay.brain;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,11 +26,30 @@ public final class KeywordNlu implements Nlu {
         "(elfu\\s*)?(?<!\\d)(\\d{1,3}(?:[,.]\\d{3})+(?!\\d)|\\d+(?:\\.\\d+)?)\\s*(k\\b|elfu\\b)?", Pattern.CASE_INSENSITIVE);
     /** Prices per kg in UGX are well above this; smaller numbers are menu codes (1, 2, 3) or quantities. */
     private static final double MIN_OFFER = 100;
+    /**
+     * Frequent function words. They decide the reply language when the lexicon terms don't ("kiboko ... ni sawa?",
+     * "how does this work"). Each distinct word counts like one lexicon term.
+     */
+    private static final Set<String> SW_WORDS = new HashSet<>(Arrays.asList(
+        "ni", "na", "ya", "wa", "za", "la", "kwa", "hii", "huu", "hapa", "sana", "sawa", "gani", "ngapi", "nini", "lini",
+        "yangu", "wangu", "zangu", "langu", "kuna", "je", "leo", "kesho", "tafadhali", "asante", "mimi", "yote", "kama",
+        "bado", "sasa", "au", "lakini", "pia", "ndani", "juu", "chini", "mtu", "hapana", "ndiyo"));
+    private static final Set<String> EN_WORDS = new HashSet<>(Arrays.asList(
+        "the", "is", "are", "my", "how", "what", "when", "does", "do", "this", "that", "of", "for", "to", "and", "a", "an",
+        "i", "it", "have", "has", "with", "in", "on", "at", "can", "should", "much", "today", "please", "pls", "you",
+        "your", "there", "be", "not", "why", "which", "per", "was", "will", "get"));
 
     private final List<Rule> rules = new ArrayList<>();
+    /** Terms listed under both languages ("kiboko", "faq") say nothing about which language the farmer writes in. */
+    private final Set<String> bothLanguages = new HashSet<>();
 
     public KeywordNlu(List<Knowledge.LexiconEntry> lexicon) {
-        for (Knowledge.LexiconEntry entry : lexicon) rules.add(new Rule(entry));
+        Set<String> sw = new HashSet<>(), en = new HashSet<>();
+        for (Knowledge.LexiconEntry entry : lexicon) {
+            rules.add(new Rule(entry));
+            ("sw".equals(entry.lang) ? sw : en).add(entry.term);
+        }
+        for (String term : sw) if (en.contains(term)) bothLanguages.add(term);
     }
 
     @Override public Slots parse(String text, String lang) {
@@ -40,7 +62,7 @@ public final class KeywordNlu implements Nlu {
         java.util.Set<String> swTerms = new java.util.HashSet<>(), enTerms = new java.util.HashSet<>();
         for (Rule rule : rules) {
             if (!rule.pattern.matcher(normalized).find()) continue;
-            boolean languageNeutral = rule.entry.term.length() <= 1;  // "1", "p", "?" exist in both languages
+            boolean languageNeutral = rule.entry.term.length() <= 1 || bothLanguages.contains(rule.entry.term);  // "1", "p", "?", "kiboko"
             if (!languageNeutral) ("sw".equals(rule.entry.lang) ? swTerms : enTerms).add(rule.entry.term);
             Map<String, java.util.Set<String>> target;
             switch (rule.entry.slot) {
@@ -53,10 +75,17 @@ public final class KeywordNlu implements Nlu {
             // Distinct terms per value: "1" listed under both languages is still one hit.
             target.computeIfAbsent(rule.entry.value, k -> new java.util.HashSet<>()).add(rule.entry.term);
         }
+        for (String word : normalized.split(" ")) {
+            if (SW_WORDS.contains(word)) swTerms.add(word);
+            else if (EN_WORDS.contains(word)) enTerms.add(word);
+        }
         Slots slots = new Slots();
         slots.lang = lang != null ? lang : (enTerms.size() > swTerms.size() ? "en" : "sw");  // Swahili first (decision D3)
         slots.offer = offer(text);
         slots.crop = unique(crops);
+        // A symptom word can mean different conditions on different crops ("mistari", lines: leaf-miner trails on coffee,
+        // streak virus on maize). Once the crop is known, keep only symptoms that form a real label with it.
+        if (slots.crop != null) symptoms.keySet().removeIf(s -> !Resolver.LABELS.contains(slots.crop + "_" + s));
         slots.symptom = unique(symptoms);
         slots.commodity = unique(commodities);
         slots.intent = intent(intents, slots);

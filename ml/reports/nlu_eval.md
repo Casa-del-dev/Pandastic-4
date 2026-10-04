@@ -2,29 +2,40 @@
 
 Synthetic SMS written by the team (labelled synthetic). `dev` was used to tune the keyword lexicon;
 `heldout` was written before any results and never used for tuning; `fresh` was written after the LoRA was
-trained, in phrasings unlike its templates, and is not used to tune anything. Qwen: Q4_K_M via llama.cpp,
+trained, in phrasings unlike its templates (first keyword score 68%; its errors were then used to fix
+KeywordNlu); `fresh2` was written before those fixes and never used to make them (keywords 80% before, the
+row below after). `fresh2` is the honest test. Qwen: Q4_K_M via llama.cpp,
 temperature 0, thinking off, 4 CPU threads on a laptop (a phone is slower).
 
-| Set | Model | n | lang | intent | crop | symptom | commodity | offer | all slots |
-| :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: |
-| dev | keyword | 100 | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
-| dev | qwen | 100 | 66% | 79% | 91% | 72% | 84% | 97% | 31% |
-| dev | hybrid_intent | 100 | 100% | 99% | 100% | 100% | 100% | 100% | 99% |
-| dev | hybrid_intent_crop | 100 | 100% | 99% | 94% | 100% | 98% | 100% | 93% |
-| dev | llm_first | 100 | 100% | 79% | 91% | 100% | 85% | 100% | 71% |
-| dev | hybrid_fill | 100 | 100% | 99% | 94% | 86% | 98% | 100% | 81% |
-| heldout | keyword | 50 | 100% | 80% | 96% | 86% | 96% | 100% | 68% |
-| heldout | qwen | 50 | 68% | 78% | 94% | 64% | 86% | 100% | 34% |
-| heldout | hybrid_intent | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% |
-| heldout | hybrid_intent_crop | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% |
-| heldout | llm_first | 50 | 100% | 78% | 94% | 86% | 86% | 100% | 60% |
-| heldout | hybrid_fill | 50 | 100% | 96% | 96% | 74% | 96% | 100% | 66% |
-| fresh | keyword | 40 | 95% | 85% | 100% | 82% | 100% | 100% | 68% |
-| fresh | qwen | 40 | 92% | 60% | 90% | 68% | 78% | 90% | 32% |
-| fresh | hybrid_intent | 40 | 95% | 90% | 100% | 82% | 100% | 100% | 68% |
-| fresh | hybrid_intent_crop | 40 | 95% | 90% | 92% | 82% | 100% | 100% | 62% |
-| fresh | llm_first | 40 | 95% | 60% | 90% | 82% | 80% | 100% | 35% |
-| fresh | hybrid_fill | 40 | 95% | 90% | 92% | 65% | 100% | 100% | 55% |
+| Set | Model | n | lang | intent | crop | symptom | commodity | offer | all slots | same reply |
+| :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: | --: |
+| dev | keyword | 100 | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
+| dev | qwen | 100 | 66% | 79% | 91% | 72% | 84% | 97% | 31% | 34% |
+| dev | hybrid_intent | 100 | 100% | 99% | 100% | 100% | 100% | 100% | 99% | 100% |
+| dev | hybrid_intent_crop | 100 | 100% | 99% | 94% | 100% | 98% | 100% | 93% | 94% |
+| dev | llm_first | 100 | 100% | 79% | 91% | 100% | 85% | 100% | 71% | 75% |
+| dev | hybrid_fill | 100 | 100% | 99% | 94% | 86% | 98% | 100% | 81% | 82% |
+| heldout | keyword | 50 | 100% | 84% | 96% | 86% | 96% | 100% | 72% | 76% |
+| heldout | qwen | 50 | 68% | 78% | 94% | 64% | 86% | 100% | 34% | 38% |
+| heldout | hybrid_intent | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% | 82% |
+| heldout | hybrid_intent_crop | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% | 82% |
+| heldout | llm_first | 50 | 100% | 78% | 94% | 86% | 86% | 100% | 60% | 66% |
+| heldout | hybrid_fill | 50 | 100% | 96% | 96% | 74% | 96% | 100% | 66% | 70% |
+| fresh | keyword | 40 | 100% | 100% | 100% | 88% | 100% | 100% | 88% | 88% |
+| fresh | qwen | 40 | 92% | 60% | 90% | 68% | 78% | 90% | 32% | 38% |
+| fresh | hybrid_intent | 40 | 100% | 98% | 100% | 88% | 100% | 100% | 85% | 85% |
+| fresh | hybrid_intent_crop | 40 | 100% | 98% | 92% | 88% | 100% | 100% | 80% | 80% |
+| fresh | llm_first | 40 | 100% | 60% | 90% | 88% | 80% | 100% | 42% | 48% |
+| fresh | hybrid_fill | 40 | 100% | 98% | 92% | 70% | 100% | 100% | 70% | 70% |
+| fresh2 | keyword | 30 | 97% | 97% | 100% | 87% | 100% | 100% | 83% | 83% |
+| fresh2 | qwen | 30 | 73% | 63% | 90% | 53% | 83% | 93% | 27% | 30% |
+| fresh2 | hybrid_intent | 30 | 97% | 93% | 100% | 87% | 100% | 100% | 77% | 83% |
+| fresh2 | hybrid_intent_crop | 30 | 97% | 93% | 93% | 87% | 100% | 100% | 70% | 77% |
+| fresh2 | llm_first | 30 | 97% | 63% | 90% | 87% | 83% | 100% | 40% | 47% |
+| fresh2 | hybrid_fill | 30 | 97% | 93% | 93% | 57% | 100% | 100% | 47% | 53% |
+
+`same reply` treats `help` and `other` as one intent, because the app answers both with the same menu;
+it is the share of SMS that get exactly the reply the gold slots would give.
 
 Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent
 keyword matched (KeywordNlu intentProb 0). `hybrid_intent_crop`: also the crop when none was found (LlmNlu
@@ -33,13 +44,14 @@ correctly leave empty. `hybrid_fill` also lets it fill symptom and offer: the ba
 `llm_first` = the LLM's intent and crop win whenever it gives them; lang, symptom and offer stay with the keywords.
 
 Model: `Qwen3.5-0.8B-Q4_K_M.gguf`.
-Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 synthetic SMS): dev 51/100, heldout 24/50, fresh 3/40. A fine-tuned model's dev/heldout scores are optimistic by that much; `fresh` is the honest one.
+Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 synthetic SMS): dev 51/100, heldout 24/50, fresh 3/40, fresh2 7/30. A fine-tuned model's dev/heldout scores are optimistic by that much; `fresh` is the honest one.
 
 | Set | median latency (s) | max (s) | prompt ms (median) | generation ms (median) |
 | :-- | --: | --: | --: | --: |
-| dev | 0.92 | 4.3 | 170 | 722 |
-| heldout | 0.94 | 1.1 | 184 | 726 |
-| fresh | 0.95 | 1.19 | 199 | 725 |
+| dev | 1.0 | 4.54 | 190 | 792 |
+| heldout | 1.01 | 1.23 | 209 | 786 |
+| fresh | 1.01 | 1.28 | 225 | 765 |
+| fresh2 | 1.02 | 1.19 | 218 | 774 |
 
 ## Misses: dev / qwen
 
@@ -174,10 +186,8 @@ Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 syn
 - h29 `P2 1000` intent: want `price` got `other`
 - h29 `P2 1000` crop: want `maize` got ``
 - h29 `P2 1000` commodity: want `maize_grain` got ``
-- h41 `best time to plant beans` intent: want `planting` got `other`
 - h44 `nisaidie` intent: want `help` got `other`
 - h45 `salaam` intent: want `help` got `other`
-- h50 `miti ya kahawa inakufa` intent: want `diagnose` got `other`
 
 ## Misses: heldout / qwen
 
@@ -239,21 +249,11 @@ Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 syn
 
 ## Misses: fresh / keyword
 
-- f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `streak_virus`
 - f4 `coffee leaf got brown circles with grey middle like an eye` symptom: want `cercospora` got ``
-- f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` intent: want `diagnose` got `other`
 - f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got ``
-- f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` symptom: want `streak_virus` got `miner`
 - f8 `corn leaves have long cigar shaped grey brown lesions` symptom: want `leaf_blight` got ``
 - f9 `maharagwe yangu majani yana vidoa vya kahawia vyenye kona kona` symptom: want `angular_leaf_spot` got ``
-- f11 `Shamba la mahindi limeharibika sana mwaka huu sijui ni nini` intent: want `diagnose` got `other`
-- f12 `my coffee is not doing well this season` intent: want `diagnose` got `planting`
 - f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``
-- f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` lang: want `sw` got `en`
-- f32 `should i plant my maize before the rains start` intent: want `planting` got `help`
-- f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `other`
-- f36 `how does this work` lang: want `en` got `sw`
-- f36 `how does this work` intent: want `help` got `other`
 
 ## Misses: fresh / qwen
 
@@ -306,3 +306,58 @@ Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 syn
 - f40 `jua ni kali sana leo shambani` intent: want `other` got `diagnose`
 - f40 `jua ni kali sana leo shambani` crop: want `` got `coffee`
 - f40 `jua ni kali sana leo shambani` symptom: want `` got `leaf_blight`
+
+## Misses: fresh2 / keyword
+
+- g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got ``
+- g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got ``
+- g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got ``
+- g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got ``
+- g28 `good morning` lang: want `en` got `sw`
+- g28 `good morning` intent: want `help` got `other`
+
+## Misses: fresh2 / qwen
+
+- g3 `maharage yangu yana vipele vya kahawia chini ya jani` lang: want `sw` got `en`
+- g3 `maharage yangu yana vipele vya kahawia chini ya jani` symptom: want `rust` got `leaf_blight`
+- g5 `funza wamevamia mahindi yote shambani` symptom: want `fall_armyworm` got `leaf_blight`
+- g7 `kahawa yangu ina tatizo, majani yanakauka` symptom: want `` got `leaf_blight`
+- g8 `beans dying in the field what is the problem` symptom: want `` got `lethal_necrosis`
+- g9 `ndizi zangu zina ugonjwa` crop: want `` got `coffee`
+- g9 `ndizi zangu zina ugonjwa` symptom: want `` got `miner`
+- g10 `coffee leaves have grey spots with brown ring` lang: want `en` got `sw`
+- g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got `leaf_blight`
+- g11 `mahindi yana madoa ya kijivu marefu kama sigara` lang: want `sw` got `en`
+- g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got `streak_virus`
+- g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got `leaf_blight`
+- g13 `bei ya kahawa kiboko leo sokoni ni ngapi` intent: want `price` got `diagnose`
+- g13 `bei ya kahawa kiboko leo sokoni ni ngapi` symptom: want `` got `leaf_blight`
+- g13 `bei ya kahawa kiboko leo sokoni ni ngapi` commodity: want `coffee_robusta_kiboko` got ``
+- g14 `buyer wants to pay 13,500 for parchment` lang: want `en` got `sw`
+- g15 `wanataka kununua mahindi kwa shilingi 750` intent: want `price` got `diagnose`
+- g15 `wanataka kununua mahindi kwa shilingi 750` commodity: want `maize_grain` got ``
+- g15 `wanataka kununua mahindi kwa shilingi 750` offer: want `750` got ``
+- g17 `nimeambiwa bei ya maharage ni elfu nne` lang: want `sw` got `en`
+- g17 `nimeambiwa bei ya maharage ni elfu nne` intent: want `price` got `diagnose`
+- g17 `nimeambiwa bei ya maharage ni elfu nne` symptom: want `` got `leaf_blight`
+- g17 `nimeambiwa bei ya maharage ni elfu nne` commodity: want `beans_dry` got ``
+- g17 `nimeambiwa bei ya maharage ni elfu nne` offer: want `4000` got ``
+- g19 `P 3 2700` crop: want `bean` got `coffee`
+- g19 `P 3 2700` commodity: want `beans_dry` got `coffee_arabica_parchment`
+- g20 `drugar inauzwa bei gani mwezi huu` intent: want `price` got `diagnose`
+- g20 `drugar inauzwa bei gani mwezi huu` symptom: want `` got `leaf_blight`
+- g20 `drugar inauzwa bei gani mwezi huu` commodity: want `coffee_arabica_drugar` got ``
+- g22 `bei ya mihogo` intent: want `price` got `help`
+- g23 `nipande mahindi lini mwaka huu` lang: want `sw` got `en`
+- g23 `nipande mahindi lini mwaka huu` intent: want `planting` got `diagnose`
+- g23 `nipande mahindi lini mwaka huu` symptom: want `` got `leaf_blight`
+- g24 `is it time to sow beans` intent: want `planting` got `diagnose`
+- g25 `msimu wa kupanda kahawa ni lini` intent: want `planting` got `diagnose`
+- g25 `msimu wa kupanda kahawa ni lini` symptom: want `` got `leaf_blight`
+- g26 `hello, what can you do` lang: want `en` got `sw`
+- g27 `msaada tafadhali` intent: want `help` got `diagnose`
+- g27 `msaada tafadhali` crop: want `` got `coffee`
+- g27 `msaada tafadhali` symptom: want `` got `leaf_blight`
+- g29 `nashukuru sana` intent: want `other` got `help`
+- g30 `the rain was heavy yesterday` lang: want `en` got `sw`
+- g30 `the rain was heavy yesterday` intent: want `other` got `help`

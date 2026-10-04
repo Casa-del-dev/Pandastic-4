@@ -102,6 +102,27 @@ public class KeywordNluTest {
         assertEquals(14000.0, s.offer, 0.01);
     }
 
+    @Test public void functionWordsDecideTheLanguage() {
+        assertEquals("sw", nlu.parse("faq iko bei gani hapa kwetu", null).lang);  // "faq" is listed in both languages
+        assertEquals("en", nlu.parse("what is this app for", null).lang);         // no lexicon term at all
+        assertEquals("sw", nlu.parse("bei ya coffee", null).lang);                // code-switching: Swahili frame wins
+    }
+
+    @Test public void symptomWordMustFitTheCrop() {
+        Slots coffee = nlu.parse("kuna mistari mieupe kwenye majani ya kahawa", null);
+        assertEquals("coffee", coffee.crop);
+        assertEquals("miner", coffee.symptom);
+        Slots maize = nlu.parse("mistari ya njano kwenye majani ya mahindi", null);
+        assertEquals("maize", maize.crop);
+        assertEquals("streak_virus", maize.symptom);
+        assertNull(nlu.parse("kuna mistari kwenye majani", null).symptom);  // no crop: ambiguous, so no symptom
+    }
+
+    @Test public void seasonAloneIsNotPlanting() {
+        assertEquals("diagnose", nlu.parse("msimu huu mahindi yanakufa", null).intent);
+        assertEquals("planting", nlu.parse("can we plant beans next week", null).intent);
+    }
+
     @Test public void normalizeKeepsQuestionMark() {
         assertEquals("bei ya kahawa ?", KeywordNlu.normalize("Bei ya KAHAWA ?!"));
     }
