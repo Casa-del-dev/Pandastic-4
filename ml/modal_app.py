@@ -5,6 +5,7 @@ Run from ml/ (needs `modal token new` once):
   modal run modal_app.py --stage manifest              # labels, pHash de-duplication, splits (CPU)
   modal run modal_app.py --stage train --epochs 12     # GPU training + calibration + ONNX export
   modal run modal_app.py --stage all                   # all three
+  modal run --detach modal_app.py --stage all          # same, and it keeps running if this machine sleeps
   --labels p1 adds maize blight/grey leaf spot + bean classes; --labels p2 also healthy maize, fall armyworm and
   streak virus from CCMT (Ghana). --smoke runs a 30-step training to test the GPU path cheaply.
 
@@ -70,18 +71,33 @@ def train(labels: str, epochs: int, batch_size: int, lr: float, smoke: bool) -> 
     return meta
 
 
+SOURCES = ["bracol", "jmuben", "jmuben2", "plantdoc", "ibean", "ccmt"]
+
+
+@app.function(image=image, timeout=8 * 3600)
+def pipeline(stage: str, labels: str, epochs: int, batch_size: int, lr: float, smoke: bool) -> dict:
+    """Runs the stages from Modal, not from the laptop, so a detached run finishes even if the laptop sleeps."""
+    result = {}
+    if stage in ("fetch", "all"):
+        fetch.remote(SOURCES)
+    if stage in ("manifest", "all"):
+        result["manifest"] = manifest.remote(labels)
+    if stage in ("train", "all"):
+        result["meta"] = train.remote(labels, epochs, batch_size, lr, smoke)
+    return result
+
+
 @app.local_entrypoint()
 def main(stage: str = "all", labels: str = "p0", epochs: int = 12, batch_size: int = 64, lr: float = 1e-3,
          smoke: bool = False):
     from leaf import config
-    sources = ["bracol", "jmuben", "jmuben2", "plantdoc", "ibean", "ccmt"]
+    result = pipeline.remote(stage, labels, epochs, batch_size, lr, smoke)
     if stage in ("fetch", "all"):
-        fetch.remote(sources)
-        print("fetched + extracted:", ", ".join(f"{s} ({config.SOURCES[s]['licence']})" for s in sources))
-    if stage in ("manifest", "all"):
-        print(json.dumps(manifest.remote(labels), indent=2))
-    if stage in ("train", "all"):
-        meta = train.remote(labels, epochs, batch_size, lr, smoke)
+        print("fetched + extracted:", ", ".join(f"{s} ({config.SOURCES[s]['licence']})" for s in SOURCES))
+    if "manifest" in result:
+        print(json.dumps(result["manifest"], indent=2))
+    if "meta" in result:
+        meta = result["meta"]
         print(json.dumps(meta["eval"], indent=2))
         print(f"\nmodal volume get pandastic-models leaf/{meta['version']} ./artifacts/\n"
               f"python -m leaf.install artifacts/{meta['version']}")
