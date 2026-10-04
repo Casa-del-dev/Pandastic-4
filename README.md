@@ -50,10 +50,10 @@ These are browser previews; carrier SMS is available in the Android app.
 
 | Part | What | Size |
 | :-- | :-- | :-- |
-| Leaf classifier | MobileNetV4-Conv-Small, trained on BRACOL and tested on JMuBEN (Kenya), temperature-calibrated, ONNX Runtime | ~10 MB (a labelled placeholder until training runs) |
-| Language model | Qwen3.5-0.8B Q4_K_M (Apache-2.0, multilingual) via llama.cpp. It **only** reads the intent and crop from messages the keywords did not understand, under a GBNF grammar. It never writes advice. | 533 MB, side-loaded once |
+| Leaf classifier | 3 × MobileNetV4-Conv-Small averaged in one ONNX file (int8 weights), 14 labels: coffee, maize and bean leaf problems, healthy leaves, and "not a leaf". Trained on photos from Brazil, Kenya, Ecuador, Ghana and Uganda; temperature-calibrated, with stricter floors for "healthy". A plant-share and blur gate runs first. | 7.7 MB |
+| Language model | Qwen3.5-0.8B Q4_K_M (Apache-2.0, multilingual), fine-tuned with LoRA on farmer SMS, via llama.cpp under a GBNF grammar. It **only** reads what the keywords missed (the intent, and a symptom under strict conditions). It never writes advice. | 542 MB, optional: downloaded once in the app (opt-in) or imported from a file |
 | Knowledge base | SQLite: cited advice (EN + SW), UCDA/MAAIF coffee farm-gate prices, WFP maize and bean prices, SW/EN lexicon | 360 KB |
-| App | Java + React (bundled, offline). The APK has **no INTERNET permission**. | 40 MB (arm64 release) |
+| App | Java + React (bundled, offline). The INTERNET permission is used for one thing, the opt-in model download; questions, photos and answers never go online, and the WebView blocks every network load. | ~40 MB (arm64 release) |
 
 Peak memory with the language model loaded is under 1 GB (the model file is memory-mapped) on the 4 GB target phone.
 
@@ -65,7 +65,7 @@ Peak memory with the language model loaded is under 1 GB (the model file is memo
   - Text alone is never treated as a diagnosis.
   - Old prices are flagged as old.
 - **The person decides.** Chat preserves instructions to ask an officer and never treats text alone as a confirmed diagnosis. The owner explicitly opts in to automatic SMS replies.
-- **The language model is never trusted for the diagnosis.** It invented a symptom for vague text during testing, so symptoms come only from exact keywords or the photo classifier. Measured in `ml/reports/nlu_eval.md`: keywords 68%, Qwen alone 34%, hybrid 78% on held-out SMS.
+- **The language model never decides alone.** The base model invented a symptom for vague text during testing, so the model may add a symptom only if it is the fine-tuned file, the SMS reports a problem, the keywords found the crop, and the label is a real problem (never "healthy"). Crop, price and language always come from keywords. Text alone is never a confident diagnosis. Measured on `fresh2`, SMS written before the last keyword fixes ([ml/reports/nlu_eval_lora.md](ml/reports/nlu_eval_lora.md)): the same reply as the reference for 93% with keywords + model, 83% with keywords alone.
 - **Airtime and privacy.**
   - Only numbers the owner lists get answers, and short codes are ignored.
   - Replies are rate-limited.
@@ -114,8 +114,9 @@ LEDGER.md                                    how the two coding agents split and
 
 ## Limits we state openly
 
-- **Photos:** coffee leaves only for now. There are no coffee berry disease photos, and the training photos have white backgrounds (BRACOL).
+- **Photos:** coffee, maize and bean leaves only. No coffee berry disease photos. Coffee photos from one country transfer poorly to another, so held-out results are per source ([docs/DATA.md](docs/DATA.md)). When unsure, the app says so and asks for a person.
 - **Swahili:** the text is machine-translated and needs review by native speakers.
 - **Prices:** national averages, not Noor's own market.
 - **Allowlist:** it controls cost; it is not authentication, because caller ID can be spoofed.
-- **Language model:** the 533 MB file has to be copied to the phone once.
+- **Language model:** a one-time 542 MB download over mobile data (opt-in), or a file copied to the phone. Everything works without it.
+- **Not yet tested:** a real 4 GB phone, real carrier SMS delays, the helper surviving a night of Android battery saving.

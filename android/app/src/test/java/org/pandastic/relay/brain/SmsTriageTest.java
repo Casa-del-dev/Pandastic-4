@@ -43,6 +43,19 @@ public class SmsTriageTest {
         }
     }
 
+    @Test public void helpRequestsGetTheMenu() {
+        for (String sms : new String[]{
+            "nisaidie", "Nisaidie tafadhali", "saidia", "help me please", "what can you do?", "How does this work",
+            "Habari, unaweza kufanya nini?", "Pandastic", "msaada kahawa"}) {
+            assertTrue(sms, answered(sms));
+        }
+        // The same words asking the daughter for something else stay personal.
+        for (String sms : new String[]{
+            "nisaidie pesa ya ada", "Mwanangu nisaidie", "help me with the school fees", "what can you do about the fees?"}) {
+            assertFalse(sms, answered(sms));
+        }
+    }
+
     @Test public void theModelAloneCannotTriggerAReplyToChitChat() {
         Slots kw = keywords.parse("how is school?", null);
         assertFalse(HubPolicy.isFarmingQuestion("how is school?", kw, "help"));

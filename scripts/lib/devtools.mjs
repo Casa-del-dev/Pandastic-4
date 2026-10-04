@@ -31,10 +31,12 @@ export async function connectApp(serial = process.env.DEVICE, port = 9333) {
     try { pid = adb('shell', 'pidof', PACKAGE) } catch { /* not running */ }
     // A WebView in the background does not answer DevTools: always bring the app to the front (state is kept).
     adb('shell', 'am', 'start', '-W', '-n', `${PACKAGE}/.FrontendActivity`)
-    if (!pid) {
-      await sleep(2500)
-      pid = adb('shell', 'pidof', PACKAGE)
+    // A cold start right after an install can take longer than one wait: poll up to ~15 s.
+    for (let i = 0; i < 30 && !pid; i++) {
+      await sleep(500)
+      try { pid = adb('shell', 'pidof', PACKAGE) } catch { /* still starting */ }
     }
+    if (!pid) throw new Error(`${serial ?? 'device'}: the app did not start`)
     pid = pid.split(/\s+/)[0]
     adb('forward', `tcp:${port}`, `localabstract:webview_devtools_remote_${pid}`)
     let pages = []

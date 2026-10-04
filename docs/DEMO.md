@@ -11,36 +11,32 @@ make run-device                 # or: make run (emulator)
 
 Without the NDK, `cd android && ./gradlew -Pnollm assembleDebug` builds the app without the LLM. It still works fully, using keyword understanding only.
 
-## 2. Side-load the language model (optional, 533 MB)
+## 2. The language model (optional, 542 MB)
 
-The LLM file is never inside the APK. Download it on a computer that has internet access, then transfer it to the offline phone (for example, over USB). From the repository root, run:
+The model file is never inside the APK. Three ways to get it onto the phone:
 
-```sh
-python3 -m venv ml/.venv
-source ml/.venv/bin/activate
-python -m pip install --upgrade huggingface_hub
-mkdir -p ml/artifacts/llm
-hf download unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-Q4_K_M.gguf --local-dir ml/artifacts/llm
-```
-
-This places the roughly 533 MB file at `ml/artifacts/llm/Qwen3.5-0.8B-Q4_K_M.gguf`. The Hugging Face CLI can resume/skip files already present in its local download directory. Transfer the file to the phone, then select **Capable phone → Models → Import model file** and choose it. Import runs locally and does not need internet. The native runtime checks compatibility when loaded. For a debug build, you can also push the downloaded file with ADB:
+- **In the app:** Capable phone → Models → Download. It is opt-in, uses mobile data once (~542 MB), resumes after a
+  dropped connection, and is checked by size and SHA-256 against `ml/llm/model.json` before it loads.
+- **From a file:** download `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf` from the GitHub release `models-v1` on a computer,
+  copy it to the phone, then Models → Import model file. No internet needed on the phone.
+- **Emulator / debug build:** `make human-test` puts it back from `/data/local/tmp/`, or:
 
 ```sh
-# Qwen3.5-0.8B Q4_K_M from unsloth/Qwen3.5-0.8B-GGUF, sha256 bd258782…c517 (see ml/llm/)
-adb push ml/artifacts/llm/Qwen3.5-0.8B-Q4_K_M.gguf /data/local/tmp/
-adb shell run-as org.pandastic.relay sh -c 'mkdir -p files/models && cp /data/local/tmp/Qwen3.5-0.8B-Q4_K_M.gguf files/models/'
-adb shell rm /data/local/tmp/Qwen3.5-0.8B-Q4_K_M.gguf
+adb push Qwen3.5-0.8B-pandastic-Q4_K_M.gguf /data/local/tmp/
+adb shell run-as org.pandastic.relay mkdir -p files/models
+adb shell run-as org.pandastic.relay cp /data/local/tmp/Qwen3.5-0.8B-pandastic-Q4_K_M.gguf files/models/
 ```
 
-`run-as` only works on debug builds. For the release APK (`make release`), open the app once (it creates its folder), then `adb push Qwen3.5-0.8B-Q4_K_M.gguf /sdcard/Android/data/org.pandastic.relay/files/models/`. Restart the app afterwards. `adb logcat -s PandasticLlm` shows "System prompt cached" and then about 3–5 s per SMS on the emulator.
+`adb logcat -s PandasticLlm` shows the model reading a message (about 5 s on the emulator). Each answer's `nlu` field
+says who understood it: `keywords`, `model`, or `keywords_no_model`.
 
 ## 3. Set up the SMS helper (once, on the daughter's phone)
 
 1. Select **Capable phone**, then open **Settings → Automatic SMS replies**.
-2. Add Mama's number, e.g. `+256 7…`. Only numbers on this list get answers.
+2. Pick Mama Noor from the phone's Contacts. Only numbers on this list get answers, and only farming questions: personal SMS ("how is school?") get no automatic reply.
 3. Choose the reply language. On a smaller Android phone, use **Basic phone** mode and save this phone’s number as the SMS destination.
 4. Turn the switch on and allow SMS and notifications. Allow "ignore battery optimisation" so Android does not stop the helper.
-5. Keep **mobile data off and SMS on**. Airplane mode would also block SMS.
+5. Questions and answers use SMS only, never mobile data. Airplane mode would block SMS.
 
 ## 4. Scenarios
 
@@ -53,6 +49,7 @@ On the emulator, an incoming SMS is simulated with `adb emu sms send <number> "<
 | 3 | `?` | Menu of short codes | Usable without literacy in long text |
 | 4 | `Emmwanyi zange zirina obulwadde ku bikoola` (Luganda) | Same safe reply as #2 | The LLM reads a less-supported language; it does not invent a disease |
 | 5 | (from an unknown number or a promo short code) | No reply, nothing stored | Allowlist, airtime protection |
+| 5b | `Habari mwanangu, shule inaendaje?` | No reply; it stays in the daughter's Messages | Personal SMS are never answered by the helper |
 
 In the app (capable phone, local chat):
 
@@ -60,11 +57,10 @@ In the app (capable phone, local chat):
 | :- | :-- | :-- |
 | 6 | Chat → + → Camera/Gallery → picture of a rusty coffee leaf → Send | Picture and reply in chat, confidence, advice, cited source and instruction to ask an officer before spraying |
 | 7 | Blurry or dark photo | "Piga picha tena" (take the photo again), with the reason |
-| 8 | A photo that is not a coffee leaf | Uncertainty and instructions to ask a person |
+| 8 | A photo that is not a leaf (a mug, a table) | "Not a leaf it knows" and instructions to ask a person |
 | 9 | Chat → This phone → `coffee price 12000` | Same decision as SMS #1, with offer and dated market reference |
 | 10 | Models → inspect installed/loaded state | Actual inventory without loading weights just to inspect it |
 
-Until T10's trained model replaces the stub, photo answers show the badge "Majaribio: si akili bandia halisi bado" (demo: not the real AI yet). Never present stub output as AI in the video.
 
 ## 5. Video script (2–5 min, brief §8)
 
@@ -74,12 +70,11 @@ Until T10's trained model replaces the stub, photo answers show the badge "Majar
 4. **AI and why not a simpler tool (~45 s).**
    - Computer vision on the leaf photo, calibrated and tested on another country's data.
    - A small multilingual LLM (Qwen3.5-0.8B, on-device) reads messy SMS in Swahili, English and even Luganda into a fixed form.
-     Measured on 50 held-out SMS ([ml/reports/nlu_eval.md](../ml/reports/nlu_eval.md)): keywords alone get 68% fully right, the LLM alone 34%, keywords + LLM filling only what the keywords missed 78% (intent 80% → 96%). That's why the LLM is a helper, not the decider.
+     Measured on `fresh2`, 30 SMS written before the last keyword fixes ([ml/reports/nlu_eval_lora.md](../ml/reports/nlu_eval_lora.md)): the same reply as the reference for 83% with keywords alone and 93% with keywords + the fine-tuned model filling only what the keywords missed. That's why the LLM is a helper, not the decider.
    - Plain SMS menus can't read a leaf photo or a misspelled message. A web search needs data, literacy and trust in the source.
 5. **Guardrails (~30 s).**
    - Answers come from a fixed list of cited sources, never from the model.
    - Text alone is never a diagnosis. "Not sure — ask a person, don't spray yet."
-   - Grain mould → "get it tested".
    - Prices carry source + date, and old prices are flagged.
    - The person sends the message to the officer, not the app.
    - Allowlist + rate limits. Data stays on the phone.
@@ -88,9 +83,9 @@ Until T10's trained model replaces the stub, photo answers show the badge "Majar
    - ONNX Runtime classifier (MobileNetV4, trained on Modal).
    - llama.cpp + GBNF grammar.
    - SQLite knowledge base (UCDA/MAAIF, WFP, PlantwisePlus).
-   - Sizes: app ~40 MB arm64 + optional 533 MB model. Peak RAM < 1 GB on a 4 GB phone.
+   - Sizes: app ~40 MB arm64 + optional 542 MB model. Peak RAM < 1 GB on a 4 GB phone.
 7. **Limits, honestly (~20 s).**
-   - Coffee leaves only for photos today.
+   - Photos: coffee, maize and bean leaves only.
    - Swahili text is machine-translated and needs native review.
    - Caller ID is not authentication.
    - No coffee berry disease photos.
