@@ -13,11 +13,21 @@ Without the NDK, `cd android && ./gradlew -Pnollm assembleDebug` builds the app 
 
 ## 2. Side-load the language model (optional, 533 MB)
 
-The LLM file is never inside the APK. Obtain it once while internet is available, put it on the phone, then select **Capable phone → Models → Import model file** and choose `Qwen3.5-0.8B-Q4_K_M.gguf`. The import is local and does not download anything. The native runtime checks compatibility when loaded. You can also copy it with ADB:
+The LLM file is never inside the APK. Download it on a computer that has internet access, then transfer it to the offline phone (for example, over USB). From the repository root, run:
+
+```sh
+python3 -m venv ml/.venv
+source ml/.venv/bin/activate
+python -m pip install --upgrade huggingface_hub
+mkdir -p ml/artifacts/llm
+hf download unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-Q4_K_M.gguf --local-dir ml/artifacts/llm
+```
+
+This places the roughly 533 MB file at `ml/artifacts/llm/Qwen3.5-0.8B-Q4_K_M.gguf`. The Hugging Face CLI can resume/skip files already present in its local download directory. Transfer the file to the phone, then select **Capable phone → Models → Import model file** and choose it. Import runs locally and does not need internet. The native runtime checks compatibility when loaded. For a debug build, you can also push the downloaded file with ADB:
 
 ```sh
 # Qwen3.5-0.8B Q4_K_M from unsloth/Qwen3.5-0.8B-GGUF, sha256 bd258782…c517 (see ml/llm/)
-adb push Qwen3.5-0.8B-Q4_K_M.gguf /data/local/tmp/
+adb push ml/artifacts/llm/Qwen3.5-0.8B-Q4_K_M.gguf /data/local/tmp/
 adb shell run-as org.pandastic.relay sh -c 'mkdir -p files/models && cp /data/local/tmp/Qwen3.5-0.8B-Q4_K_M.gguf files/models/'
 adb shell rm /data/local/tmp/Qwen3.5-0.8B-Q4_K_M.gguf
 ```
