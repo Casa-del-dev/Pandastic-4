@@ -25,6 +25,7 @@ slope, the AI runs on the daughter's phone at the house, and there is no data bu
 | Coffee farm-gate prices: Arabica parchment, Drugar, Robusta kiboko, FAQ; national monthly averages | [MAAIF Coffee Department / UCDA monthly reports](https://ugandacoffee.go.ug/resource-center/reports/monthly-reports), one report per month, each row citing its PDF | Uganda government publication | 84 rows, Dec 2024 – Aug 2026 | "Is this buyer's price fair?" |
 | Maize and dry bean retail prices by market | [WFP food prices for Uganda, via HDX](https://data.humdata.org/dataset/wfp-food-prices-for-uganda) | **CC BY-IGO** | 2,138 market-month rows, Jan 2024 – Aug 2026; plus 64 national 25th–75th percentile rows, marked `derived=1` | Maize and bean price checks |
 | Coffee leaf rust advice | [CABI Plantwise factsheet RW014 (Rwanda Agriculture Board)](https://plantwiseplusknowledgebank.org/doi/10.1079/PWKB.20127801774) | CC BY-SA 4.0 | 1 condition | Advice text (paraphrased, cited) |
+| Maize grey leaf spot advice | [CABI Plantwise factsheet ZM013 (Zambia Ministry of Agriculture)](https://plantwiseplusknowledgebank.org/doi/full/10.1079/pwkb.20147801404) | CC BY-SA 4.0 | 1 condition | Advice text (paraphrased, cited) |
 | Brown eye spot, fall armyworm, northern leaf blight, bean rust, angular leaf spot | [Pacific Pests, Pathogens & Weeds fact sheets](https://apps.lucidcentral.org/ppp/) (ACIAR / SPC) | Free online fact sheets; reuse terms still to confirm | 5 conditions | Advice text (paraphrased, cited) |
 | Coffee leaf miner | [Dantas et al., *Insects* 12(12):1130, 2021](https://doi.org/10.3390/insects12121130) | CC BY 4.0 | 1 condition | Advice text |
 | Phoma leaf spot | [Pereira & Reis, Revista Cultivar, 2024](https://revistacultivar.com/articles/phoma-spot-or-ascochyta-spot-of-coffee) | Publisher copyright; paraphrased and cited | 1 condition | Advice text |
@@ -79,9 +80,9 @@ The base model invents symptoms, so the app never takes a symptom from it.
 - Maize fall armyworm and healthy maize have **no training source** in the pipeline yet, so the first model is coffee + `other`.
 
 **Advice**
-- Advice covers 11 conditions. Maize streak virus, lethal necrosis and grey leaf spot have none yet, so the app sends
-  the farmer to the extension officer.
-- Sources are from Rwanda, the Pacific, Brazil and a review paper, not Ugandan extension material. Uganda's pesticide
+- Advice covers 12 conditions. Maize streak virus and lethal necrosis have none yet, so the app sends the farmer
+  to the extension officer.
+- Sources are from Rwanda, Zambia, the Pacific, Brazil and a review paper, not Ugandan extension material. Uganda's pesticide
   registration list was not checked, so the advice never gives doses and always says "ask the officer before spraying".
 - Swahili text is machine translated by the team; there is no Luganda advice.
 

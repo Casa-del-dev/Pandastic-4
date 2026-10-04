@@ -64,6 +64,7 @@ Until T10's trained model replaces the stub, photo answers show the badge "Majar
 4. **AI and why not a simpler tool (~45 s).**
    - Computer vision on the leaf photo, calibrated and tested on another country's data.
    - A small multilingual LLM (Qwen3.5-0.8B, on-device) reads messy SMS in Swahili, English and even Luganda into a fixed form.
+     Measured on 50 held-out SMS ([ml/reports/nlu_eval.md](../ml/reports/nlu_eval.md)): keywords alone get 68% fully right, the LLM alone 34%, keywords + LLM filling only what the keywords missed 78% (intent 80% → 96%). That's why the LLM is a helper, not the decider.
    - Plain SMS menus can't read a leaf photo or a misspelled message. A web search needs data, literacy and trust in the source.
 5. **Guardrails (~30 s).**
    - Answers come from a fixed list of cited sources, never from the model.
