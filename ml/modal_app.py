@@ -16,6 +16,7 @@ epoch when relaunched with the same arguments. Early stopping (patience 4). Line
   --coffee-split mix (default): half of RoCoLe's plants (Ecuador, phone photos on the plant) are trained on, the
   others are coffee calib/test; xc: RoCoLe is never trained on (cross-country test). Manifests and run ids carry both, e.g. manifest-p2-xc.csv, leaf-p2-xc-1a2b3c4d.
   modal run modal_app.py --stage reeval --labels p1 --version leaf-p1-...   # adds eval.by_crop to an older model
+  --input-size 320: train and export at a higher resolution (own image cache; the app reads input_size from the JSON)
 
 Then fetch the artifacts and install them into the app:
   modal volume get pandastic-models leaf/<version> ./artifacts/
@@ -48,6 +49,16 @@ def _tag(labels: str, coffee_split: str) -> str:
     return f"{labels}-{coffee_split}"
 
 
+def _cache_side(input_size: int) -> int:
+    """Short side of the image cache: a 60%-area random crop must still cover the model input (320 for 224)."""
+    return 320 if input_size <= 224 else 32 * -(-int(input_size / 0.6 ** 0.5) // 32)
+
+
+def _cached_manifest(tag: str, input_size: int) -> Path:
+    side = _cache_side(input_size)
+    return DATA / (f"manifest-{tag}-cached.csv" if side == 320 else f"manifest-{tag}-cached{side}.csv")
+
+
 @app.function(image=image, volumes={"/data": data_volume}, cpu=4, memory=8192, timeout=3 * 3600)
 def fetch(sources: list[str]) -> None:
     from leaf import data
@@ -69,12 +80,15 @@ def manifest(labels: str, coffee_split: str) -> dict:
 
 
 @app.function(image=image, volumes={"/data": data_volume}, cpu=16, memory=16384, timeout=2 * 3600)
-def cache(tag: str) -> dict:
-    """Decode + shrink every image once (CPU), so GPU epochs read small JPEGs. Reused across runs and labels."""
+def cache(tag: str, input_size: int = 224) -> dict:
+    """Decode + shrink every image once (CPU), so GPU epochs read small JPEGs. Reused across runs and labels;
+    one cache folder per short side, so a higher --input-size never reads images shrunk for 224."""
     from leaf import data
     data_volume.reload()
-    rows, dropped = data.build_cache(data.read_manifest(DATA / f"manifest-{tag}.csv"), DATA / "cache", workers=16)
-    data.write_manifest(rows, DATA / f"manifest-{tag}-cached.csv")
+    side = _cache_side(input_size)
+    rows, dropped = data.build_cache(data.read_manifest(DATA / f"manifest-{tag}.csv"),
+                                     DATA / ("cache" if side == 320 else f"cache-{side}"), short_side=side, workers=16)
+    data.write_manifest(rows, _cached_manifest(tag, input_size))
     data_volume.commit()
     return {"cached": len(rows), "dropped": dropped}
 
@@ -94,19 +108,24 @@ def _run_id(tag: str, manifest_bytes: bytes, hparams: dict) -> tuple[str, dict]:
 # Retries + per-epoch checkpoints: a preempted or cancelled container resumes where it stopped.
 @app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, gpu="L4", cpu=16,
               memory=32768, timeout=4 * 3600, retries=modal.Retries(max_retries=2, initial_delay=10.0))
-def train(labels: str, coffee_split: str, epochs: int, batch_size: int, lr: float, smoke: bool, git_sha: str = "") -> dict:
+def train(labels: str, coffee_split: str, epochs: int, batch_size: int, lr: float, smoke: bool, git_sha: str = "",
+          input_size: int = 224) -> dict:
     import timm
     import torch
     from leaf import config, data, train as trainer
     data_volume.reload()
     models_volume.reload()
+    config.INPUT_SIZE = input_size  # read at call time by train.py (resize, ONNX export, leaf_classifier.json)
     tag = _tag(labels, coffee_split)
-    cached = DATA / f"manifest-{tag}-cached.csv"
+    cached = _cached_manifest(tag, input_size)
     manifest_path = cached if cached.exists() else DATA / f"manifest-{tag}.csv"
     rows = data.read_manifest(manifest_path)
     stats = json.loads((DATA / f"manifest-{tag}.json").read_text())
     hparams = {"labels": labels, "coffee_split": coffee_split, "epochs": epochs, "batch_size": batch_size, "lr": lr, "smoke": smoke,
                "arch": config.ARCH, "seed": 13, "patience": 4}
+    if input_size != 224:  # 224 keeps the hyper-parameters (and run ids) of earlier runs
+        hparams["input_size"] = input_size
+        tag += f"-r{input_size}"
     version, hashes = _run_id(tag, manifest_path.read_bytes(), hparams)
     version += "-smoke" if smoke else ""
     lineage = {**hashes, "manifest": manifest_path.name, "git_sha": git_sha, "seed": 13,
@@ -149,7 +168,7 @@ SOURCES = ["bracol", "jmuben", "jmuben2", "rocole", "plantdoc", "ibean", "ccmt"]
 
 @app.function(image=image, timeout=8 * 3600)
 def pipeline(stage: str, labels: str, coffee_split: str, epochs: int, batch_size: int, lr: float, smoke: bool,
-             git_sha: str = "") -> dict:
+             git_sha: str = "", input_size: int = 224) -> dict:
     """Runs the stages from Modal, not from the laptop, so a detached run finishes even if the laptop sleeps."""
     result = {}
     if stage in ("fetch", "all"):
@@ -157,22 +176,22 @@ def pipeline(stage: str, labels: str, coffee_split: str, epochs: int, batch_size
     if stage in ("manifest", "all"):
         result["manifest"] = manifest.remote(labels, coffee_split)
     if stage in ("cache", "train", "all"):  # idempotent: only new images are decoded
-        result["cache"] = cache.remote(_tag(labels, coffee_split))
+        result["cache"] = cache.remote(_tag(labels, coffee_split), input_size)
     if stage in ("train", "all"):
-        result["meta"] = train.remote(labels, coffee_split, epochs, batch_size, lr, smoke, git_sha)
+        result["meta"] = train.remote(labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size)
     return result
 
 
 @app.local_entrypoint()
 def main(stage: str = "all", labels: str = "p0", coffee_split: str = "mix", epochs: int = 12, batch_size: int = 64,
-         lr: float = 1e-3, smoke: bool = False, version: str = ""):
+         lr: float = 1e-3, smoke: bool = False, version: str = "", input_size: int = 224):
     import subprocess
     from leaf import config
     if stage == "reeval":
         print(json.dumps(reeval.remote(labels, coffee_split, version)["eval"], indent=2))
         return
     git_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-    result = pipeline.remote(stage, labels, coffee_split, epochs, batch_size, lr, smoke, git_sha)
+    result = pipeline.remote(stage, labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size)
     if "cache" in result:
         print(f"cache: {result['cache']['cached']} images, dropped {len(result['cache']['dropped'])}")
     if stage in ("fetch", "all"):
