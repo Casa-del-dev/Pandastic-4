@@ -1,6 +1,8 @@
 import type { Lang } from './native'
 
 const en = {
+  hubReading: 'Phone AI is reading the message…', hubAnswered: 'Phone AI answered automatically', hubPersonal: 'Personal message: no automatic reply',
+  hubRateLimited: 'Not answered: too many messages this hour', hubFailed: 'Phone AI could not answer', autoReply: 'automatic reply',
   readAloud: 'Read aloud', stopReading: 'Stop reading', speechFailed: 'Couldn’t read aloud. Check the phone’s speech voices and media volume.',
   nativeDictationNote: 'Dictation works offline in English and Swahili. Review the words before sending.',
   localPhone: 'Local phone', simulatedSms: 'Simulated SMS', localSmsNote: 'Messages travel to the other local instance. No SIM or SMS charges.',
@@ -68,6 +70,8 @@ const en = {
   pendingSetup: 'Set up SMS in Settings to receive replies.', back: 'Back', priceTitle: 'Check a price',
 }
 const sw: typeof en = {
+  hubReading: 'AI ya simu inasoma ujumbe…', hubAnswered: 'AI ya simu imejibu yenyewe', hubPersonal: 'Ujumbe binafsi: hakuna jibu la moja kwa moja',
+  hubRateLimited: 'Haikujibiwa: ujumbe mwingi kwa saa moja', hubFailed: 'AI ya simu haikuweza kujibu', autoReply: 'jibu la moja kwa moja',
   readAloud: 'Sikiliza', stopReading: 'Acha kusoma', speechFailed: 'Sauti haipatikani. Kagua sauti za kusoma na kiwango cha sauti kwenye simu.',
   nativeDictationNote: 'Unaweza kusema ujumbe bila intaneti kwa Kiingereza na Kiswahili. Kagua maneno kabla ya kutuma.',
   localPhone: 'Simu ya ndani', simulatedSms: 'SMS ya kuiga', localSmsNote: 'Ujumbe unaenda kwa app nyingine ya ndani. Hakuna SIM wala gharama za SMS.',

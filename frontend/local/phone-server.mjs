@@ -34,7 +34,7 @@ export function localPhonePlugin() {
     delivered: [], nextId: 1, answeredDate: new Date().toISOString().slice(0, 10),
   }
   try { state = { ...state, ...JSON.parse(readFileSync(file, 'utf8')), number } } catch { /* first launch */ }
-  state.chat.messages.forEach(message => { if (message.status === 'sending') message.status = 'unknown' })
+  state.chat.messages.forEach(message => { if (message.status === 'sending') message.status = 'unknown'; if (message.hub === 'pending') delete message.hub })
   state.hub.recent.forEach(entry => { if (entry.status === 'pending') entry.status = 'cancelled' })
   const clients = new Set()
   const timers = new Set()
@@ -57,6 +57,7 @@ export function localPhonePlugin() {
     if (previous) return previous.status === 'sent' ? { ok: true } : { ok: false, error: 'unknown' }
     const message = addMessage(remote, body, 'out', 'sending')
     message.requestId = id
+    if (automatic) message.automatic = true
     publish()
     try {
       const result = await fetch(`http://127.0.0.1:${peer}/__phone/deliver`, {
@@ -126,7 +127,7 @@ export function localPhonePlugin() {
             if (data.from !== peer || typeof data.id !== 'string' || !data.id || typeof data.body !== 'string' || !data.body.trim() || data.body.length > 1000 || typeof data.automatic !== 'boolean') return respond({ error: 'invalid' }, 400)
             if (state.delivered.includes(data.id)) return respond({ ok: true })
             state.delivered.push(data.id)
-            addMessage(data.from, data.body, 'in', 'received')
+            const incoming = addMessage(data.from, data.body, 'in', 'received')
             // Automatic responses never cause another response, even if both phones enable their hub.
             if (!data.automatic && state.mode === 'capable' && state.hub.enabled && state.hub.contacts.some(contact => contact.number === data.from)) {
               const now = new Date().toISOString().slice(0, 10)
@@ -134,20 +135,23 @@ export function localPhonePlugin() {
               const recent = state.hub.recent.filter(entry => entry.contact === data.from && entry.receivedAt > Date.now() - 3600000)
               const entry = { id: state.nextId++, contact: data.from, question: data.body, reply: null, status: recent.length >= 12 ? 'rate_limited' : 'pending', receivedAt: Date.now() }
               state.hub.recent.push(entry)
+              // Shown under the SMS in the helper's chat, so the owner sees the hub reading and answering it.
+              incoming.hub = entry.status === 'pending' ? 'pending' : 'rate_limited'
               if (entry.status === 'pending') {
                 const timer = setTimeout(async () => {
                   timers.delete(timer)
-                  if (!state.hub.enabled || state.mode !== 'capable' || !state.hub.contacts.some(contact => contact.number === data.from)) { entry.status = 'cancelled'; publish(); return }
+                  if (!state.hub.enabled || state.mode !== 'capable' || !state.hub.contacts.some(contact => contact.number === data.from)) { entry.status = 'cancelled'; delete incoming.hub; publish(); return }
                   if (brainUrl) {
                     // Same rule as HubService: personal messages get no reply, and the log keeps no copy.
                     let answer
                     try { answer = await brain('/sms', { text: data.body }) }
                     catch (error) { console.error(`Brain unavailable (${error.message}); local demo answer sent.`) }
-                    if (answer && !answer.farming) { entry.status = 'personal'; entry.question = ''; publish(); return }
+                    if (answer && !answer.farming) { entry.status = 'personal'; entry.question = ''; incoming.hub = 'personal'; publish(); return }
                     entry.reply = answer ? answer.reply : localAnswer(db, data.body, state.hub.lang)
                   } else entry.reply = localAnswer(db, data.body, state.hub.lang)
                   const result = await send(`reply-${data.id}`, data.from, entry.reply, true)
                   entry.status = result.ok ? 'sent' : 'failed'
+                  incoming.hub = result.ok ? 'answered' : 'failed'
                   if (result.ok) state.hub.answeredToday++
                   publish()
                 }, 250)
