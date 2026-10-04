@@ -74,7 +74,7 @@ def photos():
             ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB").save(target, quality=92)
         out.append((target, r["label"], r["filename"]))
     blurred = CACHE / "leaf5.jpg"
-    Image.open(out[2][0]).filter(ImageFilter.GaussianBlur(14)).save(blurred, quality=92)
+    Image.open(out[2][0]).filter(ImageFilter.GaussianBlur(25)).save(blurred, quality=92)
     out.append((blurred, "retake (blurred)", out[2][2]))
     other = CACHE / "picture6.jpg"
     im = Image.new("RGB", (1280, 960), (196, 160, 112))  # a wooden table with a mug: not a plant

@@ -94,11 +94,22 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     @Override public Slots parse(String text, String lang) {
         Slots slots = keywords.parse(text, lang);
         boolean symptoms = fineTuned();
-        if (!needsModel(slots, symptoms)) return slots;
+        if (!needsModel(slots, symptoms)) { lastSource = "keywords"; return slots; }
         JSONObject json = complete(text);
-        if (json == null) return slots;
-        return merge(slots, json.optString("intent", null), symptoms ? json.optString("symptom", null) : null);
+        if (json == null) { lastSource = "keywords_model_failed"; return slots; }
+        String intentBefore = slots.intent, symptomBefore = slots.symptom;
+        merge(slots, json.optString("intent", null), symptoms ? json.optString("symptom", null) : null);
+        boolean used = !java.util.Objects.equals(intentBefore, slots.intent) || !java.util.Objects.equals(symptomBefore, slots.symptom);
+        lastSource = used ? "model" : "keywords_model_agreed";
+        return slots;
     }
+
+    /**
+     * How the last message was understood, for the UI and the hub log: "keywords" (the model was not needed),
+     * "model" (its intent or symptom was used), "keywords_model_agreed" (asked, added nothing usable),
+     * "keywords_model_failed" (no answer within the time budget). Read on the same thread as parse().
+     */
+    public volatile String lastSource = "keywords";
 
     boolean fineTuned() { return FINE_TUNED.equals(modelName()); }
 

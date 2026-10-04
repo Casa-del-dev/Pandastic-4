@@ -46,7 +46,9 @@ public final class BrainHost {
     private Knowledge knowledge;
     private volatile LlmNlu llm;
     private volatile KeywordNlu keywords;
-    private volatile boolean llmLoading;
+    /** LLM loads queued or running. A count, not a flag: a load for an unloaded Brain finishing must not
+     *  report "not loading" while the next one is still queued (e2e caught info() saying llm=null, done). */
+    private final java.util.concurrent.atomic.AtomicInteger llmLoads = new java.util.concurrent.atomic.AtomicInteger();
     private volatile Future<?> llmLoad;
     private final java.util.concurrent.atomic.AtomicBoolean warmUpQueued = new java.util.concurrent.atomic.AtomicBoolean();
     private volatile String brainError;
@@ -143,6 +145,10 @@ public final class BrainHost {
         if (brain == null) return interimPhoto(issue, result, model != null && model.stub, lang).toString();
         // Without a classifier the Brain sees no result and answers "not sure — ask a person".
         JSONObject decision = new JSONObject(brain.answerPhoto(issue, result, text, lang).toJson());
+        if (text != null && !text.trim().isEmpty()) {  // the words with the photo went through the same NLU
+            LlmNlu language = llm;
+            decision.put("nlu", language != null ? language.lastSource : llmLoads.get() > 0 ? "keywords_model_loading" : "keywords_no_model");
+        }
         return decision.put("stub", model != null && model.stub)
             .put("plant_share", Math.round(plantShare * 100) / 100.0).put("not_a_plant", notAPlant).toString();
     }
@@ -158,11 +164,15 @@ public final class BrainHost {
         Brain brain = brain();
         if (brain == null) return new Responder.Fallback().answer(text, lang);
         Decision decision = brain.answerText(text, lang);
+        // Which part understood the message, so the UI, the hub log and the tests can see the language model work.
+        LlmNlu model = llm;
+        String nlu = model != null ? model.lastSource : llmLoads.get() > 0 ? "keywords_model_loading" : "keywords_no_model";
+        String json = new JSONObject(decision.toJson()).put("nlu", nlu).toString();
         // Personal messages from the same allowed numbers get no automatic reply: decide on the keywords'
         // own reading (cheap) plus the final intent (HubPolicy).
         KeywordNlu words = keywords;
         boolean farming = HubPolicy.isFarmingQuestion(text, words == null ? null : words.parse(text, lang), decision.intent);
-        return new Responder.Reply(SmsFormatter.format(decision), decision.toJson(), farming);
+        return new Responder.Reply(SmsFormatter.format(decision), json, farming);
     }
 
     /**
@@ -173,7 +183,7 @@ public final class BrainHost {
         LeafClassifier model = classifier;
         boolean missing = (model == null && classifierError == null) || (brain == null && brainError == null);
         boolean capable = new HubPrefs(context).capable();  // a Basic phone never loads models
-        boolean loading = capable && (missing || llmLoading);
+        boolean loading = capable && (missing || llmLoads.get() > 0);
         if (capable && missing) warmUp();
         return new JSONObject()
             .put("classifier", model == null ? JSONObject.NULL : model.version)
@@ -187,7 +197,7 @@ public final class BrainHost {
 
     /** Loads the LLM in the background for this Brain; until then keywords answer alone. */
     private synchronized void startLlmLoad(Brain owner, KeywordNlu keywords) {
-        llmLoading = true;
+        llmLoads.incrementAndGet();
         llmLoad = llmLoader.submit(() -> {
             LlmNlu loaded = null;
             try { loaded = LlmNlu.open(context, keywords); }
@@ -195,7 +205,7 @@ public final class BrainHost {
             synchronized (this) {  // unload() may have run meanwhile (Basic phone): then free it again
                 if (brain == owner) llm = loaded;
                 else if (loaded != null) loaded.close();
-                llmLoading = false;
+                llmLoads.decrementAndGet();
             }
         });
     }
@@ -205,7 +215,7 @@ public final class BrainHost {
         worker.execute(() -> {
             if (!new HubPrefs(context).capable()) return;
             synchronized (this) {
-                if (brain != null && llm == null && !llmLoading && keywords != null) { startLlmLoad(brain, keywords); return; }
+                if (brain != null && llm == null && llmLoads.get() == 0 && keywords != null) { startLlmLoad(brain, keywords); return; }
             }
             classifier();
             brain();

@@ -174,6 +174,17 @@ await check('manageModels: release then load again', async () => {
   return `reload ${Math.round((Date.now() - started) / 1000)} s`
 })
 
+// The language model only reads what the keywords miss (measured: keywords first is the most accurate).
+await check('ask: words the keywords miss are read by the language model', async () => {
+  if (!info.llm) return `SKIP: no language model on this phone (${info.loading ? 'still loading' : 'not installed'})`
+  const d = await ask('emmwanyi zange zirwadde amakoola gafuuse kyenvu', 'sw')
+  expectDecision(d, 'luganda')
+  expect(d.nlu === 'model' || d.nlu === 'keywords_model_agreed', `nlu ${d.nlu}: the model was not consulted`)
+  const plain = await ask('P 1 12000', 'sw')
+  expect(plain.nlu === 'keywords', `a price code should need no model, got ${plain.nlu}`)
+  return `Luganda: ${d.nlu} (${d.status}, intent ${d.intent}); "P 1 12000": ${plain.nlu}`
+})
+
 await check('ask: SMS price code "P 1 12000"', async () => {
   const d = await ask('P 1 12000', 'sw')
   expectDecision(d, 'P 1 12000')

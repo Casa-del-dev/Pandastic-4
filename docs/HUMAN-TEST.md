@@ -1,101 +1,96 @@
-# Human test: script and observation sheet
+# Human test
 
-**Goal:** find what confuses people and where an answer could be misread as more certain than it is, before the 10:30 UTC freeze. A session takes 15–20 minutes. Three to five testers are enough to find most problems. At least one should be non-technical, and one should be a Swahili speaker if possible.
+**Goal:** before the 10:30 UTC freeze, find what confuses people. Above all, find where someone reads an answer as more certain than it is. One session takes about 20 minutes. Three to five testers are enough. At least one should be non-technical, and one a Swahili speaker if possible.
 
-**What we want to learn:**
-1. Can a first-time user set up the phone (phone mode) without help?
-2. Can they check a leaf photo, and do they understand a "not sure" answer as *not sure*?
-3. Can they tell whether a buyer's price is fair?
-4. Can the helper phone's owner let another number ask by SMS, and does the Basic phone user get and understand the reply?
+## The story the tester plays
 
-## 1. Before each session (facilitator)
+- **Noor** has a basic phone and uses its normal SMS app. Pandastic is not on it.
+- **Amani**, her daughter, has the smartphone with Pandastic. This is the "helper phone".
+- Noor texts Amani about everything: school, money, and her crops. The helper phone answers **only the farming questions**, by SMS. Everything else stays a normal message for Amani.
+- Each phone already has the other person in its own **Contacts** app, as a real phone would. Pandastic starts from its first screen, and the tester sets it up.
 
-Two commands:
+| Phone | Window | Number | In its Contacts app |
+| :-- | :-- | :-- | :-- |
+| Amani's helper phone | `emulator-5554` (big) | +256 772 000 001 | Mama Noor |
+| Noor's phone | `emulator-5556` (small) | +256 772 000 002 | Amani (binti) |
+
+## Before each tester (facilitator)
 
 ```bash
-./run.sh          # once: both emulator phones, build + install, SMS carrier. Keep this terminal open.
-make human-test   # before EACH tester, in a second terminal: both phones back to their first screen + test photos
+./run.sh          # once: both phones + the SMS carrier. Keep this terminal open.
+make human-test   # before EACH tester: Pandastic wiped on both phones, Noor's SMS cleared, photos added
 ```
 
-`./run.sh` starts the helper phone (`emulator-5554`, +256 772 000 001) and Noor's Basic phone (`emulator-5556`, +256 772 000 002). It keeps the SMS "carrier" running between them. `make human-test` wipes the app's data on both phones: settings, chats and SMS history. It puts the side-loaded language model back, adds the test photos to both galleries and opens the app on its first screen.
+The language model is put back on the helper phone. To test the download instead, run `python3 scripts/human_test_prep.py --fresh --no-model`. That needs the Models page download button (C, in progress).
 
-- **Record** (with consent):
-  - Screen recording on each emulator: `adb -s emulator-5554 shell screenrecord --time-limit 180 /sdcard/t1.mp4` (3 min max per file).
-  - Or record the laptop screen.
-- **Logs:** `adb -s emulator-5554 logcat -c` before you start; save `adb -s emulator-5554 logcat -d > tester-N.log` after.
-- **Language:** set the app language the tester prefers (Swahili is the default).
-- **Photo key:** this is for the facilitator only. Don't show it to testers.
+**Photo key, for the facilitator only.** The photos are in the gallery under `Pictures/PandasticTest`.
 
-| File | Truth | What the app answers now |
+| File | Truth | What the app answers |
 | :-- | :-- | :-- |
-| `leaf1.jpg` | coffee rust | Sure: leaf rust (94%) |
-| `leaf2.jpg` | coffee rust | Sure: leaf rust (85%) |
-| `leaf3.jpg` | healthy coffee | Not sure (leans healthy, 70%; "healthy" needs 95%) |
-| `leaf4.jpg` | healthy coffee | Not sure (rust 36% vs healthy 31%) |
-| `leaf5.jpg` | blurred copy of leaf3 | "Not a leaf I know": ask for another photo |
-| `picture6.jpg` | a table with a mug | "Not a leaf I know" |
+| `leaf1.jpg` | coffee rust | Sure: leaf rust |
+| `leaf2.jpg` | coffee rust | Sure: leaf rust |
+| `leaf3.jpg` | healthy coffee | Sure: healthy |
+| `leaf4.jpg` | healthy coffee | **Not sure** ("healthy" needs 99%; this one is 98.5%) |
+| `leaf5.jpg` | very blurred `leaf3` | Asks for a sharper photo |
+| `picture6.jpg` | a table with a mug | Not a leaf it knows |
 
-## 2. What to say at the start (read it out; don't explain the app)
+## Say at the start
 
-> "Thank you for helping. We're testing the app, not you. If something is hard, that's the app's fault and exactly what we want to find. Please think aloud: say what you're looking for and what you expect. I can't help during the tasks, but you can stop or skip at any time. Is it OK if I record the screen? No names or faces are recorded."
+> "We're testing the app, not you. If something is hard, that's what we want to find. Please think aloud. I can't help during the tasks, but you can skip any of them. May I record the screen? No names or faces."
 
-Swahili (machine-written, have a speaker check it):
-> "Asante kwa kutusaidia. Tunajaribu programu, si wewe. Kitu kikiwa kigumu, ni kosa la programu, na ndicho tunachotaka kujua. Tafadhali sema unachofikiri: unachotafuta na unachotarajia. Siwezi kukusaidia wakati wa kazi, lakini unaweza kusimama au kuruka wakati wowote. Je, ni sawa nirekodi skrini? Hakuna majina wala nyuso zitakazorekodiwa."
+Swahili (machine-written):
 
-## 3. Tasks
+> "Tunajaribu programu, si wewe. Kitu kikiwa kigumu, ndicho tunachotaka kujua. Tafadhali sema unachofikiri. Siwezi kukusaidia wakati wa kazi, lakini unaweza kuruka yoyote. Naweza kurekodi skrini? Hakuna majina wala nyuso."
 
-Read each task card as written. Don't name buttons or screens. Only give a hint if the tester is stuck for 60 s, and mark it.
+## Tasks
 
-| # | Phone | Task card (read aloud) | Done when | Watch for |
+Read each card as written. Don't name buttons. Hint only after 60 s of being stuck, and note it.
+
+| # | Phone | Card (read aloud) | Done when | Watch for |
 | :-- | :-- | :-- | :-- | :-- |
-| 1 | Helper (5554) | "This is your daughter's phone. Set it up so it can check plant leaves." | Chooses **Capable phone**, reaches the chat | Do they understand Basic vs Capable? Do they read the RAM line? |
-| 2 | Helper | "Your coffee leaves look strange. The photo is in the phone's pictures, `leaf1`. Find out what's wrong." | Attaches leaf1 from Gallery, reads the answer, can say what to do next | Finding the attach (+) button; reading the advice steps |
-| 3 | Helper | "Check `leaf4` the same way. What does the app want you to do?" | Says it's **not sure** and to ask a person / not spray | ⚠️ Do they read "not sure" as a diagnosis? |
-| 4 | Helper | "Try `picture6`." | Understands it's not a leaf the app knows | Confusion, or blaming themselves |
-| 5 | Helper | "A buyer offers you 12,000 shillings per kilo for your coffee. Is that a good price? Use the app." | Types a question (e.g. `bei ya kahawa 12000`); says it's about 23% below | Do they know they can type freely? Is "23% below" clear? |
-| 6 | Helper | "Without a photo, ask the app about yellow powder under your coffee leaves." | Reads "not sure from words, don't spray yet, show a photo" | ⚠️ Do they think it diagnosed rust for sure? |
-| 7 | Helper | "Your mother Noor has another phone, number **+256 772 000 002**. Let her phone ask this phone questions by SMS." | Settings → automatic SMS replies **on**, number added | Finding it at all; permission prompts; the battery prompt |
-| 8 | Basic (5556) | "This is Noor's small phone. Set it up, then ask the helper phone (**+256 772 000 001**) for today's coffee price." | Chooses **Basic phone**, sets the number, sends; the reply arrives in ~2–10 s | Typing the number; waiting; understanding the reply SMS |
-| 9 | (optional) terminal | "Noor has no smartphone at all. Text the helper phone from this keyboard phone." The facilitator runs `make sms-phone` and types what the tester dictates. | Reply understood | Does the SMS wording work for a plain-SMS user? |
+| 1 | Helper | "This is Amani's phone. Set up Pandastic so it can help with farming." | Picks **Capable phone** and reaches the chat | Basic vs Capable understood? |
+| 2 | Helper | "Amani's mother, Mama Noor, will ask farming questions by SMS. Let her number get automatic answers." | Settings: automatic SMS replies **on**, Mama Noor picked from Contacts | Finding it; permission prompts; picking the contact |
+| 3 | Noor | "You are Noor. With the normal SMS app, ask Amani whether 12,000 shillings per kilo is a good price for your coffee." | Sends from Messages; a "Pandastic:" reply arrives in a few seconds | Who do they think answered? Is "23% below" clear? |
+| 4 | Noor | "Now just ask Amani how school is going." | Sends it; **no** automatic reply. On the helper phone it sits in Messages for Amani | Do they expect a bot reply? Is it fine that none comes? |
+| 5 | Noor | "Tell Amani that your coffee leaves have yellow powder underneath." | Reply: "not sure from words alone, don't spray yet, show a photo or ask an officer" | ⚠️ Do they read it as a sure diagnosis? |
+| 6 | Noor | (Luganda or mixed words; let the tester say it their way, e.g. *"emmwanyi zange zirwadde"*) | A safe reply within ~10 s (the language model reads it) | Wording that fails; how long they wait |
+| 7 | Helper | "Your coffee leaves look strange. The photo is `leaf1` in the pictures. Find out what's wrong." | Attaches leaf1 and can say what to do next | Finding the + button; reading the steps |
+| 8 | Helper | "Check `leaf4` the same way. What does the app want you to do?" | Says it's **not sure** and to ask a person | ⚠️ "Not sure" read as a diagnosis? |
+| 9 | Helper | "Try `picture6`, then `leaf5`." | Understands "not a leaf" and "take a sharper photo" | Blaming themselves |
+| 10 | Helper | "In the chat, ask about maize leaves with holes, in your own words." | Gets a "not sure, may be fall armyworm, ask/show a photo" kind of answer | Free typing understood? |
 
-Read-aloud ("listen") will be added back by the frontend agent. If a speaker button is visible, add a task: "Have the app read the answer to you."
-
-## 4. Observation sheet (copy one per tester)
+## Observation sheet (one per tester)
 
 ```
-Tester: T__   Date/time: ____   Language: sw / en   Phone use: basic / smartphone daily   Farming: yes / no
+Tester T__   Language sw / en   Daily smartphone use yes / no   Farms yes / no
 
-#  Result (alone / hint / failed)  Time   First thing they tapped      Quotes / confusion            ⚠️ misread certainty?
-1  ______________________________  ____   ________________________     ____________________________  ___
-2  ______________________________  ____   ________________________     ____________________________  ___
-3  ______________________________  ____   ________________________     ____________________________  ___
-4  ______________________________  ____   ________________________     ____________________________  ___
-5  ______________________________  ____   ________________________     ____________________________  ___
-6  ______________________________  ____   ________________________     ____________________________  ___
-7  ______________________________  ____   ________________________     ____________________________  ___
-8  ______________________________  ____   ________________________     ____________________________  ___
-9  ______________________________  ____   ________________________     ____________________________  ___
+#   Alone / hint / failed   Time   Quote or confusion                      ⚠️ misread certainty?
+1   ____________________   ____   _____________________________________   ___
+2   ____________________   ____   _____________________________________   ___
+3   ____________________   ____   _____________________________________   ___
+4   ____________________   ____   _____________________________________   ___
+5   ____________________   ____   _____________________________________   ___
+6   ____________________   ____   _____________________________________   ___
+7   ____________________   ____   _____________________________________   ___
+8   ____________________   ____   _____________________________________   ___
+9   ____________________   ____   _____________________________________   ___
+10  ____________________   ____   _____________________________________   ___
 
-After the tasks (ask, then write the answer down word for word):
-a. "In your own words, what does this app do?"
-b. "When the app said it was not sure, what would you do next?"
-c. "Would you trust its price answer when selling? Why / why not?"
-d. "What was the hardest moment?"
-e. "From 1 (very hard) to 5 (very easy), how easy was it?"  __
-f. "Would you tell a neighbour about it? What would you say?"
+a. In your own words, what does this do?
+b. When it said "not sure", what would you do?
+c. Would you trust its price answer when selling? Why?
+d. Hardest moment?
+e. 1 (very hard) to 5 (very easy): __
 ```
 
-## 5. After each session
+## After each tester
 
-1. Save the recordings: `adb -s emulator-5554 pull /sdcard/t1.mp4`, plus the logcat.
-2. Write the sheet up in `docs/human-tests/<date>-T<n>.md`. Use no names, only T1, T2…
-3. Put each problem on the ledger as one line: task #, what happened, severity. ⚠️ means the tester believed an uncertain answer, so it's top priority.
-4. Reset for the next tester: `make human-test`.
+1. Write the sheet up in `docs/human-tests/<date>-T<n>.md`. Use T1, T2…, never names.
+2. Put each problem on the ledger as one line: task #, what happened, severity. Anything marked ⚠️ comes first.
+3. Run `make human-test` for the next tester.
 
-## 6. Known issues (don't count these as tester mistakes)
+**Known, not tester mistakes:**
 
-- The Swahili texts are machine-written; a native speaker hasn't reviewed them yet.
-- The read-aloud button is missing from the current UI (native side ready; C is adding it).
-- The language model needs about 30 s after the app starts on the emulator. Questions are answered by keywords until then.
-- `leaf3`/`leaf4` are real healthy leaves that the app is not sure about: "healthy" requires 95% on purpose.
-- On a real network, SMS replies can take longer than on the emulator.
+- The Swahili text is machine-written.
+- In the first ~30 s after the app opens, the language model is still loading, and odd wording gets the menu.
+- Real networks deliver SMS slower than the emulator.
