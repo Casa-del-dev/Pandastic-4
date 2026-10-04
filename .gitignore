@@ -16,3 +16,4 @@ data/raw/
 ml/artifacts/
 __pycache__/
 *.gguf
+out/
