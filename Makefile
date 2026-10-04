@@ -22,7 +22,7 @@ EMULATOR_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-e)
 PHONE_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-d)
 EMULATOR_OPTIONS = --adb "$(ADB)" --emulator "$(EMULATOR)" --sdk "$(SDK_DIR)" --name "$(EMULATOR_NAME)" --device "$(DEVICE)" --timeout "$(BOOT_TIMEOUT)" --log "$(EMULATOR_LOG)"
 
-.PHONY: run run-device build release web stop e2e
+.PHONY: run run-device build release web stop reset-state e2e
 
 # Gradle also builds React and bundles it into the APK.
 build:
@@ -55,6 +55,16 @@ run-device:
 
 stop:
 	@bash scripts/android-emulator.sh stop $(EMULATOR_OPTIONS)
+
+# Restore the app to a first-run state on the emulator, or DEVICE=<serial>.
+# This clears app-private data, including settings, chat history and imported model files.
+reset-state:
+	@set -eu; \
+	printf 'This clears all Pandastic app data (settings, chats and imported models) on %s.\n' '$(if $(DEVICE),$(DEVICE),the emulator)'; \
+	printf 'Type reset to continue: '; \
+	read -r answer; \
+	if [ "$$answer" != reset ]; then echo 'Reset cancelled.'; exit 1; fi; \
+	"$(ADB)" $(if $(DEVICE),-s "$(DEVICE)",-e) shell pm clear "$(PACKAGE_NAME)"
 
 # Tests every UI <-> native connector inside the running debug app (emulator or phone): bridge methods,
 # questions, photos, hub settings, SMS round trip. Extra flags: make e2e ARGS="--photo leaf.jpg"
