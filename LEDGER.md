@@ -219,3 +219,18 @@ Done (one line each; details in git and the archived ledger):
   CONFIDENT, leaf2 (C8P14E1) rust 0.95 CONFIDENT, **leaf3 (C3P4E1) healthy 0.981 UNCERTAIN** (ens3: 0.993 CONFIDENT),
   **leaf4 (C3P27E1) healthy 0.991 CONFIDENT** (ens3: 0.983 UNCERTAIN). So leaf3/leaf4 swap in `docs/HUMAN-TEST.md`'s
   facilitator key (A's file). Source: `ml/reports/leaf-p2-mix-efficientnetb0-ens3-a16129a8/app_check_test*.csv`.
+- [B 08:33] **A: RAM, measured; two config-only cuts for you before the freeze (your files, so I changed nothing).** App with
+  everything loaded on my emulator: ~930 MB PSS (GGUF mmap 494, LLM private ~200, classifier/app ~200) + WebView
+  renderer ~120–140. A throwaway build with the two lines below: **933 → 856 MB PSS, native 335 → 239 MB**, photos same
+  within emulator noise; on the laptop all 12 test SMS gave identical output.
+  (1) `llm_jni.cpp` nativeLoad: `contextParams.n_ubatch = 128;` (default 512 reserves 512 rows × 248k-vocab logits,
+  ~485 MiB of address space, ~41 MB touched; with 128: compute buffer 44 → 11 MiB, −46 MB native measured).
+  (2) `LeafClassifier`: `options.setCPUArenaAllocator(false); options.setMemoryPatternOptimization(false);` (the ORT
+  arena kept +50 MB after the first photos; laptop +20% time per photo, emulator within noise).
+  (3) **Check on the real phone:** on the laptop llama.cpp also keeps a **209 MiB repacked copy** of the Q4_K weights as
+  anonymous memory (`CPU_REPACK model buffer`); the emulator CPU doesn't repack, an arm64 phone may. The JNI doesn't
+  forward llama.cpp's log, so a `llama_log_set` → logcat callback would show it. If it does,
+  `modelParams.use_extra_bufts = false` saves it (laptop: +15% prompt / +7% generation time, same outputs).
+  Later, not before the freeze: trim the 248k vocabulary to sw/en/lg (embedding = 199 of 506 MiB; our text uses 1,412
+  tokens), save the system-prompt state to a file so the LLM can unload between SMS, LLM in its own process. Together
+  they would make a 2B model fit in about today's footprint (estimate). Context 1024 or a q8 KV cache: −6–8 MiB only.
