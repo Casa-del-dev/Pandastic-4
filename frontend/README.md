@@ -88,7 +88,13 @@ Fonts, icons and code are bundled offline. No cloud APIs or browser speech recog
 
 ## Two local browser phones (ports are phone numbers)
 
-Use **Node 22.13+ or Node 24+** for this local lab (it reads the bundled knowledge database using Node's SQLite module). From the repository root:
+Use **Node 22.13+ or Node 24+** for this local lab (it reads the bundled knowledge database using Node's SQLite module). From the repository root, run the one-command launcher:
+
+```sh
+./run.sh
+```
+
+It installs frontend dependencies when missing, starts both phones, waits until they are ready, and opens their browser tabs. If both phones are already running, it opens the existing pair. `./run.sh --no-open` skips opening tabs. Ctrl+C shuts down a pair started by this launcher. You can run the underlying commands manually too:
 
 ```sh
 cd frontend
@@ -121,3 +127,15 @@ The local lab binds to `127.0.0.1`; open the loopback URLs on this computer. Ord
 Tap the **microphone** beside Send, allow microphone access, speak, and tap **Stop**. Recognized words are appended to the existing draft, up to the composer's 480-character limit. Review or edit them, then press Send yourself. Dictation never sends automatically. Both the SMS and **This phone** composers support it; the app language selects English (`en-US`) or Swahili (`sw-KE`).
 
 This uses the browser's `SpeechRecognition` / `webkitSpeechRecognition` API when available. Speech-service and language support vary; browser recognition can require internet and send audio to the browser's speech provider. The UI explains this before use. It reports unavailable recognition, denied microphone access, missing speech and network/service errors while preserving the draft. Switching conversation, language, or screen stops recognition and ignores late results. Android WebViews without this API can use the keyboard's microphone instead; this change does not add native offline STT. See [MDN's SpeechRecognition documentation](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).
+
+## One-command Android SMS lab
+
+From the repository root:
+
+```sh
+./run.sh --android
+```
+
+The launcher checks the SDK and build prerequisites, starts the helper and Basic phone AVDs, waits for both to boot, builds the APK, installs it on both phones, configures their SMS roles and allowlist, and runs the simulated carrier. Type `P 1 12000` in the Basic phone's chat. Ctrl+C stops the carrier; the emulators stay open.
+
+The helper uses your existing AVD; select it with `EMULATOR_NAME=Your_AVD ./run.sh --android` when several exist. The launcher creates `pandastic_basic` if needed, using the already-installed Android 35 Google APIs x86_64 system image. It does not download SDK images or Qwen weights: install the Android prerequisites from the root README first, and import the language model separately in Models. Keyword answers and the bundled classifier work without Qwen. Existing imported models and message histories are preserved; setup updates phone modes, destinations and the helper allowlist. `./run.sh --help` lists the options.
