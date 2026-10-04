@@ -29,8 +29,10 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 // Every status the Brain may send (Decision.java) plus the bridge's own ERROR.
 const STATUSES = ['CONFIDENT', 'UNCERTAIN', 'UNSUPPORTED', 'RETAKE', 'ASK_CROP', 'TEXT_ONLY', 'PRICE', 'PRICE_STALE',
   'NO_DATA', 'HELP', 'ERROR']
-const BRIDGE = ['checkPhoto', 'ask', 'info', 'hubStatus', 'setHubEnabled', 'setHubContacts', 'setHubLang',
-  'clearHubHistory', 'draftSms', 'share', 'speak', 'voices', 'stopSpeaking']  // = type Native in frontend/src/native.ts
+// The bridge methods the UI may call: read from `type Native` in frontend/src/native.ts, so this test follows
+// whatever the frontend declares.
+const nativeTs = readFileSync(new URL('../frontend/src/native.ts', import.meta.url), 'utf8')
+const BRIDGE = [...(nativeTs.match(/type Native = \{([\s\S]*?)\n\}/)?.[1] ?? '').matchAll(/^\s+(\w+)\(/gm)].map(m => m[1])
 
 // ---- results ---------------------------------------------------------------------------------
 
@@ -135,11 +137,27 @@ const INSTALL = `(() => {
         window.PandasticNative[method](id, ...args);
       });
     },
-    hubEvent(trigger, timeoutMs) {
+    hubEvent(trigger, timeoutMs) { return window.__e2e.event('pandastic:hub', trigger, timeoutMs); },
+    event(name, trigger, timeoutMs) {
       return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('no pandastic:hub event')), timeoutMs);
-        window.addEventListener('pandastic:hub', e => { clearTimeout(timer); resolve(e.detail); }, { once: true });
+        const timer = setTimeout(() => reject(new Error('no ' + name + ' event')), timeoutMs);
+        window.addEventListener(name, e => { clearTimeout(timer); resolve(e.detail); }, { once: true });
         trigger();
+      });
+    },
+    /** manageModels / sendSms answer through their own window callbacks; wrap them once, like __pandasticReply. */
+    result(callback, method, args, timeoutMs) {
+      const key = '__e2e_' + callback;
+      if (!window[key]) {
+        const app = window[callback];
+        const pending = window[key] = new Map();
+        window[callback] = (id, r) => pending.has(id) ? (pending.get(id)(r), pending.delete(id)) : app && app(id, r);
+      }
+      const id = 'e2e-' + Math.random().toString(36).slice(2);
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { window[key].delete(id); reject(new Error(method + ' gave no answer')); }, timeoutMs);
+        window[key].set(id, r => { clearTimeout(timer); resolve(r); });
+        window.PandasticNative[method](id, ...args);
       });
     },
     /** frontend/src/native.ts toJpegBase64: longest side 640 px, JPEG quality 0.88. */
@@ -182,6 +200,47 @@ await check('bridge exposes every method native.ts declares', async () => {
   return page.url
 })
 
+// ---- phone modes: a Basic ('lite') phone never runs models and talks to a capable phone by SMS ----
+const isStr = v => typeof v === 'string'
+const phone = JSON.parse(await evaluate('PandasticNative.phoneInfo()'))
+await check('phoneInfo(): mode and RAM', async () => {
+  expect(['', 'lite', 'capable'].includes(phone.mode ?? ''), `mode ${phone.mode}`)
+  expect(isNum(phone.totalRamMb) && phone.totalRamMb > 0, `totalRamMb ${phone.totalRamMb}`)
+  return `mode '${phone.mode}', ${phone.totalRamMb} MB RAM`
+})
+const setMode = mode => evaluate(`__e2e.hubEvent(() => PandasticNative.setPhoneMode('${mode}'), 5000)`)
+
+let chat
+await check('chatStatus(): every field the chat screen reads', async () => {
+  chat = JSON.parse(await evaluate('PandasticNative.chatStatus()'))
+  expect(isStr(chat.peer) && typeof chat.smsPermission === 'boolean' && Array.isArray(chat.messages), 'shape')
+  expect(chat.messages.every(m => isNum(m.id) && isStr(m.number) && isStr(m.body) && ['in', 'out'].includes(m.direction)
+    && isNum(m.time) && isStr(m.status)), 'message shape')
+  return `peer '${chat.peer}', ${chat.messages.length} messages`
+})
+await check('setSmsPeer: a valid number is kept and announced; a bad one is refused', async () => {
+  const detail = await evaluate(`__e2e.event('pandastic:chat', () => PandasticNative.setSmsPeer('+256 700 999 123'), 5000)`)
+  expect(detail.peer.replace(/[^0-9]/g, '') === '256700999123', `peer ${detail.peer}`)
+  await evaluate(`PandasticNative.setSmsPeer('not a number')`)
+  const now = JSON.parse(await evaluate('PandasticNative.chatStatus()'))
+  expect(now.peer === detail.peer, `bad number replaced the peer: ${now.peer}`)
+})
+await evaluate(`PandasticNative.setSmsPeer(${JSON.stringify(chat?.peer ?? '')})`).catch(() => undefined)
+
+await check('Basic phone: no models, questions and photos politely refused', async () => {
+  await setMode('lite')
+  expect(JSON.parse(await evaluate('PandasticNative.phoneInfo()')).mode === 'lite', 'mode not saved')
+  expect(await evaluate('PandasticNative.info()') === '{}', 'info() should be empty')
+  const d = await ask('P 1 12000', 'sw')
+  expectDecision(d, 'lite ask')
+  expect(d.status === 'ERROR' && d.error === 'phone_mode', `${d.status} ${d.error}`)
+  const hubNow = JSON.parse(await evaluate('PandasticNative.hubStatus()'))
+  expect(hubNow.enabled === false, 'the SMS helper must be off on a Basic phone')
+  const r = await evaluate(`__e2e.result('__pandasticModelReply', 'manageModels', ['load'], 5000)`)
+  expect(r.ok === false && r.error === 'unavailable', `manageModels on lite: ${JSON.stringify(r)}`)
+})
+await setMode('capable')
+
 let info
 await check('info(): answers at once, even while models load', async () => {
   const started = Date.now()
@@ -201,6 +260,33 @@ await check('info(): knowledge base, classifier (and LLM, if side-loaded) finish
   expect(typeof info.classifier === 'string', `classifier ${info.classifier}, error ${info.classifierError}`)
   expect(typeof info.classifierStub === 'boolean', 'classifierStub not boolean')
   return `${Math.round((Date.now() - started) / 1000)} s: classifier ${info.classifier}${info.classifierStub ? ' (STUB)' : ''}, llm ${info.llm ?? 'none (keywords only)'}`
+})
+
+await check('modelStatus(): every field the Models screen reads', async () => {
+  const m = JSON.parse(await evaluate('PandasticNative.modelStatus()'))
+  const file = (f, extra) => f && typeof f.installed === 'boolean' && typeof f.loaded === 'boolean' && isNum(f.bytes) && extra(f)
+  expect(file(m.classifier, f => isStr(f.version) && typeof f.stub === 'boolean'), `classifier ${JSON.stringify(m.classifier)}`)
+  expect(file(m.language, f => isStr(f.name) && typeof f.runtimeAvailable === 'boolean'), `language ${JSON.stringify(m.language)}`)
+  expect(file(m.knowledge, () => true), `knowledge ${JSON.stringify(m.knowledge)}`)
+  expect(typeof m.busy === 'boolean', 'busy')
+  expect(m.classifier.loaded && m.knowledge.loaded, 'loaded models not reported as loaded')
+  return `classifier ${m.classifier.version} ${(m.classifier.bytes / 1e6).toFixed(1)} MB, LLM ${m.language.installed ? (m.language.bytes / 1e6).toFixed(0) + ' MB' : 'not installed'}`
+})
+
+await check('manageModels: unknown action refused', async () => {
+  const r = await evaluate(`__e2e.result('__pandasticModelReply', 'manageModels', ['format_disk'], 5000)`)
+  expect(r.ok === false && r.error === 'action', JSON.stringify(r))
+})
+
+await check('manageModels: release then load again', async () => {
+  const off = await evaluate(`__e2e.result('__pandasticModelReply', 'manageModels', ['unload'], 30000)`)
+  expect(off.ok, `unload ${JSON.stringify(off)}`)
+  const m = JSON.parse(await evaluate('PandasticNative.modelStatus()'))
+  expect(!m.classifier.loaded && !m.language.loaded && !m.knowledge.loaded, 'still loaded after unload')
+  const started = Date.now()
+  const on = await evaluate(`__e2e.result('__pandasticModelReply', 'manageModels', ['load'], 180000)`)
+  expect(on.ok, `load ${JSON.stringify(on)}`)
+  return `reload ${Math.round((Date.now() - started) / 1000)} s`
 })
 
 await check('ask: SMS price code "P 1 12000"', async () => {
@@ -323,7 +409,7 @@ if (hub) {
         await sleep(1000)
         const now = JSON.parse(await evaluate('PandasticNative.hubStatus()'))
         const entry = now.recent.find(e => e.question === 'P 1 12000' && e.receivedAt >= since - 60000)
-        if (entry && entry.status !== 'received') {
+        if (entry && !['received', 'pending'].includes(entry.status)) {  // pending = reply queued, not yet sent
           expect(entry.status === 'answered' && entry.reply, `status ${entry.status}`)
           return `${Math.round((Date.now() - since) / 1000)} s: ${entry.reply.slice(0, 70)}…`
         }
@@ -342,6 +428,8 @@ await check('voices(): answers without blocking', async () => {
   return v.ready ? `sw ${v.sw}, en ${v.en}` : 'TTS engine still starting'
 })
 
+if (phone.mode === 'lite') await setMode('lite').catch(() => undefined)
+else if (!phone.mode) console.log("note: phone mode was not chosen yet; it is now 'capable'")
 page.close()
 clearInterval(keepAlive)
 const failed = results.filter(r => !r.ok).length

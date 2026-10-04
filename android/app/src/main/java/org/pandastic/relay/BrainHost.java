@@ -45,6 +45,7 @@ public final class BrainHost {
     private Knowledge knowledge;
     private volatile LlmNlu llm;
     private volatile boolean llmLoading;
+    private volatile Future<?> llmLoad;
     private volatile String brainError;
 
     public static synchronized BrainHost get(Context context) {
@@ -71,8 +72,17 @@ public final class BrainHost {
         classifierError = null; brainError = null;
     }
 
-    /** Called on the model worker only, following an explicit action on the Models page. */
-    public void loadModels() { if (new HubPrefs(context).capable()) { classifier(); brain(); } }
+    /**
+     * Called on the model worker only, following an explicit action on the Models page. Unlike warmUp it
+     * waits for the LLM too, so the page can report whether everything loaded.
+     */
+    public void loadModels() throws Exception {
+        if (!new HubPrefs(context).capable()) return;
+        classifier();
+        brain();
+        Future<?> pending = llmLoad;
+        if (pending != null) pending.get();
+    }
 
     /** Reads files and current state without opening any model or knowledge database. */
     public static synchronized JSONObject status(Context context) throws Exception {
@@ -168,7 +178,7 @@ public final class BrainHost {
                     return model != null ? model.parse(text, lang) : keywords.parse(text, lang);
                 });
                 llmLoading = true;
-                llmLoader.execute(() -> {
+                llmLoad = llmLoader.submit(() -> {
                     LlmNlu loaded = null;
                     try { loaded = LlmNlu.open(context, keywords); }
                     catch (Throwable e) { Log.e(TAG, "LLM unavailable; keywords only", e); }
