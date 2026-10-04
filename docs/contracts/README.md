@@ -1,7 +1,9 @@
 # Contracts between agent A (Android/UI) and agent B (ML/data) — v0
 
 Change only through a ledger message that the other agent acknowledges. Bump the version line when you change it.
-**Version: v0 (A, 2026-10-04 02:00 CEST): proposed. B: ack or amend.**
+**Version: v0.1 (A, 2026-10-04 ~02:30 CEST): B's amendments from `docs/AUDIT-B.md` applied, §6 Java API added, LLM moved to P1 (user decision). B: ack in the ledger.**
+
+Device fact (user-confirmed): the daughter's phone has **4 GB RAM total**. Keep all models together under ~1 GB peak resident (Android + other apps use the rest).
 
 ## 1. Leaf image classifier
 
@@ -41,6 +43,8 @@ Full target set (P1): coffee `healthy, rust, miner, cercospora, phoma`; maize `h
 
 `escalate = true` for every status except `CONFIDENT` (healthy or disease) and `PRICE`.
 
+Price offer (B's A1): the NLU pulls the offered number out of the text with a regex (`12000`, `12,000`, `12k`, `12.5k`), per kg unless the text says otherwise. `offer` is `null` when there is none. `gap_pct = (offer − price_low) / price_low × 100`, **computed in Java, never by a model**. `stale` = the newest row is older than 120 days.
+
 Decision object (Java → UI via the bridge; also the input to the SMS formatter):
 ```json
 { "status": "CONFIDENT|UNCERTAIN|UNSUPPORTED|RETAKE|ASK_CROP|TEXT_ONLY|PRICE|PRICE_STALE|NO_DATA",
@@ -48,7 +52,8 @@ Decision object (Java → UI via the bridge; also the input to the SMS formatter
   "runner_up": "coffee_cercospora", "runner_up_prob": 0.09,
   "lang": "sw", "advice_sms": "...", "advice_long": "...",
   "source": { "id": "plantwise:coffee-rust-01", "title": "...", "url": "..." },
-  "price": { "commodity": "...", "low": 0, "high": 0, "currency": "UGX", "unit": "KG", "date": "2025-09", "source_id": "..." },
+  "price": { "commodity": "...", "low": 0, "high": 0, "currency": "UGX", "unit": "KG", "date": "2025-09", "source_id": "...",
+             "offer": 12000, "gap_pct": -25.0, "stale": false },
   "escalate": true }
 ```
 
@@ -76,16 +81,63 @@ CREATE TABLE prices(id INTEGER PRIMARY KEY,
                     date TEXT NOT NULL,                       -- ISO 'YYYY-MM' or 'YYYY-MM-DD'
                     source_id TEXT NOT NULL REFERENCES sources(id),
                     derived INTEGER NOT NULL DEFAULT 0);      -- 1 = computed, not published
-CREATE TABLE lexicon(lang TEXT NOT NULL, term TEXT NOT NULL,  -- lowercase; matched as substring of normalised SMS
+CREATE TABLE lexicon(lang TEXT NOT NULL, term TEXT NOT NULL,  -- lowercase
                      slot TEXT NOT NULL,                      -- 'intent' | 'crop' | 'symptom'
-                     value TEXT NOT NULL);                    -- e.g. ('sw','kahawa','crop','coffee'), ('sw','bei','intent','price')
+                     value TEXT NOT NULL,                     -- e.g. ('sw','kahawa','crop','coffee'), ('sw','bei','intent','price')
+                     match TEXT NOT NULL DEFAULT 'prefix');   -- 'token' (whole word) | 'prefix' (word starts with term) | 'substring'
 ```
 Intents: `diagnose | price | planting | help | other`. Every row in `advice` and `prices` must have a `source_id`. Nothing is invented; derived numbers set `derived=1`.
+
+SMS short codes (B's A3), all `match='token'`: `1` = coffee, `2` = maize, `3` = beans, `p` / `bei` = price, `?` / `msaada` = help. The `help` reply is a numbered menu.
+
+Build rules (B's A4): no FTS5 or other virtual tables (Android's SQLite lacks FTS5); `PRAGMA journal_mode=DELETE`; `PRAGMA user_version = 1`. A copies the asset to `getDatabasePath()` on first run and whenever `meta.built_at` changes.
 
 ## 4. NLU model (P1, B) — optional; A's keyword NLU (from `lexicon`) is the fallback
 
 Input: raw SMS text (lowercased, whitespace-collapsed). Output per head: `{label: prob}` for `intent`, `crop` (+ optional `symptom`). Delivery format is B's choice (ONNX with a string input, or a compact linear model + a reference implementation written down here). If the top intent prob is < its threshold, A uses `help`, which replies with the menu.
 
-## 5. Optional LLM (P2)
+## 5. LLM: Qwen3.5-0.8B (P1, user decision 2026-10-04)
 
-Qwen3.5-0.8B Q4_K_M via llama.cpp, used for **NLU only** (SMS text → the JSON slots in §4) under a GBNF grammar whose enums come from `leaf_classifier.json` labels + the intents above. It never writes advice text.
+- Model: `Qwen3.5-0.8B` GGUF `Q4_K_M` (533 MB, Apache-2.0, 201 languages) via llama.cpp JNI (NDK r28c `28.2.13676358`, CMake `3.22.1`). Weights are never committed; they are side-loaded to `getFilesDir()/models/` (download script in `ml/`).
+- `n_ctx` is set explicitly to ≤ 2048 (B's A6). Text only; the vision tower is not used, because photo confidence must come from the calibrated classifier.
+- Role: **NLU only.** Messy SMS text → the slots in §4 (`intent`, `crop`, `symptom`, `offer`) under a GBNF grammar whose enums come from `leaf_classifier.json` labels + the intents above. **It never writes advice or price text.** Those still come from `knowledge.sqlite` + templates.
+- The keyword NLU stays as the fallback (model missing, timeout > 8 s, or grammar output that fails the checks in code).
+- Optional LoRA on Modal (B) once the user gives the go for training.
+
+## 6. Java API inside `android/app/src/main/java/org/pandastic/relay/brain/`
+
+File ownership: **A** = `ClassifierResult`, `LeafClassifier`, `QualityGate`, `LlmNlu` (+ `cpp/`). **B** = `Decision`, `Knowledge`, `Nlu`, `Resolver`, `SmsFormatter`, `Templates`, `Brain`, plus `android/app/src/test/`. A owns `app/build.gradle` and already adds `junit` + `onnxruntime-android`; ask A for other dependencies.
+
+```java
+// A: pure Java value type (no android.* imports), produced by LeafClassifier
+public final class ClassifierResult {
+  public final String modelVersion;
+  public final String[] labels;              // order from leaf_classifier.json
+  public final float[] probs;                // softmax(logits / temperature)
+  public final float minProb, minMargin;
+  public final java.util.Map<String, Float> perClassMinProb;
+}
+// A
+public final class QualityGate { public static String check(android.graphics.Bitmap b); }  // null = ok, else "blur" | "dark" | "bright"
+public final class LeafClassifier implements AutoCloseable {
+  public LeafClassifier(android.content.Context c) throws Exception;   // loads assets/models/leaf_classifier.{onnx,json}
+  public ClassifierResult classify(android.graphics.Bitmap b);
+}
+
+// B: all pure Java and JVM-testable, except Knowledge's Android implementation
+public final class Brain {
+  public Brain(Knowledge k, Nlu nlu);
+  public Decision answerText(String text, String lang);                 // lang null = auto-detect (sw/en)
+  public Decision answerPhoto(String qualityIssue, ClassifierResult r, String text, String lang);
+}
+public interface Nlu { Slots parse(String text, String lang); }         // B: KeywordNlu; A: LlmNlu implements the same interface
+public final class Slots {                                              // B: pure value type
+  public String lang, intent, crop, symptom;                            // enums from §3/§4; null = not found
+  public Double offer;                                                  // offered price per kg, or null
+  public float intentProb;                                              // 1.0 for keyword hits
+}
+public final class SmsFormatter { public static String format(Decision d); }   // safety line first; ≤ 2 segments checked with SmsMessage.calculateLength at runtime
+public final class Decision { public String toJson(); }                // fields as in §2
+```
+
+Threading: A calls `Brain` from one single-thread executor (the hub and the UI bridge share it), so `Brain` doesn't need to be thread-safe.
