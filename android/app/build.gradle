@@ -44,8 +44,13 @@ android {
         targetSdk 35
         versionCode 1
         versionName '0.1.0'
-        // Phones are arm64; x86_64 only for the emulator. Each ABI adds ~33-39 MB of ONNX Runtime.
-        ndk { abiFilters 'arm64-v8a', 'x86_64' }
+        // Phones are arm64; x86_64 only for the emulator. Each ABI adds ~45 MB (ONNX Runtime + llama.cpp).
+        // -PphoneOnly drops the emulator ABI for the side-loadable APK (make release).
+        ndk { abiFilters(*(project.hasProperty('phoneOnly') ? ['arm64-v8a'] : ['arm64-v8a', 'x86_64'])) }
+    }
+    buildTypes {
+        // Hackathon build: signed with the debug key so it can be side-loaded; not for a store.
+        release { signingConfig signingConfigs.debug }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

@@ -29,7 +29,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import org.pandastic.relay.hub.HubPrefs;
 import org.pandastic.relay.hub.HubService;
@@ -39,11 +38,9 @@ public final class FrontendActivity extends Activity {
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + LOCAL_HOST + "/assets/pandastic/index.html";
     private static final int PICK_IMAGE = 20;
-    private static final int MICROPHONE_PERMISSION = 21;
     private static final int HUB_PERMISSION = 22;
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
-    private PermissionRequest microphoneRequest;
     private Uri cameraUri;
     private final List<File> cameraFiles = new ArrayList<>();
     private NativeBridge bridge;
@@ -52,9 +49,9 @@ public final class FrontendActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(250, 249, 246));
+        webView.setBackgroundColor(Color.rgb(237, 242, 233));
         FrameLayout container = new FrameLayout(this);
-        container.setBackgroundColor(Color.rgb(250, 249, 246));
+        container.setBackgroundColor(Color.rgb(237, 242, 233));
         container.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
@@ -129,27 +126,12 @@ public final class FrontendActivity extends Activity {
                 }
                 return true;
             }
-            @Override public void onPermissionRequest(PermissionRequest request) {
-                runOnUiThread(() -> {
-                    if (!isLocalOrigin(request.getOrigin()) ||
-                        !Arrays.asList(request.getResources()).contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                        request.deny(); return;
-                    }
-                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
-                    } else if (microphoneRequest == null) {
-                        microphoneRequest = request;
-                        requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, MICROPHONE_PERMISSION);
-                    } else { request.deny(); }
-                });
-            }
+            // The page never needs the camera stream, microphone or location; photos come from the picker.
+            @Override public void onPermissionRequest(PermissionRequest request) { runOnUiThread(request::deny); }
             @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage message) {
                 if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
                     android.util.Log.d("PandasticWeb", message.messageLevel() + " " + message.message() + " @" + message.lineNumber());
                 return true;
-            }
-            @Override public void onPermissionRequestCanceled(PermissionRequest request) {
-                if (microphoneRequest == request) microphoneRequest = null;
             }
         });
         bridge = new NativeBridge(this, webView);
@@ -182,13 +164,6 @@ public final class FrontendActivity extends Activity {
             Runnable done = afterHubPermissions;
             afterHubPermissions = null;
             done.run();
-            return;
-        }
-        if (requestCode == MICROPHONE_PERMISSION && microphoneRequest != null) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
-                microphoneRequest.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
-            else microphoneRequest.deny();
-            microphoneRequest = null;
         }
     }
 
@@ -208,7 +183,7 @@ public final class FrontendActivity extends Activity {
     }
 
     @Override protected void onPause() {
-        webView.evaluateJavascript("window.dispatchEvent(new Event('pandastic:pause')); document.querySelectorAll('audio').forEach(a => a.pause());", null);
+        if (bridge != null) bridge.stopSpeaking();
         webView.onPause();
         super.onPause();
     }
@@ -220,7 +195,6 @@ public final class FrontendActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        if (microphoneRequest != null) { microphoneRequest.deny(); microphoneRequest = null; }
         if (fileCallback != null) { fileCallback.onReceiveValue(null); fileCallback = null; }
         bridge.close();
         webView.destroy();

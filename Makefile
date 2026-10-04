@@ -19,11 +19,16 @@ APK := $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
 EMULATOR_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-e)
 PHONE_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-d)
 
-.PHONY: run run-device build web stop
+.PHONY: run run-device build release web stop
 
 # Gradle also builds React and bundles it into the APK.
 build:
 	@cd $(ANDROID_DIR) && ./gradlew assembleDebug
+
+# Side-loadable phone APK (arm64 only, release-optimised). The 533 MB LLM is copied separately (docs/DEMO.md).
+release:
+	@cd $(ANDROID_DIR) && ./gradlew -PphoneOnly assembleRelease
+	@ls -lh $(ANDROID_DIR)/app/build/outputs/apk/release/app-release.apk
 
 # Quick UI development in the computer's browser.
 web:

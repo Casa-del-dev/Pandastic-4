@@ -22,7 +22,7 @@ adb shell run-as org.pandastic.relay sh -c 'mkdir -p files/models && cp /data/lo
 adb shell rm /data/local/tmp/Qwen3.5-0.8B-Q4_K_M.gguf
 ```
 
-`run-as` only works on debug builds. Restart the app afterwards. `adb logcat -s PandasticLlm` shows "System prompt cached" and then about 3–5 s per SMS on the emulator.
+`run-as` only works on debug builds. For the release APK (`make release`), open the app once (it creates its folder), then `adb push Qwen3.5-0.8B-Q4_K_M.gguf /sdcard/Android/data/org.pandastic.relay/files/models/`. Restart the app afterwards. `adb logcat -s PandasticLlm` shows "System prompt cached" and then about 3–5 s per SMS on the emulator.
 
 ## 3. Set up the SMS helper (once, on the daughter's phone)
 
@@ -58,7 +58,7 @@ Until T10's trained model replaces the stub, photo answers show the badge "Majar
 
 ## 5. Video script (2–5 min, brief §8)
 
-1. **Problem (one sentence, ~15 s).** "Because of Pandastic, Noor will check a sick coffee leaf or a buyer's price on the same day, by SMS from the slope or by photo at home, which she would otherwise do months late or not at all; we know because [evidence from docs/DATA.md: extension visits per year, price gap, phone ownership]."
+1. **Problem (one sentence, ~15 s).** "Because of Pandastic, Noor will check a sick coffee leaf or a buyer's price on the same day, by SMS from the slope or by photo at home, which she would otherwise do months late or not at all; we know because one extension worker serves ~1,800 farmers in Uganda (1:500 recommended), and the official coffee farm-gate price moved 25% in 21 months." Sources: [DATA.md §1](DATA.md).
 2. **Where it sits in her day (~30 s).** Daytime: the basic phone on the slope, SMS to the daughter's smartphone at the house, answer in seconds. Evening: photo of a leaf on the smartphone. Show `docs/screenshots/`.
 3. **Demo (~90 s).** Scenarios 1, 2, 6 and 10 live, with data off and SMS on. Show the notification "SMS helper is on".
 4. **AI and why not a simpler tool (~45 s).**
