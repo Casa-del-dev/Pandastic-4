@@ -1,0 +1,89 @@
+package org.pandastic.relay.brain;
+
+import static org.junit.Assert.assertTrue;
+
+import java.io.File;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.Test;
+
+/**
+ * Scores KeywordNlu on ml/llm/eval_sms.csv (synthetic SW/EN SMS written by the team, labelled synthetic).
+ * Commodity is scored as the Resolver uses it: the crop's default when the message names none.
+ * Set -Dpandastic.evalOut=path.csv to save the predictions for ml/llm/eval_llm.py.
+ */
+public class NluEvalTest {
+    @Test public void keywordNluOnSyntheticSmsSet() throws Exception {
+        File file = FakeKnowledge.findRepoFile("ml/llm/eval_sms.csv");
+        List<String[]> rows = new ArrayList<>();
+        List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
+        for (String line : lines.subList(1, lines.size())) if (!line.trim().isEmpty()) rows.add(csv(line));
+
+        KeywordNlu nlu = new KeywordNlu(new FakeKnowledge().lexicon());
+        String[] slots = {"lang", "intent", "crop", "symptom", "commodity", "offer"};
+        int[] correct = new int[slots.length];
+        int allCorrect = 0;
+        StringBuilder misses = new StringBuilder();
+        StringBuilder out = new StringBuilder("id,lang,intent,crop,symptom,commodity,offer\n");
+        for (String[] r : rows) {
+            Slots s = nlu.parse(r[1], null);
+            String commodity = "price".equals(s.intent) ? (s.commodity != null ? s.commodity : defaultCommodity(s.crop)) : null;
+            String offer = s.offer == null ? "" : String.valueOf(Math.round(s.offer));
+            String[] predicted = {s.lang, s.intent, s.crop, s.symptom, commodity, offer};
+            boolean all = true;
+            for (int i = 0; i < slots.length; i++) {
+                if (same(r[2 + i], predicted[i])) correct[i]++;
+                else { all = false; misses.append(String.format("  #%s %-50s %s: want '%s' got '%s'%n", r[0], r[1], slots[i], r[2 + i], nz(predicted[i]))); }
+            }
+            if (all) allCorrect++;
+            out.append(r[0]);
+            for (String p : predicted) out.append(',').append(nz(p));
+            out.append('\n');
+        }
+        StringBuilder report = new StringBuilder(String.format("KeywordNlu on %d synthetic SMS:%n", rows.size()));
+        for (int i = 0; i < slots.length; i++) report.append(String.format("  %-9s %5.1f%%%n", slots[i], 100.0 * correct[i] / rows.size()));
+        report.append(String.format("  all slots %5.1f%%%n", 100.0 * allCorrect / rows.size()));
+        System.out.print(report);
+        System.out.print(misses);
+        String target = System.getProperty("pandastic.evalOut");
+        if (target != null) try (PrintWriter w = new PrintWriter(target, "UTF-8")) { w.print(out); }
+
+        // Floors, not targets: they catch regressions in the lexicon or the matcher.
+        assertTrue(report.toString(), correct[1] >= 0.85 * rows.size());  // intent
+        assertTrue(report.toString(), correct[2] >= 0.85 * rows.size());  // crop
+        assertTrue(report.toString(), correct[5] >= 0.95 * rows.size());  // offer
+    }
+
+    private static boolean same(String want, String got) { return nz(want).equals(nz(got)); }
+
+    private static String nz(String s) { return s == null ? "" : s; }
+
+    private static String defaultCommodity(String crop) {
+        if ("coffee".equals(crop)) return "coffee_arabica_parchment";
+        if ("maize".equals(crop)) return "maize_grain";
+        if ("bean".equals(crop)) return "beans_dry";
+        return null;
+    }
+
+    /** Minimal CSV line parser: commas, double-quoted fields with "" escapes. */
+    static String[] csv(String line) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (quoted) {
+                if (c == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') { field.append('"'); i++; }
+                else if (c == '"') quoted = false;
+                else field.append(c);
+            } else if (c == '"') quoted = true;
+            else if (c == ',') { fields.add(field.toString()); field.setLength(0); }
+            else field.append(c);
+        }
+        fields.add(field.toString());
+        return fields.toArray(new String[0]);
+    }
+}

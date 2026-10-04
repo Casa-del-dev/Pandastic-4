@@ -20,7 +20,7 @@ public final class KeywordNlu implements Nlu {
      * A space is never a thousands separator: in "P 1 12000" the 1 is a menu code, not part of the price.
      */
     private static final Pattern NUMBER = Pattern.compile(
-        "(elfu\\s*)?(?<!\\d)(\\d{1,3}(?:[,.]\\d{3})+(?!\\d)|\\d+(?:\\.\\d+)?)\\s*(k\\b)?", Pattern.CASE_INSENSITIVE);
+        "(elfu\\s*)?(?<!\\d)(\\d{1,3}(?:[,.]\\d{3})+(?!\\d)|\\d+(?:\\.\\d+)?)\\s*(k\\b|elfu\\b)?", Pattern.CASE_INSENSITIVE);
     /** Prices per kg in UGX are well above this; smaller numbers are menu codes (1, 2, 3) or quantities. */
     private static final double MIN_OFFER = 100;
 
@@ -32,25 +32,29 @@ public final class KeywordNlu implements Nlu {
 
     @Override public Slots parse(String text, String lang) {
         String normalized = normalize(text);
-        Map<String, Integer> intents = new LinkedHashMap<>(), crops = new LinkedHashMap<>(),
+        Map<String, java.util.Set<String>> intents = new LinkedHashMap<>(), crops = new LinkedHashMap<>(),
             symptoms = new LinkedHashMap<>(), commodities = new LinkedHashMap<>();
-        int sw = 0, en = 0;
         // Terms from both languages always count: people mix Swahili and English in one SMS ("bei ya coffee").
-        // The language only decides which language the reply is written in.
+        // The language only decides which language the reply is written in. A term counts once per language,
+        // even when it fills several slots ("faq" is both a crop and a commodity).
+        java.util.Set<String> swTerms = new java.util.HashSet<>(), enTerms = new java.util.HashSet<>();
         for (Rule rule : rules) {
             if (!rule.pattern.matcher(normalized).find()) continue;
             boolean languageNeutral = rule.entry.term.length() <= 1;  // "1", "p", "?" exist in both languages
-            if (!languageNeutral) { if ("sw".equals(rule.entry.lang)) sw++; else en++; }
+            if (!languageNeutral) ("sw".equals(rule.entry.lang) ? swTerms : enTerms).add(rule.entry.term);
+            Map<String, java.util.Set<String>> target;
             switch (rule.entry.slot) {
-                case "intent": increment(intents, rule.entry.value); break;
-                case "crop": increment(crops, rule.entry.value); break;
-                case "symptom": increment(symptoms, rule.entry.value); break;
-                case "commodity": increment(commodities, rule.entry.value); break;
-                default: break;
+                case "intent": target = intents; break;
+                case "crop": target = crops; break;
+                case "symptom": target = symptoms; break;
+                case "commodity": target = commodities; break;
+                default: continue;
             }
+            // Distinct terms per value: "1" listed under both languages is still one hit.
+            target.computeIfAbsent(rule.entry.value, k -> new java.util.HashSet<>()).add(rule.entry.term);
         }
         Slots slots = new Slots();
-        slots.lang = lang != null ? lang : (en > sw ? "en" : "sw");  // Swahili first (decision D3)
+        slots.lang = lang != null ? lang : (enTerms.size() > swTerms.size() ? "en" : "sw");  // Swahili first (decision D3)
         slots.offer = offer(text);
         slots.crop = unique(crops);
         slots.symptom = unique(symptoms);
@@ -60,10 +64,13 @@ public final class KeywordNlu implements Nlu {
         return slots;
     }
 
-    /** Lowercase, keep letters, digits and '?', collapse everything else to single spaces. */
+    /**
+     * Lowercase, keep letters, digits and '?', collapse everything else to single spaces.
+     * Thousands separators are joined first, so "1,200" stays one number and never looks like menu code "1".
+     */
     static String normalize(String text) {
         if (text == null) return "";
-        String lower = text.toLowerCase(Locale.ROOT).replace("ŋ", "ng'");
+        String lower = text.toLowerCase(Locale.ROOT).replace("ŋ", "ng'").replaceAll("(?<=\\d)[,.](?=\\d{3}(?!\\d))", "");
         return lower.replaceAll("[^a-z0-9?]+", " ").trim();
     }
 
@@ -83,12 +90,13 @@ public final class KeywordNlu implements Nlu {
         return best;
     }
 
-    private static String intent(Map<String, Integer> intents, Slots slots) {
-        if (slots.offer != null && slots.crop != null) increment(intents, "price");
+    private static String intent(Map<String, java.util.Set<String>> intents, Slots slots) {
+        // A crop plus a price-like number ("mahindi 900") is a price question even without a price word.
+        if (slots.offer != null && slots.crop != null) intents.computeIfAbsent("price", k -> new java.util.HashSet<>()).add("<offer>");
         String best = null;
         int bestCount = 0;
         for (String candidate : INTENT_PRIORITY) {
-            int count = intents.getOrDefault(candidate, 0);
+            int count = intents.containsKey(candidate) ? intents.get(candidate).size() : 0;
             if (count > bestCount) { best = candidate; bestCount = count; }
         }
         if (best != null) return best;
@@ -97,20 +105,17 @@ public final class KeywordNlu implements Nlu {
         return "other";
     }
 
-    /** The value with the most hits; null if none or if two values tie. */
-    private static String unique(Map<String, Integer> counts) {
+    /** The value with the most distinct terms; null if none or if two values tie. */
+    private static String unique(Map<String, java.util.Set<String>> hits) {
         String best = null;
         int bestCount = 0;
         boolean tie = false;
-        for (Map.Entry<String, Integer> e : counts.entrySet()) {
-            if (e.getValue() > bestCount) { best = e.getKey(); bestCount = e.getValue(); tie = false; }
-            else if (e.getValue() == bestCount) tie = true;
+        for (Map.Entry<String, java.util.Set<String>> e : hits.entrySet()) {
+            int count = e.getValue().size();
+            if (count > bestCount) { best = e.getKey(); bestCount = count; tie = false; }
+            else if (count == bestCount) tie = true;
         }
         return tie ? null : best;
-    }
-
-    private static void increment(Map<String, Integer> counts, String key) {
-        counts.put(key, counts.getOrDefault(key, 0) + 1);
     }
 
     private static final class Rule {

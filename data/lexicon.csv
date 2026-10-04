@@ -160,3 +160,20 @@ en,stripes,symptom,streak_virus,prefix
 sw,mistari,symptom,streak_virus,prefix
 en,necrosis,symptom,lethal_necrosis,prefix
 en,mln,symptom,lethal_necrosis,token
+en,wrong,intent,diagnose,token
+en,black,intent,diagnose,prefix
+en,falling,intent,diagnose,token
+sw,kauka,intent,diagnose,substring
+sw,kufa,intent,diagnose,token
+sw,meusi,intent,diagnose,prefix
+en,thank,intent,other,prefix
+en,ok,intent,other,token
+sw,asante,intent,other,prefix
+sw,kahwa,crop,coffee,prefix
+sw,mahind,crop,maize,prefix
+en,orange,symptom,rust,prefix
+sw,machungwa,symptom,rust,prefix
+sw,njia nyeupe,symptom,miner,substring
+en,white trails,symptom,miner,substring
+en,holes,symptom,fall_armyworm,token
+sw,matundu,symptom,fall_armyworm,prefix
