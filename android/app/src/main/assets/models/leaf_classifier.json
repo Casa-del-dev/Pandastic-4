@@ -1,0 +1,39 @@
+{
+  "version": "leaf-stub-0",
+  "stub": true,
+  "note": "STUB: mean-colour heuristic, NOT a trained model. For app integration only; never demo it as AI.",
+  "arch": "stub_mean_colour_linear",
+  "input_size": 224,
+  "resize": "direct_bilinear",
+  "mean": [
+    0.48500001430511475,
+    0.4560000002384186,
+    0.4059999883174896
+  ],
+  "std": [
+    0.2290000021457672,
+    0.2240000069141388,
+    0.22499999403953552
+  ],
+  "labels": [
+    "coffee_healthy",
+    "coffee_rust",
+    "coffee_miner",
+    "coffee_cercospora",
+    "coffee_phoma",
+    "other"
+  ],
+  "temperature": 1.0,
+  "thresholds": {
+    "min_prob": 0.7,
+    "min_margin": 0.25
+  },
+  "per_class_min_prob": {},
+  "eval": {
+    "test_set": "none (stub)",
+    "n": 0,
+    "accuracy": 0,
+    "coverage_at_threshold": 0,
+    "selective_accuracy": 0
+  }
+}

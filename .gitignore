@@ -6,3 +6,10 @@ local.properties
 .vscode/
 node_modules/
 dist/
+
+# ML (agent B): local env, raw downloads, large artifacts. Never commit datasets or LLM weights.
+ml/.venv/
+data/raw/
+ml/artifacts/
+__pycache__/
+*.gguf
