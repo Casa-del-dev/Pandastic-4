@@ -142,7 +142,12 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
           <span><strong>{attachment.file.name}</strong><small>{t.photoCaption}</small></span>
           <button className="icon-button" type="button" aria-label={t.removePhoto} disabled={busy} onClick={() => setAttachment(undefined)}><Icon name="close" size={18} /></button>
         </div>}
-        <textarea ref={textarea} rows={1} maxLength={480} aria-label={local ? t.askComposer : t.composer} placeholder={local ? t.askComposer : t.composer} value={current} disabled={busy} onChange={event => local ? setLocalDraft(event.target.value) : setDraft(event.target.value)} />
+        <textarea ref={textarea} rows={1} maxLength={480} aria-label={local ? t.askComposer : t.composer} placeholder={local ? t.askComposer : t.composer} value={current} disabled={busy} onChange={event => local ? setLocalDraft(event.target.value) : setDraft(event.target.value)} onKeyDown={event => {
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault()
+            if (!event.repeat && !busy) event.currentTarget.form?.requestSubmit()
+          }
+        }} />
         <div className="composer-tools">
           {capable && <div className="attach-control" ref={attachControl}>
             <button className="attach-button" type="button" aria-label={t.attach} aria-expanded={attachOpen} aria-haspopup="dialog" disabled={busy} onClick={() => setAttachOpen(!attachOpen)}><Icon name={attachOpen ? 'close' : 'plus'} size={22} /></button>
@@ -160,7 +165,7 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
               {peers.map(number => <option key={number} value={number}>{hub.contacts.find(contact => native.sameNumber(contact.number, number))?.name || number}</option>)}
             </select> : <button className="destination-button" type="button" disabled={busy} onClick={openSettings}><Icon name="phone" size={14} /><span>{contact?.name || chat.peer || t.choosePhone}</span></button>)}
           </div>
-          <button className="send-button" type="submit" aria-label={local ? t.ask : t.send} disabled={busy || (!current.trim() && !(local && attachment)) || (!local && (!chat.peer || native.isDemo))}><Icon name="arrow" size={21} /></button>
+          <button className="send-button" type="submit" aria-label={local ? t.ask : t.send} title={t.keyboardHint} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={busy || (!current.trim() && !(local && attachment)) || (!local && (!chat.peer || native.isDemo))}><Icon name="arrow" size={21} /></button>
         </div>
       </form>
       {!local && <p className="composer-note">{native.isDemo ? t.browser : t.smsNote}</p>}

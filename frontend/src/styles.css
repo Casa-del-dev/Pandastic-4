@@ -121,6 +121,30 @@ input[aria-invalid='true'] { border-color: #a7443f; }
 .model-feedback { font-size: 13px; margin-top: 17px; }
 
 /* Settings stays separate from the chat canvas. */
+.settings-page { min-height: 100%; display: flex; flex-direction: column; }
+.settings-page .settings-language { margin-top: 0; padding-bottom: 25px; }
+.settings-language h2 { font-size: 14px; }
+.settings-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 14px; background: #f0f2ec; }
+.settings-tabs button { display: flex; justify-content: center; align-items: center; gap: 8px; min-width: 0; min-height: 48px; padding: 10px 8px; border: 0; border-radius: 10px; background: transparent; font-size: 13px; color: var(--soil-muted); }
+.settings-tabs button[aria-pressed='true'] { background: var(--paper); color: var(--leaf); box-shadow: 0 1px 4px #29382f08; }
+.settings-page .sms-settings-panel { border-bottom: 0; padding-bottom: 30px; }
+.settings-footer { margin-top: auto; padding-top: 8px; }
+.settings-disclosure { border-top: 1px solid var(--line); }
+.settings-disclosure summary { display: flex; align-items: center; gap: 12px; min-height: 65px; padding: 18px 0; cursor: pointer; list-style: none; font-size: 14px; }
+.settings-disclosure summary::-webkit-details-marker { display: none; }
+.settings-disclosure summary > span:first-child { flex: 1; min-width: 0; }
+.settings-disclosure summary > svg { color: var(--soil-muted); transform: rotate(90deg); }
+.settings-disclosure[open] summary > svg { transform: rotate(-90deg); }
+.settings-disclosure summary small { display: block; font-size: 11px; color: var(--soil-muted); margin-top: 3px; }
+.phone-mode-label { font-size: 12px; color: var(--soil-muted); }
+.disclosure-content { padding-bottom: 20px; }
+.own-number-form { display: grid; gap: 8px; padding: 7px 0 20px; }
+.own-number-form .field-hint { margin-top: -5px; }
+.demo-mode-title { margin: 4px 0 12px; font-size: 14px; }
+.add-phone-button { display: flex; align-items: center; gap: 7px; padding: 8px 0; }
+.contact-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; }
+.contact-fields > div { display: grid; gap: 7px; min-width: 0; }
+.contact-fields input { min-width: 0; }
 .settings-section { padding: 24px 0; border-bottom: 1px solid var(--line); }
 .settings-section:last-of-type { border-bottom: 0; }
 .settings-section > h2 { margin-bottom: 14px; }
@@ -158,7 +182,6 @@ input[aria-invalid='true'] { border-color: #a7443f; }
 .contacts small { display: block; color: var(--soil-muted); font-size: 12px; }
 .avatar { display: grid; place-items: center; height: 35px; width: 35px; border-radius: 50%; background: var(--leaf-soft); color: var(--leaf); font-size: 14px; flex-shrink: 0; }
 .add-contact { display: grid; gap: 7px; margin-top: 16px; }
-.add-contact label:not(:first-child) { margin-top: 5px; }
 .add-contact button { justify-self: start; margin-top: 5px; }
 .danger-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; border: 0; background: transparent; color: #974e46; padding: 12px 0; margin-top: 8px; font-size: 13px; }
 
@@ -198,6 +221,8 @@ input[aria-invalid='true'] { border-color: #a7443f; }
   .bottom-nav button { min-width: 57px; }
   .setting-row { gap: 9px; }
   .setting-row > h3 { max-width: 90px; }
+  .settings-tabs button { font-size: 12px; gap: 6px; }
+  .contact-fields { grid-template-columns: 1fr; }
 }
 @media (max-height: 450px) {
   .empty-panda svg { width: 64px; height: 64px; }
