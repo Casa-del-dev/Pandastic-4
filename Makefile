@@ -1,9 +1,19 @@
 ANDROID_DIR := android
-EMULATOR_NAME ?= Medium_Phone_API_37.0
 PACKAGE_NAME ?= org.pandastic.relay
-SDK_DIR ?= $(or $(ANDROID_HOME),$(ANDROID_SDK_ROOT),$(shell sed -n 's/^sdk.dir=//p' $(ANDROID_DIR)/local.properties 2>/dev/null),$(HOME)/Android/Sdk)
-ADB ?= $(if $(wildcard $(SDK_DIR)/platform-tools/adb),$(SDK_DIR)/platform-tools/adb,adb)
-EMULATOR ?= $(if $(wildcard $(SDK_DIR)/emulator/emulator),$(SDK_DIR)/emulator/emulator,emulator)
+
+# Prefer an explicitly provided SDK path, then the project's local.properties.
+ifeq ($(strip $(SDK_DIR)),)
+SDK_DIR := $(or $(strip $(ANDROID_HOME)),$(strip $(ANDROID_SDK_ROOT)),$(shell sed -n 's/^sdk.dir=//p' $(ANDROID_DIR)/local.properties 2>/dev/null),$(HOME)/Android/Sdk)
+endif
+ifeq ($(strip $(ADB)),)
+ADB := $(if $(wildcard $(SDK_DIR)/platform-tools/adb),$(SDK_DIR)/platform-tools/adb,adb)
+endif
+ifeq ($(strip $(EMULATOR)),)
+EMULATOR := $(if $(wildcard $(SDK_DIR)/emulator/emulator),$(SDK_DIR)/emulator/emulator,emulator)
+endif
+ifeq ($(strip $(EMULATOR_NAME)),)
+EMULATOR_NAME := medium_phone
+endif
 DEVICE ?=
 APK := $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
 EMULATOR_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-e)
