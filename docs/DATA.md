@@ -45,7 +45,7 @@ Every advice and price row carries a `source_id`; the build fails if one is miss
 | [iBean (Makerere AI Lab)](https://huggingface.co/datasets/AI-Lab-Makerere/beans) | Bean leaves, **Uganda** field photos | MIT | ~1,300 images | `other` (P0); bean classes (P1, P2) |
 | [Caltech-101](https://data.caltech.edu/records/mzrjq-6wc02) | Objects, animals, faces, scenes (102 categories) | CC BY 4.0 | ≤ 40 per category, 4,009 used | `other` (non-plants), split by category so test categories are unseen |
 | [CCMT (Crop Pest and Disease Detection)](https://data.mendeley.com/datasets/bwh3zbpkpv/1), raw maize photos | Maize leaves from local farms in **Ghana** | CC BY 4.0 | 3,472 images used: fall armyworm 285, healthy 208, leaf blight 1,000, leaf spot 1,000, streak virus 979 (grasshopper and leaf-beetle folders not used) | Maize classes (P2); listed per image with its public S3 URL in `ml/leaf/ccmt_files.csv` |
-| timm `mobilenetv4_conv_small` ImageNet weights | Pretrained backbone | Apache-2.0 | 3.8 M parameters | Starting point |
+| timm `efficientnet_b0.ra_in1k` ImageNet weights (installed model; the earlier ens3 used `mobilenetv4_conv_small`, 3.8 M) | Pretrained backbone | Apache-2.0 | 5.3 M parameters | Starting point |
 
 How it is evaluated: thresholds are chosen on a calibration split, and accuracy, coverage (the share of plant
 photos the app answers instead of saying "not sure") and the share of `other` photos wrongly accepted are reported
@@ -250,11 +250,13 @@ matched, and a symptom only for a problem report whose crop the keywords found, 
 
 **Leaf photos**
 - **No Ugandan coffee leaf photos.** Coffee images come from Brazil (white background; we paste them onto field
-  backgrounds) and Kenya (128 px lesion close-ups). Performance on Ugandan phone photos is untested, and on the
-  Kenyan patches the coffee classes fail (section 2.2).
+  backgrounds), Kenya (128 px lesion close-ups) and Ecuador (RoCoLe phone photos on the plant, the only source that
+  looks like a farmer's photo; half its plants are held out for calibration and test). A model never trained on
+  RoCoLe answered 1.2% of its photos, so coffee transfers poorly between countries, and performance on Ugandan phone
+  photos is untested.
 - **Leaves only:** no berries, so no coffee berry disease, berry borer or black branches. Those photos fall to `other`,
   which the app answers with "not sure — ask a person".
-- Arabica only, no Robusta. Leaves with several stresses at once are excluded from training.
+- Arabica (BRACOL, JMuBEN) and Robusta (RoCoLe, healthy and rust only). Leaves with several stresses at once are excluded from training.
 - `other` is made of other crops' leaves; hands, soil, walls or blurry shots are handled by the quality gate and
   thresholds, not learned.
 - Maize photos come from one source (CCMT, Ghana) and bean photos from one source (iBean, Uganda), so maize and bean
@@ -268,8 +270,10 @@ matched, and a symptom only for a problem report whose crop the keywords found, 
 - Swahili text is machine translated by the team; there is no Luganda advice.
 
 **Language and messages**
-- Swahili and English only. Luganda and Lumasaba (Mt Elgon) are not supported: a Luganda SMS gets the safe
-  "not sure — show a photo or ask the officer" reply, which is what we would show for a less-supported language.
+- Swahili and English. Luganda, our less-supported example, has only its three crop words in the lexicon
+  (`emmwanyi`, `kasooli`, `ebijanjaalo`); the language model reads a Luganda problem report as a crop problem, and the
+  reply is the safe "not sure — show a photo or ask the officer" (in Swahili). There is no Luganda advice text, and
+  Lumasaba (Mt Elgon) is not covered at all.
 - All SMS test data is synthetic and written by non-native speakers. No real farmer messages were used, so real
   spelling, slang and abbreviations will be harder than our test sets.
 

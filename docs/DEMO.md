@@ -84,7 +84,7 @@ In the app (capable phone, local chat):
    - ONNX Runtime classifier (3 × EfficientNet-B0, trained on Modal).
    - llama.cpp + GBNF grammar.
    - SQLite knowledge base (UCDA/MAAIF, WFP, PlantwisePlus).
-   - Sizes: app ~40 MB arm64 + optional 542 MB model. Peak RAM < 1 GB on a 4 GB phone.
+   - Sizes: app ~90 MB arm64 (incl. offline speech) + optional 542 MB model. Peak RAM < 1 GB on a 4 GB phone.
 7. **Limits, honestly (~20 s).**
    - Photos: coffee, maize and bean leaves only.
    - Swahili text is machine-translated and needs native review.

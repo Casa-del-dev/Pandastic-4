@@ -50,10 +50,10 @@ These are browser previews; carrier SMS is available in the Android app.
 
 | Part | What | Size |
 | :-- | :-- | :-- |
-| Leaf classifier | 3 × EfficientNet-B0 averaged in one ONNX file (int8 weights), 14 labels: coffee, maize and bean leaf problems, healthy leaves, and "not a leaf". Trained on photos from Brazil, Kenya, Ecuador, Ghana and Uganda; temperature-calibrated, with stricter floors for "healthy" chosen on calibration photos run through the app. A plant-share and blur gate runs first. Held-out, in the app: coffee phone photos 97.4% right when it answers, no rust leaf called healthy ([docs/DATA.md](docs/DATA.md) §2.2). | 12.7 MB |
+| Leaf classifier | 3 × EfficientNet-B0 averaged in one ONNX file (int8 weights), 14 labels: coffee, maize and bean leaf problems, healthy leaves, and "not a leaf". Trained on photos from Brazil, Kenya, Ecuador, Ghana and Uganda; temperature-calibrated, with stricter floors for "healthy" chosen on calibration photos run through the app. A plant-share and blur gate runs first. Held-out, in the app: coffee phone photos 97.4% right when it answers, no rust leaf called healthy ([docs/DATA.md](docs/DATA.md) §2.2). | 13 MB |
 | Language model | Qwen3.5-0.8B Q4_K_M (Apache-2.0, multilingual), fine-tuned with LoRA on farmer SMS, via llama.cpp under a GBNF grammar. It reads every message (its reading is used only where the keywords found nothing: the intent, and a symptom under strict conditions), and in the helper's chat also says the fixed, cited answer in its own words (code checks every word; automatic SMS always get the fixed answer). It never invents advice. | 542 MB, optional: downloaded once in the app (opt-in) or imported from a file |
 | Knowledge base | SQLite: cited advice (EN + SW), UCDA/MAAIF coffee farm-gate prices, WFP maize and bean prices, SW/EN lexicon | 360 KB |
-| App | Java + React (bundled, offline). The INTERNET permission is used for one thing, the opt-in model download; questions, photos and answers never go online, and the WebView blocks every network load. | ~40 MB (arm64 release) |
+| App | Java + React (bundled, offline). The INTERNET permission is used for one thing, the opt-in model download; questions, photos and answers never go online, and the WebView blocks every network load. | ~90 MB (arm64 release, incl. the 32 MB offline speech model) |
 
 Peak memory with the language model loaded is under 1 GB (the model file is memory-mapped) on the 4 GB target phone.
 
@@ -82,7 +82,7 @@ Requirements: JDK 17, Android SDK 35, NDK `28.2.13676358` with CMake 3.22.1 (for
 ```sh
 make run            # start/select emulator, build + install + launch; plain make does the same
 make run-device     # same on a USB-connected phone
-make release        # 40 MB arm64 APK for side-loading
+make release        # ~90 MB arm64 APK for side-loading
 make web            # UI only, in a desktop browser (labelled demo answers)
 make stop           # shut down the running emulator
 cd android && ./gradlew testDebugUnitTest   # resolver, NLU, SMS formatting, number matching
