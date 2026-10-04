@@ -89,7 +89,13 @@ public final class HubService extends Service {
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Pandastic:answer");
             wakeLock.acquire(90_000);
             try {
-                Responder.Reply reply = responder.answer(entry.body, prefs.lang());
+                Responder.Reply reply;
+                try { reply = responder.answer(entry.body, prefs.lang()); }
+                catch (Exception e) {
+                    // Noor always gets an answer: if the models fail, the safe "ask a person" reply goes out.
+                    Log.e(TAG, "Answering failed, sending the safe reply: " + e.getClass().getSimpleName());
+                    reply = new Responder.Fallback().answer(entry.body, prefs.lang());
+                }
                 SmsSender.send(this, entry.sender, reply.sms);
                 log.finish(entry.id, HubLog.ANSWERED, reply.sms, reply.decisionJson);
             } catch (Exception e) {

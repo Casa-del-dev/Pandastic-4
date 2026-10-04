@@ -12,8 +12,10 @@ import org.json.JSONObject;
 import org.pandastic.relay.brain.Brain;
 import org.pandastic.relay.brain.ClassifierResult;
 import org.pandastic.relay.brain.Decision;
+import org.pandastic.relay.brain.KeywordNlu;
 import org.pandastic.relay.brain.Knowledge;
 import org.pandastic.relay.brain.LeafClassifier;
+import org.pandastic.relay.brain.LlmNlu;
 import org.pandastic.relay.brain.QualityGate;
 import org.pandastic.relay.brain.SmsFormatter;
 import org.pandastic.relay.hub.Responder;
@@ -31,6 +33,7 @@ public final class BrainHost {
     private LeafClassifier classifier;
     private String classifierError;
     private Brain brain;
+    private LlmNlu llm;
     private String brainError;
 
     public static synchronized BrainHost get(Context context) {
@@ -74,13 +77,18 @@ public final class BrainHost {
             .put("classifierStub", model != null && model.stub)
             .put("classifierError", classifierError == null ? JSONObject.NULL : classifierError)
             .put("brain", brain() != null)
+            .put("llm", llm == null ? JSONObject.NULL : LlmNlu.MODEL_NAME)
             .put("brainError", brainError == null ? JSONObject.NULL : brainError);
     }
 
     /** Knowledge base + resolver. Null only if knowledge.sqlite cannot be opened; then replies stay safe fallbacks. */
     private synchronized Brain brain() {
         if (brain == null && brainError == null) {
-            try { brain = new Brain(Knowledge.open(context), null); }
+            try {
+                Knowledge knowledge = Knowledge.open(context);
+                llm = LlmNlu.open(context, new KeywordNlu(knowledge.lexicon()));
+                brain = new Brain(knowledge, llm);
+            }
             catch (Exception e) {
                 brainError = e.getClass().getSimpleName();
                 Log.e(TAG, "Knowledge base unavailable", e);

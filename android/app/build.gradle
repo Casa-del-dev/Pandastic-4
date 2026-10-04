@@ -30,6 +30,7 @@ def syncFrontendAssets = tasks.register('syncFrontendAssets', Sync) {
 android {
     namespace 'org.pandastic.relay'
     compileSdk 35
+    ndkVersion '28.2.13676358'
     defaultConfig {
         applicationId 'org.pandastic.relay'
         minSdk 24 // onnxruntime-android 1.30 requires 24
@@ -44,6 +45,10 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     sourceSets.main.assets.srcDir(generatedFrontendAssets)
+    // llama.cpp for the optional on-device LLM (contracts §5). Build without it: ./gradlew -Pnollm assembleDebug
+    if (!project.hasProperty('nollm')) {
+        externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
+    }
     // Models are memory-mapped/opened from assets; keep them uncompressed.
     androidResources { noCompress += ['onnx', 'sqlite', 'gguf'] }
     // brain/ logic is unit-tested on the JVM; android.* stubs return defaults instead of throwing.
