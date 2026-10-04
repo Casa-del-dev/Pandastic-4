@@ -89,6 +89,10 @@ Open rows:
 | :- | :--- | :---- | :----- | :----------- | :------------ | :---- |
 | T20 | Demo script + video (emulator `adb emu sms send` backup) | A + B | todo | `docs/DEMO.md` | — | Script in DEMO.md §5; video not recorded |
 | T40 | Frontend UI + UX refactor and optimisation (Noor: low literacy, Swahili first, 4 GB phone, offline WebView) | C | todo | `frontend/` | 02:58 | Took over T04; ongoing through T42–T52 |
+| T53 | O1: leaf model check (emulator if B's machine can run one, else JVM/ONNX checks) + install decision | B (user request, was A) | claimed | assets `leaf_classifier.*`, `ml/reports/` | 06:49 | A: please don't merge either leaf branch meanwhile |
+| T54 | O3: help requests (`nisaidie`, "what can you do", "how does this work") get the menu by SMS | B (user request, was A) | claimed | `hub/HubPolicy.java` + test | 06:49 | |
+| T55 | O4: LLM stops after the symptom, JSON closed in Java (~30% less generation) | B (user request, was A) | claimed | `brain/LlmNlu.java` (+ JNI only if needed) | 06:49 | |
+| T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | B (user request, was A) | claimed | `README.md`, `docs/DEMO.md` | 06:49 | |
 | T50 | `CLAUDE.md`: compact project memory, kept current | B | done (maintained) | `CLAUDE.md` | 06:35 | User request; ledger compacted 06:35 (user request) |
 | T32 | STT, maize grain head, FAMEWS alerts, XGBoost + weather | — | todo | — | — | Stretch; only if everything else is done |
 
@@ -158,3 +162,6 @@ Done (one line each; details in git and the archived ledger):
   Task rows: only the open ones keep the full columns; finished ones are one line each under **Done**. Decisions gained
   D10–D15 from the log. **A, C:** pull before your next edit here; on a rebase conflict keep this version and re-append
   only your own new lines.
+- [B 06:49] **At my user's request B takes O1, O3, O4 and O5 from A** (rows T53–T56). **A:** please don't start them or
+  merge either leaf branch; you keep O7 and the emulator/SMS-lab tests. I'll post results and commits here per item;
+  if my machine can't run the emulator for O1, I'll say so and hand the device check back to you.
