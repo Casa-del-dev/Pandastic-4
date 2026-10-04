@@ -83,8 +83,29 @@ public final class LlmNlu implements Nlu, AutoCloseable {
         this.handle = handle;
         this.keywords = keywords;
         this.system = system.trim();
-        this.grammar = grammar;
+        this.grammar = stopAfterSymptom(grammar);
         this.modelPath = modelPath;
+    }
+
+    /** Where ml/llm/slots.gbnf's root rule leaves the symptom; the commodity and the offer follow. */
+    private static final String AFTER_SYMPTOM = "symptom \",\\\"commodity\\\":\"";
+
+    /**
+     * Only intent, crop and symptom are read, and they come first in the JSON, so generation stops after the
+     * symptom: about a third fewer tokens per message (B, ml/reports/llm_stop_after_symptom_lora.md). The grammar
+     * ends at {@code ,"}, the token boundary the model writes there anyway, so every token before it is the one
+     * the full grammar would give; {@link #closeJson} then ends the object. Other grammars are used unchanged.
+     */
+    static String stopAfterSymptom(String grammar) {
+        int start = grammar.indexOf(AFTER_SYMPTOM);
+        if (start < 0) return grammar;
+        int lineEnd = grammar.indexOf('\n', start);
+        return grammar.substring(0, start) + "symptom \",\\\"\"" + (lineEnd < 0 ? "" : grammar.substring(lineEnd));
+    }
+
+    /** Ends the object the cut grammar leaves open after the symptom (its trailing {@code ,"}); a whole object stays as it is. */
+    static String closeJson(String output) {
+        return output.endsWith(",\"") ? output.substring(0, output.length() - 2) + "}" : output;
     }
 
     /**
@@ -206,7 +227,7 @@ public final class LlmNlu implements Nlu, AutoCloseable {
         String output = nativeComplete(handle, prompt, grammar, MAX_TOKENS, TIME_BUDGET_MS);
         Log.i(TAG, "LLM slots in " + (System.currentTimeMillis() - started) + " ms");
         if (output == null) return null;
-        try { return new JSONObject(output); }
+        try { return new JSONObject(closeJson(output)); }
         catch (Exception e) { return null; }
     }
 

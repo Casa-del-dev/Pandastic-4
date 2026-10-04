@@ -5,6 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import org.junit.Test;
 
 /**
@@ -78,5 +80,27 @@ public class LlmNluPolicyTest {
         // "mihogo" (cassava) has no crop of ours: keywords leave it empty and the model must not invent coffee.
         assertNull(LlmNlu.merge(keywords(null, null, null), "diagnose", null).crop);
         assertEquals("maize", LlmNlu.merge(keywords(null, "maize", null), "price", null).crop);
+    }
+
+    @Test public void generationStopsAfterTheSymptom() throws Exception {
+        // The bundled grammar (ml/llm/slots.gbnf): only intent, crop and symptom are read, so the root rule ends
+        // at the ',"' the model writes after the symptom anyway; commodity and offer are never generated.
+        String full = new String(Files.readAllBytes(FakeKnowledge.findRepoFile("ml/llm/slots.gbnf").toPath()), StandardCharsets.UTF_8);
+        String cut = LlmNlu.stopAfterSymptom(full);
+        String root = cut.lines().filter(l -> l.startsWith("root ::=")).findFirst().orElse("");
+        assertTrue(root, root.startsWith("root ::= \"{\\\"lang\\\":\" lang"));
+        assertTrue(root, root.endsWith(" symptom \",\\\"\""));
+        assertFalse(root, root.contains("commodity"));
+        assertEquals("the other rules stay", full.lines().count(), cut.lines().count());
+        assertEquals("another grammar is used as it is", "root ::= x", LlmNlu.stopAfterSymptom("root ::= x"));
+    }
+
+    @Test public void theCutAnswerIsClosedIntoOneObject() {
+        assertEquals("{\"lang\":\"sw\",\"intent\":\"diagnose\",\"crop\":\"coffee\",\"symptom\":\"rust\"}",
+            LlmNlu.closeJson("{\"lang\":\"sw\",\"intent\":\"diagnose\",\"crop\":\"coffee\",\"symptom\":\"rust\",\""));
+        assertEquals("{\"lang\":\"en\",\"intent\":\"help\",\"crop\":null,\"symptom\":null}",
+            LlmNlu.closeJson("{\"lang\":\"en\",\"intent\":\"help\",\"crop\":null,\"symptom\":null,\""));
+        String whole = "{\"intent\":\"price\",\"crop\":null,\"symptom\":null}";
+        assertEquals(whole, LlmNlu.closeJson(whole));
     }
 }
