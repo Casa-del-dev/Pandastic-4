@@ -13,26 +13,34 @@ temperature 0, thinking off, 4 CPU threads on a laptop (a phone is slower).
 | dev | qwen | 100 | 66% | 79% | 91% | 72% | 84% | 97% | 31% | 34% |
 | dev | hybrid_intent | 100 | 100% | 99% | 100% | 100% | 100% | 100% | 99% | 100% |
 | dev | hybrid_intent_crop | 100 | 100% | 99% | 94% | 100% | 98% | 100% | 93% | 94% |
+| dev | hybrid_intent_symptom | 100 | 100% | 99% | 100% | 92% | 100% | 100% | 91% | 92% |
+| dev | hybrid_no_offer | 100 | 100% | 99% | 94% | 92% | 98% | 100% | 87% | 88% |
 | dev | llm_first | 100 | 100% | 79% | 91% | 100% | 85% | 100% | 71% | 75% |
-| dev | hybrid_fill | 100 | 100% | 99% | 94% | 86% | 98% | 100% | 81% | 82% |
+| dev | hybrid_fill | 100 | 100% | 99% | 94% | 92% | 98% | 100% | 87% | 88% |
 | heldout | keyword | 50 | 100% | 84% | 96% | 86% | 96% | 100% | 72% | 76% |
 | heldout | qwen | 50 | 68% | 78% | 94% | 64% | 86% | 100% | 34% | 38% |
 | heldout | hybrid_intent | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% | 82% |
 | heldout | hybrid_intent_crop | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% | 82% |
+| heldout | hybrid_intent_symptom | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% | 82% |
+| heldout | hybrid_no_offer | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% | 82% |
 | heldout | llm_first | 50 | 100% | 78% | 94% | 86% | 86% | 100% | 60% | 66% |
-| heldout | hybrid_fill | 50 | 100% | 96% | 96% | 74% | 96% | 100% | 66% | 70% |
+| heldout | hybrid_fill | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% | 82% |
 | fresh | keyword | 40 | 100% | 100% | 100% | 88% | 100% | 100% | 88% | 88% |
 | fresh | qwen | 40 | 92% | 60% | 90% | 68% | 78% | 90% | 32% | 38% |
 | fresh | hybrid_intent | 40 | 100% | 98% | 100% | 88% | 100% | 100% | 85% | 85% |
 | fresh | hybrid_intent_crop | 40 | 100% | 98% | 92% | 88% | 100% | 100% | 80% | 80% |
+| fresh | hybrid_intent_symptom | 40 | 100% | 98% | 100% | 80% | 100% | 100% | 80% | 80% |
+| fresh | hybrid_no_offer | 40 | 100% | 98% | 92% | 85% | 100% | 100% | 80% | 80% |
 | fresh | llm_first | 40 | 100% | 60% | 90% | 88% | 80% | 100% | 42% | 48% |
-| fresh | hybrid_fill | 40 | 100% | 98% | 92% | 70% | 100% | 100% | 70% | 70% |
+| fresh | hybrid_fill | 40 | 100% | 98% | 92% | 85% | 100% | 100% | 80% | 80% |
 | fresh2 | keyword | 30 | 97% | 97% | 100% | 87% | 100% | 100% | 83% | 83% |
 | fresh2 | qwen | 30 | 73% | 63% | 90% | 53% | 83% | 93% | 27% | 30% |
 | fresh2 | hybrid_intent | 30 | 97% | 93% | 100% | 87% | 100% | 100% | 77% | 83% |
 | fresh2 | hybrid_intent_crop | 30 | 97% | 93% | 93% | 87% | 100% | 100% | 70% | 77% |
+| fresh2 | hybrid_intent_symptom | 30 | 97% | 93% | 100% | 77% | 100% | 100% | 67% | 73% |
+| fresh2 | hybrid_no_offer | 30 | 97% | 93% | 93% | 80% | 100% | 100% | 67% | 73% |
 | fresh2 | llm_first | 30 | 97% | 63% | 90% | 87% | 83% | 100% | 40% | 47% |
-| fresh2 | hybrid_fill | 30 | 97% | 93% | 93% | 57% | 100% | 100% | 47% | 53% |
+| fresh2 | hybrid_fill | 30 | 97% | 93% | 93% | 80% | 100% | 100% | 67% | 73% |
 
 `same reply` treats `help` and `other` as one intent, because the app answers both with the same menu;
 it is the share of SMS that get exactly the reply the gold slots would give.
@@ -40,7 +48,9 @@ it is the share of SMS that get exactly the reply the gold slots would give.
 Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent
 keyword matched (KeywordNlu intentProb 0). `hybrid_intent_crop`: also the crop when none was found (LlmNlu
 as of 01:00 UTC); it names coffee/maize for crops we don't support (cassava, tomato, tea), which keywords
-correctly leave empty. `hybrid_fill` also lets it fill symptom and offer: the base model invents symptoms.
+correctly leave empty. `hybrid_intent_symptom`: intent + a missing symptom (it must fit the crop);
+`hybrid_no_offer`: intent + crop + symptom; `hybrid_fill`: every empty slot, offer too. The base model
+invents symptoms; the fine-tune much less.
 `llm_first` = the LLM's intent and crop win whenever it gives them; lang, symptom and offer stay with the keywords.
 
 Model: `Qwen3.5-0.8B-Q4_K_M.gguf`.

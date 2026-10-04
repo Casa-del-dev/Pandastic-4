@@ -5,7 +5,7 @@ Synthetic SMS written by the team (labelled synthetic). `dev` was used to tune t
 trained, in phrasings unlike its templates (first keyword score 68%; its errors were then used to fix
 KeywordNlu); `fresh2` was written before those fixes and never used to make them (keywords 80% before, the
 row below after). `fresh2` is the honest test. Qwen: Q4_K_M via llama.cpp,
-temperature 0, thinking off, 8 CPU threads on a laptop (a phone is slower).
+temperature 0, thinking off, 4 CPU threads on a laptop (a phone is slower).
 
 | Set | Model | n | lang | intent | crop | symptom | commodity | offer | all slots | same reply |
 | :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: | --: |
@@ -13,24 +13,32 @@ temperature 0, thinking off, 8 CPU threads on a laptop (a phone is slower).
 | dev | qwen | 100 | 98% | 99% | 96% | 92% | 99% | 100% | 86% | 86% |
 | dev | hybrid_intent | 100 | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
 | dev | hybrid_intent_crop | 100 | 100% | 100% | 96% | 100% | 99% | 100% | 96% | 96% |
+| dev | hybrid_intent_symptom | 100 | 100% | 100% | 100% | 99% | 100% | 100% | 99% | 99% |
+| dev | hybrid_no_offer | 100 | 100% | 100% | 96% | 99% | 99% | 100% | 95% | 95% |
 | dev | llm_first | 100 | 100% | 99% | 96% | 100% | 99% | 100% | 95% | 95% |
 | dev | hybrid_fill | 100 | 100% | 100% | 96% | 99% | 99% | 100% | 95% | 95% |
 | heldout | keyword | 50 | 100% | 84% | 96% | 86% | 96% | 100% | 72% | 76% |
 | heldout | qwen | 50 | 100% | 98% | 100% | 96% | 100% | 100% | 94% | 96% |
 | heldout | hybrid_intent | 50 | 100% | 98% | 96% | 86% | 96% | 100% | 80% | 82% |
 | heldout | hybrid_intent_crop | 50 | 100% | 98% | 100% | 86% | 100% | 100% | 84% | 86% |
+| heldout | hybrid_intent_symptom | 50 | 100% | 98% | 96% | 100% | 96% | 100% | 94% | 96% |
+| heldout | hybrid_no_offer | 50 | 100% | 98% | 100% | 100% | 100% | 100% | 98% | 100% |
 | heldout | llm_first | 50 | 100% | 98% | 100% | 86% | 100% | 100% | 84% | 86% |
 | heldout | hybrid_fill | 50 | 100% | 98% | 100% | 100% | 100% | 100% | 98% | 100% |
 | fresh | keyword | 40 | 100% | 100% | 100% | 88% | 100% | 100% | 88% | 88% |
 | fresh | qwen | 40 | 100% | 92% | 92% | 88% | 95% | 100% | 78% | 82% |
 | fresh | hybrid_intent | 40 | 100% | 100% | 100% | 88% | 100% | 100% | 88% | 88% |
 | fresh | hybrid_intent_crop | 40 | 100% | 100% | 92% | 88% | 98% | 100% | 80% | 80% |
+| fresh | hybrid_intent_symptom | 40 | 100% | 100% | 100% | 90% | 100% | 100% | 90% | 90% |
+| fresh | hybrid_no_offer | 40 | 100% | 100% | 92% | 90% | 98% | 100% | 88% | 88% |
 | fresh | llm_first | 40 | 100% | 92% | 92% | 88% | 95% | 100% | 72% | 78% |
 | fresh | hybrid_fill | 40 | 100% | 100% | 92% | 90% | 98% | 100% | 88% | 88% |
 | fresh2 | keyword | 30 | 97% | 97% | 100% | 87% | 100% | 100% | 83% | 83% |
 | fresh2 | qwen | 30 | 100% | 97% | 100% | 93% | 100% | 100% | 90% | 90% |
 | fresh2 | hybrid_intent | 30 | 97% | 97% | 100% | 87% | 100% | 100% | 80% | 80% |
 | fresh2 | hybrid_intent_crop | 30 | 97% | 97% | 100% | 87% | 100% | 100% | 80% | 80% |
+| fresh2 | hybrid_intent_symptom | 30 | 97% | 97% | 100% | 100% | 100% | 100% | 93% | 93% |
+| fresh2 | hybrid_no_offer | 30 | 97% | 97% | 100% | 100% | 100% | 100% | 93% | 93% |
 | fresh2 | llm_first | 30 | 97% | 97% | 100% | 87% | 100% | 100% | 80% | 80% |
 | fresh2 | hybrid_fill | 30 | 97% | 97% | 100% | 100% | 100% | 100% | 93% | 93% |
 
@@ -40,7 +48,9 @@ it is the share of SMS that get exactly the reply the gold slots would give.
 Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent
 keyword matched (KeywordNlu intentProb 0). `hybrid_intent_crop`: also the crop when none was found (LlmNlu
 as of 01:00 UTC); it names coffee/maize for crops we don't support (cassava, tomato, tea), which keywords
-correctly leave empty. `hybrid_fill` also lets it fill symptom and offer: the base model invents symptoms.
+correctly leave empty. `hybrid_intent_symptom`: intent + a missing symptom (it must fit the crop);
+`hybrid_no_offer`: intent + crop + symptom; `hybrid_fill`: every empty slot, offer too. The base model
+invents symptoms; the fine-tune much less.
 `llm_first` = the LLM's intent and crop win whenever it gives them; lang, symptom and offer stay with the keywords.
 
 Model: `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf`.

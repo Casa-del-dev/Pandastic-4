@@ -27,7 +27,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SETS = {"dev": "eval_sms.csv", "heldout": "eval_sms_heldout.csv", "fresh": "eval_sms_fresh.csv", "fresh2": "eval_sms_fresh2.csv"}
 KW_DIR = ROOT / "android/app/build/nlu-eval"
-POLICIES = ("keyword", "qwen", "hybrid_intent", "hybrid_intent_crop", "llm_first", "hybrid_fill")
+POLICIES = ("keyword", "qwen", "hybrid_intent", "hybrid_intent_crop", "hybrid_intent_symptom", "hybrid_no_offer",
+            "llm_first", "hybrid_fill")
 SLOTS = ["lang", "intent", "crop", "symptom", "commodity", "offer"]
 DEFAULT_COMMODITY = {"coffee": "coffee_arabica_parchment", "maize": "maize_grain", "bean": "beans_dry"}
 
@@ -75,19 +76,32 @@ def score(gold_rows, predictions) -> dict:
             "same_reply": round(replies / n, 3), "misses": misses}
 
 
-def hybrid(kw: dict, qwen: dict, fill: str) -> dict:
-    """Keyword values always win. The LLM only fills what the keywords left empty: fill="intent" -> only the intent,
-    when no intent keyword matched (intent_prob 0); "intent_crop" -> also a missing crop; "all" -> every empty slot."""
+# Which empty keyword slots each hybrid lets the LLM fill. The intent is filled only when no intent keyword matched.
+FILLS = {"hybrid_intent": {"intent"}, "hybrid_intent_crop": {"intent", "crop"},
+         "hybrid_intent_symptom": {"intent", "symptom"}, "hybrid_no_offer": {"intent", "crop", "symptom"},
+         "hybrid_fill": {"intent", "crop", "symptom", "offer"}}
+
+
+def _labels() -> set:
+    import sys
+    sys.path.insert(0, str(HERE.parent))
+    from leaf.config import P2_LABELS
+    return set(P2_LABELS) | {"maize_lethal_necrosis"}
+
+
+def hybrid(kw: dict, qwen: dict, fill) -> dict:
+    """Keyword values always win; the LLM only fills the empty slots named in `fill` (a FILLS key or a set).
+    A filled symptom must form a real label with the crop (as Resolver requires), or it is dropped."""
+    fill = FILLS[fill] if isinstance(fill, str) else fill
     out = dict(kw)
     no_intent_evidence = kw.get("intent_prob", "0") in ("0", "0.0") and kw["intent"] == "other"
-    if no_intent_evidence and qwen["intent"]:
+    if "intent" in fill and no_intent_evidence and qwen["intent"]:
         out["intent"] = qwen["intent"]
-    if not kw["crop"] and fill != "intent":
-        out["crop"] = qwen["crop"]
-    if fill == "all":
-        for k in ("symptom", "offer"):
-            if not kw[k]:
-                out[k] = qwen[k]
+    for k in ("crop", "symptom", "offer"):
+        if k in fill and not kw[k]:
+            out[k] = qwen[k]
+    if out["symptom"] and not kw["symptom"] and out["crop"] and f"{out['crop']}_{out['symptom']}" not in _labels():
+        out["symptom"] = ""
     return effective({k: (out[k] or None) for k in SLOTS} | {"commodity": kw["commodity"] or None})
 
 
@@ -152,7 +166,9 @@ def write_report(results: dict, threads: int, report: str = "nlu_eval") -> None:
               "", "Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent",
               "keyword matched (KeywordNlu intentProb 0). `hybrid_intent_crop`: also the crop when none was found (LlmNlu",
               "as of 01:00 UTC); it names coffee/maize for crops we don't support (cassava, tomato, tea), which keywords",
-              "correctly leave empty. `hybrid_fill` also lets it fill symptom and offer: the base model invents symptoms.",
+              "correctly leave empty. `hybrid_intent_symptom`: intent + a missing symptom (it must fit the crop);",
+              "`hybrid_no_offer`: intent + crop + symptom; `hybrid_fill`: every empty slot, offer too. The base model",
+              "invents symptoms; the fine-tune much less.",
               "`llm_first` = the LLM's intent and crop win whenever it gives them; lang, symptom and offer stay with the keywords.", ""]
     meta = results.get("meta", {})
     if meta.get("model"):
@@ -246,13 +262,18 @@ def main():
 
     sets = {name: read(HERE / file) for name, file in SETS.items()}
     if args.rescore:
+        # Keep the latency and model name measured by the run that produced the predictions (same report name).
+        previous_path = ROOT / f"ml/reports/{args.report_name}.json"
+        previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.exists() else {}
         results = {}
         for name, rows in sets.items():
             path = args.predictions_dir / f"qwen_predictions_{name}.csv"
             if path.exists():
                 llm = {r["id"]: effective(r) for r in read(path)}
-                results[name] = {"qwen": score(rows, llm), "latency_s": {"median": None, "max": None},
-                                 "prompt_ms_median": None, "gen_ms_median": None}
+                timing = {k: previous.get(name, {}).get(k) for k in ("latency_s", "prompt_ms_median", "gen_ms_median")}
+                results[name] = {"qwen": score(rows, llm), **{k: v if v is not None else {"median": None, "max": None}
+                                                              if k == "latency_s" else v for k, v in timing.items()}}
+        args.model = args.model or previous.get("meta", {}).get("model")
     else:
         results = evaluate_model(args.server, args.model, args.threads, args.port, predictions_dir=args.predictions_dir)
     results["meta"] = {"model": Path(args.model).name if args.model else str(args.predictions_dir),
@@ -265,9 +286,8 @@ def main():
         kw = {r["id"]: r for r in read(kw_path)}
         llm = {r["id"]: r for r in read(args.predictions_dir / f"qwen_predictions_{name}.csv")}
         results[name]["keyword"] = score(rows, kw)
-        for fill in ("intent", "intent_crop", "all"):
-            results[name]["hybrid_fill" if fill == "all" else f"hybrid_{fill}"] = score(
-                rows, {i: hybrid(kw[i], llm[i], fill) for i in kw})
+        for policy in FILLS:
+            results[name][policy] = score(rows, {i: hybrid(kw[i], llm[i], policy) for i in kw})
         results[name]["llm_first"] = score(rows, {i: llm_first(kw[i], llm[i]) for i in kw})
         print(name, {m: (results[name][m]["all_slots"], results[name][m]["same_reply"]) for m in POLICIES})
 

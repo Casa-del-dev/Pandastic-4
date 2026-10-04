@@ -35,7 +35,6 @@
     },
     "prompt_ms_median": 399,
     "gen_ms_median": 1733,
-    "failures": 0,
     "keyword": {
       "n": 100,
       "lang": 1.0,
@@ -73,6 +72,39 @@
       "misses": [
         "4 `unga wa machungwa kwenye majani` crop: want `` got `coffee`",
         "25 `armyworms everywhere` crop: want `` got `maize`",
+        "99 `bei ya chai` crop: want `` got `coffee`",
+        "99 `bei ya chai` commodity: want `` got `coffee_arabica_parchment`",
+        "100 `cassava leaves yellow` crop: want `` got `maize`"
+      ]
+    },
+    "hybrid_intent_symptom": {
+      "n": 100,
+      "lang": 1.0,
+      "intent": 1.0,
+      "crop": 1.0,
+      "symptom": 0.99,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.99,
+      "same_reply": 0.99,
+      "misses": [
+        "97 `coffee berries black` symptom: want `` got `phoma`"
+      ]
+    },
+    "hybrid_no_offer": {
+      "n": 100,
+      "lang": 1.0,
+      "intent": 1.0,
+      "crop": 0.96,
+      "symptom": 0.99,
+      "commodity": 0.99,
+      "offer": 1.0,
+      "all_slots": 0.95,
+      "same_reply": 0.95,
+      "misses": [
+        "4 `unga wa machungwa kwenye majani` crop: want `` got `coffee`",
+        "25 `armyworms everywhere` crop: want `` got `maize`",
+        "97 `coffee berries black` symptom: want `` got `phoma`",
         "99 `bei ya chai` crop: want `` got `coffee`",
         "99 `bei ya chai` commodity: want `` got `coffee_arabica_parchment`",
         "100 `cassava leaves yellow` crop: want `` got `maize`"
@@ -140,7 +172,6 @@
     },
     "prompt_ms_median": 314,
     "gen_ms_median": 1320,
-    "failures": 0,
     "keyword": {
       "n": 50,
       "lang": 1.0,
@@ -219,6 +250,38 @@
         "h44 `nisaidie` intent: want `help` got `other`"
       ]
     },
+    "hybrid_intent_symptom": {
+      "n": 50,
+      "lang": 1.0,
+      "intent": 0.98,
+      "crop": 0.96,
+      "symptom": 1.0,
+      "commodity": 0.96,
+      "offer": 1.0,
+      "all_slots": 0.94,
+      "same_reply": 0.96,
+      "misses": [
+        "h28 `p1 13000` crop: want `coffee` got ``",
+        "h28 `p1 13000` commodity: want `coffee_arabica_parchment` got ``",
+        "h29 `P2 1000` crop: want `maize` got ``",
+        "h29 `P2 1000` commodity: want `maize_grain` got ``",
+        "h44 `nisaidie` intent: want `help` got `other`"
+      ]
+    },
+    "hybrid_no_offer": {
+      "n": 50,
+      "lang": 1.0,
+      "intent": 0.98,
+      "crop": 1.0,
+      "symptom": 1.0,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.98,
+      "same_reply": 1.0,
+      "misses": [
+        "h44 `nisaidie` intent: want `help` got `other`"
+      ]
+    },
     "hybrid_fill": {
       "n": 50,
       "lang": 1.0,
@@ -288,7 +351,6 @@
     },
     "prompt_ms_median": 308,
     "gen_ms_median": 1141,
-    "failures": 0,
     "keyword": {
       "n": 40,
       "lang": 1.0,
@@ -343,6 +405,44 @@
         "f13 `mihogo yangu ina majani yaliyojikunja` crop: want `` got `maize`",
         "f14 `tomato leaves have black spots` crop: want `` got `maize`",
         "f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``",
+        "f30 `bei ya chai leo` crop: want `` got `coffee`",
+        "f30 `bei ya chai leo` commodity: want `` got `coffee_arabica_parchment`"
+      ]
+    },
+    "hybrid_intent_symptom": {
+      "n": 40,
+      "lang": 1.0,
+      "intent": 1.0,
+      "crop": 1.0,
+      "symptom": 0.9,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.9,
+      "same_reply": 0.9,
+      "misses": [
+        "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got `streak_virus`",
+        "f11 `Shamba la mahindi limeharibika sana mwaka huu sijui ni nini` symptom: want `` got `lethal_necrosis`",
+        "f13 `mihogo yangu ina majani yaliyojikunja` symptom: want `` got `leaf_blight`",
+        "f14 `tomato leaves have black spots` symptom: want `` got `leaf_blight`"
+      ]
+    },
+    "hybrid_no_offer": {
+      "n": 40,
+      "lang": 1.0,
+      "intent": 1.0,
+      "crop": 0.925,
+      "symptom": 0.9,
+      "commodity": 0.975,
+      "offer": 1.0,
+      "all_slots": 0.875,
+      "same_reply": 0.875,
+      "misses": [
+        "f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got `streak_virus`",
+        "f11 `Shamba la mahindi limeharibika sana mwaka huu sijui ni nini` symptom: want `` got `lethal_necrosis`",
+        "f13 `mihogo yangu ina majani yaliyojikunja` crop: want `` got `maize`",
+        "f13 `mihogo yangu ina majani yaliyojikunja` symptom: want `` got `leaf_blight`",
+        "f14 `tomato leaves have black spots` crop: want `` got `maize`",
+        "f14 `tomato leaves have black spots` symptom: want `` got `leaf_blight`",
         "f30 `bei ya chai leo` crop: want `` got `coffee`",
         "f30 `bei ya chai leo` commodity: want `` got `coffee_arabica_parchment`"
       ]
@@ -418,7 +518,6 @@
     },
     "prompt_ms_median": 385,
     "gen_ms_median": 1500,
-    "failures": 0,
     "keyword": {
       "n": 30,
       "lang": 0.967,
@@ -472,6 +571,36 @@
         "g10 `coffee leaves have grey spots with brown ring` symptom: want `cercospora` got ``",
         "g11 `mahindi yana madoa ya kijivu marefu kama sigara` symptom: want `leaf_blight` got ``",
         "g12 `Wadudu wanachimba ndani ya majani ya kahawa` symptom: want `miner` got ``",
+        "g28 `good morning` lang: want `en` got `sw`",
+        "g30 `the rain was heavy yesterday` intent: want `other` got `diagnose`"
+      ]
+    },
+    "hybrid_intent_symptom": {
+      "n": 30,
+      "lang": 0.967,
+      "intent": 0.967,
+      "crop": 1.0,
+      "symptom": 1.0,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.933,
+      "same_reply": 0.933,
+      "misses": [
+        "g28 `good morning` lang: want `en` got `sw`",
+        "g30 `the rain was heavy yesterday` intent: want `other` got `diagnose`"
+      ]
+    },
+    "hybrid_no_offer": {
+      "n": 30,
+      "lang": 0.967,
+      "intent": 0.967,
+      "crop": 1.0,
+      "symptom": 1.0,
+      "commodity": 1.0,
+      "offer": 1.0,
+      "all_slots": 0.933,
+      "same_reply": 0.933,
+      "misses": [
         "g28 `good morning` lang: want `en` got `sw`",
         "g30 `the rain was heavy yesterday` intent: want `other` got `diagnose`"
       ]
