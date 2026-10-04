@@ -17,7 +17,7 @@ build:
 
 # Quick UI development in the computer's browser.
 web:
-	@cd frontend && npm run dev
+	@cd frontend && pnpm dev
 
 # Run on an emulator. Reuse an existing emulator when possible.
 run:

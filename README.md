@@ -27,7 +27,7 @@ From the repository root:
 make run-device  # Build, install and launch on a USB-connected Samsung/Android phone
 make run         # Build, install and launch on an emulator
 make build       # Build the APK without installing it
-make web         # Preview React in the computer's browser (npm install first if needed)
+make web         # Preview React in the computer's browser (pnpm install first if needed)
 ```
 
 For a physical phone, enable Developer options and USB debugging, connect by USB, and accept the authorization prompt. Check `adb devices` if the phone is not detected. With multiple phones, use `make run-device DEVICE=YOUR_SERIAL`.
@@ -61,7 +61,7 @@ android/
 
 Android Studio is optional. You can edit, build, and install this app from VS Code and a terminal. You need:
 
-- **Node.js 20.19+ or 22.12+ and npm** to build the React assets. Ensure `node` and `npm` are on `PATH` for terminal and Android Studio builds.
+- **Node.js 20.19+ or 22.12+ and pnpm** to build the React assets. Ensure `node` and `pnpm` are on `PATH` for terminal and Android Studio builds.
 - **JDK 17**. The Android Gradle Plugin is 8.9.2 and this project compiles Java 17. On Ubuntu/Debian, install it with `sudo apt install openjdk-17-jdk`; check with `java -version`.
 - **Android SDK command-line tools**, including Android SDK **Platform 35** and **Build-Tools 35.0.0**. Install these with Android Studio's SDK Manager, or with Google's command-line tools and `sdkmanager`:
 
@@ -116,7 +116,7 @@ cd android
 ./gradlew assembleDebug
 ```
 
-On Windows, run `gradlew.bat assembleDebug`. The debug APK is created at `android/app/build/outputs/apk/debug/app-debug.apk`. Gradle also runs `npm ci` and `npm run build` as needed and copies the React build into the APK. The first build needs internet to download Gradle, Android, and npm dependencies; running the app does not.
+On Windows, run `gradlew.bat assembleDebug`. The debug APK is created at `android/app/build/outputs/apk/debug/app-debug.apk`. Gradle also runs `pnpm install --frozen-lockfile` and `pnpm run build` as needed and copies the React build into the APK. The first build needs internet to download Gradle, Android, and pnpm dependencies; running the app does not.
 
 To install and launch on a USB-connected Android phone, enable Developer options and USB debugging, connect and authorize the phone, then run from `android/`:
 
