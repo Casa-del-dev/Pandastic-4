@@ -10,13 +10,18 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageFilter, ImageOps, ImageFile
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from . import config
 
 
 # ---------------------------------------------------------------- data
+
+# A few dataset JPEGs (BRACOL's zip is itself truncated) end a few bytes early; decode what is there
+# instead of crashing a DataLoader worker mid-epoch.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 
 def load_rgb(path: str) -> Image.Image:
     with Image.open(path) as im:
