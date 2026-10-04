@@ -22,7 +22,7 @@ EMULATOR_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-e)
 PHONE_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-d)
 EMULATOR_OPTIONS = --adb "$(ADB)" --emulator "$(EMULATOR)" --sdk "$(SDK_DIR)" --name "$(EMULATOR_NAME)" --device "$(DEVICE)" --timeout "$(BOOT_TIMEOUT)" --log "$(EMULATOR_LOG)"
 
-.PHONY: run run-device build release web stop reset-state e2e emulator-basic sms-setup sms-relay sms-phone sms-test
+.PHONY: run run-device build release web stop reset-state e2e emulator-basic sms-setup sms-relay sms-phone sms-test human-test
 
 # Gradle also builds React and bundles it into the APK.
 build:
@@ -84,3 +84,8 @@ sms-phone:
 	@ADB="$(ADB)" node scripts/sms-lab.mjs phone
 sms-test:
 	@ADB="$(ADB)" node scripts/sms-lab.mjs test $(ARGS)
+
+# Human test (docs/HUMAN-TEST.md): with ./run.sh running, reset both phones to their first screen and put the
+# test photos in their galleries. Run it before each tester.
+human-test:
+	@python3 scripts/human_test_prep.py --fresh

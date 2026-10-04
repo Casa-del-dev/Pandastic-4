@@ -4,6 +4,7 @@
   python3 scripts/human_test_prep.py            # test photos into both galleries, SMS lab numbers printed
   python3 scripts/human_test_prep.py --fresh    # also wipe the app on both phones (first-run screens), then
                                                 # put the side-loaded language model back on the helper phone
+                                                # (= make human-test; run it before each tester)
 
 Test photos: 4 RoCoLe leaves from plants the classifier never trained on (2 rust, 2 healthy, recomputed with the
 same seed as ml/leaf/data.py), 1 blurred copy (should ask for a retake) and 1 picture that is not a plant.
@@ -117,15 +118,17 @@ def main():
         if "--fresh" in sys.argv:
             fresh(serial)
         push_photos(serial, files)
+        # Open the app so the tester starts on its first screen.
+        adb(serial, "shell", "am", "start", "-W", "-S", "-n", f"{PACKAGE}/.FrontendActivity", check=False)
     print("\nPhotos in each gallery (Pictures/PandasticTest). Facilitator key, do not show testers:")
     for path, label, source in files:
         print(f"  {path.name:13s} {label:18s} {source}")
     print("""
-Lab numbers (the SMS carrier is `make sms-relay`; keep it running during the session):
+Lab numbers (SMS between the phones needs the carrier: ./run.sh keeps it running):
   helper phone  emulator-5554  +256 772 000 001   (Capable phone; allow +256 772 000 002 in SMS settings)
   Basic phone   emulator-5556  +256 772 000 002   (Basic phone; sends to +256 772 000 001)
   kabambe       terminal       +256 772 000 003   (`make sms-phone`)
-Next: make sms-relay   then follow docs/HUMAN-TEST.md""")
+Ready for the next tester: follow docs/HUMAN-TEST.md. Reset between testers: make human-test""")
 
 
 if __name__ == "__main__":

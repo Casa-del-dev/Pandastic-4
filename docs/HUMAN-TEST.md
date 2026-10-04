@@ -8,16 +8,16 @@
 3. Can they tell whether a buyer's price is fair?
 4. Can the helper phone's owner let another number ask by SMS, and does the Basic phone user get and understand the reply?
 
-## 1. Before each session (facilitator, ~5 min)
+## 1. Before each session (facilitator)
+
+Two commands:
 
 ```bash
-make run                                   # helper phone: emulator-5554 (builds + installs)
-make emulator-basic                        # Basic phone: emulator-5556 (once; it stays up)
-python3 scripts/human_test_prep.py --fresh # first-run state on both, language model kept, test photos in both galleries
-make sms-relay                             # the SMS "carrier" between the two emulators: keep this terminal open
+./run.sh          # once: both emulator phones, build + install, SMS carrier. Keep this terminal open.
+make human-test   # before EACH tester, in a second terminal: both phones back to their first screen + test photos
 ```
 
-`--fresh` wipes the app's data on both emulators: settings, chats and SMS history. It then puts the side-loaded language model back. Without `--fresh`, it only refreshes the photos.
+`./run.sh` starts the helper phone (`emulator-5554`, +256 772 000 001) and Noor's Basic phone (`emulator-5556`, +256 772 000 002). It keeps the SMS "carrier" running between them. `make human-test` wipes the app's data on both phones: settings, chats and SMS history. It puts the side-loaded language model back, adds the test photos to both galleries and opens the app on its first screen.
 
 - **Record** (with consent):
   - Screen recording on each emulator: `adb -s emulator-5554 shell screenrecord --time-limit 180 /sdcard/t1.mp4` (3 min max per file).
@@ -90,7 +90,7 @@ f. "Would you tell a neighbour about it? What would you say?"
 1. Save the recordings: `adb -s emulator-5554 pull /sdcard/t1.mp4`, plus the logcat.
 2. Write the sheet up in `docs/human-tests/<date>-T<n>.md`. Use no names, only T1, T2…
 3. Put each problem on the ledger as one line: task #, what happened, severity. ⚠️ means the tester believed an uncertain answer, so it's top priority.
-4. Reset for the next tester: `python3 scripts/human_test_prep.py --fresh`.
+4. Reset for the next tester: `make human-test`.
 
 ## 6. Known issues (don't count these as tester mistakes)
 
