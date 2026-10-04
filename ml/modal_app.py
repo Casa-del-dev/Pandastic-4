@@ -101,13 +101,14 @@ def train(labels: str, epochs: int, batch_size: int, lr: float, smoke: bool, git
     version, hashes = _run_id(labels, manifest_path.read_bytes(), hparams)
     version += "-smoke" if smoke else ""
     lineage = {**hashes, "manifest": manifest_path.name, "git_sha": git_sha, "seed": 13,
-               "torch": torch.__version__, "timm": timm.__version__}
+               "torch": str(torch.__version__), "timm": str(timm.__version__)}
     print(f"run {version} (resumes automatically if checkpoints exist), lineage {lineage}")
     meta = trainer.run(rows, _labels(labels), MODELS / "leaf" / version, stats, epochs=1 if smoke else epochs,
                        batch_size=batch_size, lr=lr, device="cuda", workers=14, max_steps=30 if smoke else None,
                        version=version, on_checkpoint=models_volume.commit, lineage=lineage)
     models_volume.commit()
-    return meta
+    # Plain JSON types only: the laptop that receives this has no torch/numpy to unpickle their objects.
+    return json.loads(json.dumps(meta, default=str))
 
 
 SOURCES = ["bracol", "jmuben", "jmuben2", "plantdoc", "ibean", "ccmt"]
