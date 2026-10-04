@@ -18,6 +18,7 @@ import android.provider.Settings;
 import android.provider.OpenableColumns;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
@@ -224,9 +225,27 @@ final class NativeBridge {
         try {
             ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
             activity.getSystemService(ActivityManager.class).getMemoryInfo(memory);
-            return new JSONObject().put("mode", new HubPrefs(activity).phoneMode())
+            return PhoneContacts.identity(activity).put("mode", new HubPrefs(activity).phoneMode())
                 .put("totalRamMb", memory.totalMem / (1024 * 1024)).toString();
         } catch (Exception e) { return "{}"; }
+    }
+
+    @JavascriptInterface public void phoneContacts(String id) {
+        activity.runOnUiThread(() -> activity.requestContactPermissions(() -> {
+            Thread reader = new Thread(() -> {
+                JSONObject result = PhoneContacts.read(activity);
+                webView.post(() -> {
+                    if (!activity.isDestroyed()) webView.evaluateJavascript("window.__pandasticContactsReply && window.__pandasticContactsReply("
+                        + JSONObject.quote(id) + "," + result.toString() + ")", null);
+                });
+            }, "pandastic-contacts");
+            reader.start();
+        }));
+    }
+
+    void announcePhone() {
+        String info = phoneInfo();
+        webView.post(() -> webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('pandastic:phone', {detail:" + info + "}))", null));
     }
 
     @JavascriptInterface public void setPhoneMode(String mode) {
@@ -358,9 +377,8 @@ final class NativeBridge {
     @JavascriptInterface public boolean speak(String text, String lang) {
         if (!ttsReady) { initTts(); return false; }
         if (text == null || text.trim().isEmpty()) return false;
-        Locale locale = locale(lang);
-        if (tts.isLanguageAvailable(locale) < TextToSpeech.LANG_AVAILABLE) return false;
-        tts.setLanguage(locale);
+        Voice voice = offlineVoice(lang);
+        if (voice == null || tts.setVoice(voice) != TextToSpeech.SUCCESS) return false;
         tts.setSpeechRate(0.9f);  // a little slower: many listeners read little and hear the advice once
         String clipped = text.length() > TextToSpeech.getMaxSpeechInputLength()
             ? text.substring(0, TextToSpeech.getMaxSpeechInputLength()) : text;
@@ -373,8 +391,8 @@ final class NativeBridge {
         try {
             if (!ttsReady) { initTts(); return new JSONObject().put("ready", false).toString(); }
             return new JSONObject().put("ready", true)
-                .put("sw", tts.isLanguageAvailable(locale("sw")) >= TextToSpeech.LANG_AVAILABLE)
-                .put("en", tts.isLanguageAvailable(locale("en")) >= TextToSpeech.LANG_AVAILABLE)
+                .put("sw", offlineVoice("sw") != null)
+                .put("en", offlineVoice("en") != null)
                 .put("speaking", tts.isSpeaking()).toString();
         } catch (JSONException e) { return "{}"; }
     }
@@ -386,6 +404,19 @@ final class NativeBridge {
     // ---- Internals -------------------------------------------------------------------------
 
     private static Locale locale(String lang) { return "en".equals(lang) ? Locale.ENGLISH : new Locale("sw"); }
+
+    private Voice offlineVoice(String lang) {
+        if (!ttsReady || tts.getVoices() == null) return null;
+        String language = locale(lang).getLanguage();
+        Voice chosen = null;
+        for (Voice voice : tts.getVoices()) {
+            if (!language.equals(voice.getLocale().getLanguage()) || voice.isNetworkConnectionRequired()
+                || (voice.getFeatures() != null && voice.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED))) continue;
+            if (chosen == null || voice.getQuality() > chosen.getQuality()
+                || (voice.getQuality() == chosen.getQuality() && voice.getName().compareTo(chosen.getName()) < 0)) chosen = voice;
+        }
+        return chosen;
+    }
 
     /** Started when the page loads, so the first tap on "listen" already has a voice. */
     void initTts() {

@@ -240,3 +240,11 @@ input[aria-invalid='true'] { border-color: #a7443f; }
 .model-name { overflow-wrap: anywhere; }
 .read-aloud-button { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 6px 8px; margin: 5px -8px 0; border: 0; border-radius: 10px; background: transparent; color: var(--leaf); font-size: 12px; }
 .read-aloud-button[aria-pressed='true'] { background: var(--leaf-soft); }
+.own-number-summary { display: grid; gap: 4px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.own-number-summary > span, .own-number-summary small { color: var(--soil-muted); font-size: 12px; }
+.contact-suggestions { display: grid; gap: 8px; margin-top: 16px; }
+.contact-suggestions ul { list-style: none; margin: 0; padding: 0; }
+.contact-suggestions li button { display: flex; width: 100%; min-height: 52px; gap: 11px; align-items: center; padding: 10px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }
+.contact-suggestions li button > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.contact-suggestions strong { display: block; font-weight: 500; }
+.contact-suggestions small { color: var(--soil-muted); }

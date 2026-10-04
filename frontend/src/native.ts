@@ -56,6 +56,7 @@ export type Decision = {
 }
 
 export type HubContact = { name: string; number: string }
+export type PhoneContacts = { contacts: HubContact[]; number?: string; numberSource?: string; error?: string }
 export type HubEntry = { id: number; contact: string; question: string; reply: string | null; status: string; receivedAt: number }
 export type HubStatus = {
   enabled: boolean
@@ -70,6 +71,7 @@ export type HubStatus = {
 
 type Native = {
   phoneInfo(): string
+  phoneContacts?(id: string): void
   setPhoneMode(mode: PhoneMode): void
   chatStatus(): string
   setSmsPeer(number: string): void
@@ -103,6 +105,7 @@ declare global {
     __pandasticReply?: (id: string, decision: Decision) => void
     __pandasticSmsReply?: (id: string, result: SmsResult) => void
     __pandasticModelReply?: (id: string, result: SmsResult) => void
+    __pandasticContactsReply?: (id: string, result: PhoneContacts) => void
   }
 }
 
@@ -110,13 +113,30 @@ const native = window.PandasticNative
 export const isDemo = !native
 export const canSms = Boolean(native) || isLocalPhone
 
-export function phoneInfo(): { mode?: PhoneMode; totalRamMb?: number } {
+export function phoneInfo(): { mode?: PhoneMode; totalRamMb?: number; number?: string; numberSource?: string } {
   try {
     if (native) return JSON.parse(native.phoneInfo())
     if (isLocalPhone) return { mode: localPhoneState()?.mode }
     const mode = localStorage.getItem('pandastic.phone-mode')
     return { mode: mode === 'lite' || mode === 'capable' ? mode : undefined }
   } catch { return {} }
+}
+
+export const canSuggestContacts = Boolean(native?.phoneContacts)
+export function phoneContacts(): Promise<PhoneContacts> {
+  if (!native?.phoneContacts) return Promise.resolve({ contacts: [] })
+  const id = crypto.randomUUID()
+  return new Promise(resolve => {
+    const timer = setTimeout(() => { contactRequests.delete(id); resolve({ contacts: [], error: 'unavailable' }) }, 90000)
+    contactRequests.set(id, value => { clearTimeout(timer); resolve(value) })
+    native.phoneContacts!(id)
+  })
+}
+const contactRequests = new Map<string, (value: PhoneContacts) => void>()
+window.__pandasticContactsReply = (id, value) => {
+  const complete = contactRequests.get(id)
+  contactRequests.delete(id)
+  complete?.(value)
 }
 
 export function setPhoneMode(mode: PhoneMode) {

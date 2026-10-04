@@ -41,6 +41,9 @@ public final class FrontendActivity extends Activity {
     private static final int HUB_PERMISSION = 22;
     private static final int PICK_MODEL = 23;
     private static final int MICROPHONE_PERMISSION = 24;
+    private static final int CONTACT_PERMISSION = 25;
+    private static final int NUMBER_PERMISSION = 26;
+    private final List<Runnable> afterContactPermission = new ArrayList<>();
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
@@ -162,6 +165,13 @@ public final class FrontendActivity extends Activity {
         bridge.initTts();  // the voice engine takes a moment to start; start it before the first "listen"
         webView.addJavascriptInterface(bridge, "PandasticNative");
         webView.loadUrl(START_URL);
+        // Ask once for SIM identity; the Contacts button can request it again if declined.
+        if (PhoneContacts.identity(this).optString("number").isEmpty()
+            && checkSelfPermission(PhoneContacts.numberPermission()) != PackageManager.PERMISSION_GRANTED
+            && !getPreferences(MODE_PRIVATE).getBoolean("number_asked", false)) {
+            getPreferences(MODE_PRIVATE).edit().putBoolean("number_asked", true).apply();
+            requestPermissions(new String[]{PhoneContacts.numberPermission()}, NUMBER_PERMISSION);
+        }
         // Opening the app answers SMS questions that arrived while the helper was stopped.
         if (new HubPrefs(this).enabled() && !HubService.isRunning()) HubService.start(this);
     }
@@ -203,8 +213,24 @@ public final class FrontendActivity extends Activity {
         if (afterAudioPermission.size() == 1) requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, MICROPHONE_PERMISSION);
     }
 
+    void requestContactPermissions(Runnable done) {
+        List<String> missing = new ArrayList<>();
+        for (String permission : new String[]{Manifest.permission.READ_CONTACTS, PhoneContacts.numberPermission()})
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) missing.add(permission);
+        if (missing.isEmpty()) { done.run(); return; }
+        afterContactPermission.add(done);
+        if (afterContactPermission.size() == 1) requestPermissions(missing.toArray(new String[0]), CONTACT_PERMISSION);
+    }
+
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NUMBER_PERMISSION) bridge.announcePhone();
+        if (requestCode == CONTACT_PERMISSION) {
+            List<Runnable> callbacks = new ArrayList<>(afterContactPermission);
+            afterContactPermission.clear();
+            bridge.announcePhone();
+            for (Runnable callback : callbacks) callback.run();
+        }
         if (requestCode == MICROPHONE_PERMISSION) {
             List<Runnable> callbacks = new ArrayList<>(afterAudioPermission);
             afterAudioPermission.clear();
@@ -247,7 +273,7 @@ public final class FrontendActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
-        if (bridge != null) { bridge.announceHub(); bridge.announceChat(); bridge.announceModels(); }
+        if (bridge != null) { bridge.announceHub(); bridge.announceChat(); bridge.announceModels(); bridge.announcePhone(); }
     }
 
     @Override protected void onStop() {
@@ -256,6 +282,7 @@ public final class FrontendActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        afterContactPermission.clear();
         afterAudioPermission.clear();
         webAudioRequest = null;
         if (modelRequest != null) bridge.finishModelImport(modelRequest, null);

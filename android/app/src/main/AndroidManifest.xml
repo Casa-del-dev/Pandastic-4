@@ -2,6 +2,9 @@
     <!-- No INTERNET permission: the app cannot reach the network, by construction. -->
     <!-- SMS helper: answers questions from the owner's chosen numbers over carrier SMS (no data). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" android:maxSdkVersion="25" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

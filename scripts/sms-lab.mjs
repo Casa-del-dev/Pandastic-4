@@ -26,6 +26,7 @@ const NUMBER = { hub: '+256772000001', basic: '+256772000002', phone: '+25677200
 const APK = new URL('../android/app/build/outputs/apk/debug/app-debug.apk', import.meta.url).pathname
 
 const digits = n => String(n).replace(/[^0-9]/g, '')
+const shellQuote = value => "'" + String(value).replaceAll("'", "'\\''") + "'"
 const same = (a, b) => digits(a).slice(-9) === digits(b).slice(-9)
 const online = serial => {
   try { return execFileSync(ADB, ['-s', serial, 'get-state'], { encoding: 'utf8' }).trim() === 'device' } catch { return false }
@@ -100,10 +101,32 @@ async function setup() {
       console.log(`${serial}: installing ${APK}`)
       adb('install', '-r', APK)
     }
-    for (const p of ['RECEIVE_SMS', 'SEND_SMS', 'POST_NOTIFICATIONS']) {
+    for (const p of ['RECEIVE_SMS', 'SEND_SMS', 'POST_NOTIFICATIONS', 'READ_CONTACTS', 'READ_PHONE_NUMBERS']) {
       try { adb('shell', 'pm', 'grant', 'org.pandastic.relay', `android.permission.${p}`) } catch { /* older Android */ }
     }
     try { adb('shell', 'dumpsys', 'deviceidle', 'whitelist', '+org.pandastic.relay') } catch { /* no battery prompt */ }
+    if (/^emulator-\d+$/.test(serial)) {
+      // The carrier's assigned identities differ from the emulator image's generic SIM number.
+      // Debug emulator builds read this private lab-only file; real devices use their SIM.
+      const own = serial === HUB ? NUMBER.hub : NUMBER.basic
+      const peer = serial === HUB ? NUMBER.basic : NUMBER.hub
+      const label = serial === HUB ? 'Noor (Basic phone)' : 'Pandastic helper'
+      adb('shell', 'run-as', 'org.pandastic.relay', 'mkdir', '-p', 'shared_prefs')
+      execFileSync(ADB, ['-s', serial, 'shell', 'run-as', 'org.pandastic.relay', 'tee', 'shared_prefs/pandastic_lab.xml'], {
+        input: `<?xml version="1.0" encoding="utf-8"?><map><string name="own_number">${own}</string></map>`, stdio: ['pipe', 'ignore', 'pipe'],
+      })
+      // Seed one genuine local Contacts entry, without duplicating it on repeated launches.
+      const known = adb('shell', 'content', 'query', '--uri', 'content://com.android.contacts/data/phones', '--projection', 'data1')
+      if (!known.includes(peer)) {
+        adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/raw_contacts', '--bind', 'account_type:n:', '--bind', 'account_name:n:')
+        const inserted = adb('shell', 'content', 'query', '--uri', 'content://com.android.contacts/raw_contacts', '--projection', '_id', '--sort', '"_id DESC"')
+        const rawId = inserted.match(/_id=(\d+)/)?.[1]
+        if (rawId) {
+          adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/data', '--bind', `raw_contact_id:l:${rawId}`, '--bind', 'mimetype:s:vnd.android.cursor.item/name', '--bind', shellQuote(`data1:s:${label}`))
+          adb('shell', 'content', 'insert', '--uri', 'content://com.android.contacts/data', '--bind', `raw_contact_id:l:${rawId}`, '--bind', 'mimetype:s:vnd.android.cursor.item/phone_v2', '--bind', `data1:s:${peer}`, '--bind', 'data2:i:2')
+        } else console.warn(`${serial}: add ${label} (${peer}) in Contacts to try suggestions.`)
+      }
+    }
   }
 
   const hub = await connectApp(HUB, 9333)
