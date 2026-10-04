@@ -60,7 +60,8 @@ public final class KeywordNlu implements Nlu {
         slots.symptom = unique(symptoms);
         slots.commodity = unique(commodities);
         slots.intent = intent(intents, slots);
-        slots.intentProb = 1f;
+        // 0 = no intent evidence at all (the "other" default): the only case where LlmNlu should take the LLM's intent.
+        slots.intentProb = intents.isEmpty() && slots.symptom == null ? 0f : 1f;
         return slots;
     }
 

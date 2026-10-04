@@ -16,8 +16,23 @@ import org.junit.Test;
  * Set -Dpandastic.evalOut=path.csv to save the predictions for ml/llm/eval_llm.py.
  */
 public class NluEvalTest {
-    @Test public void keywordNluOnSyntheticSmsSet() throws Exception {
-        File file = FakeKnowledge.findRepoFile("ml/llm/eval_sms.csv");
+    @Test public void keywordNluOnDevSet() throws Exception {
+        int[] correct = evaluate("ml/llm/eval_sms.csv", "pandastic.evalOut");
+        int n = correct[correct.length - 1];
+        // Floors, not targets: they catch regressions in the lexicon or the matcher.
+        assertTrue(correct[1] >= 0.85 * n);  // intent
+        assertTrue(correct[2] >= 0.85 * n);  // crop
+        assertTrue(correct[5] >= 0.95 * n);  // offer
+    }
+
+    /** Held-out set: written before any results and never used to tune the lexicon. Reported, not asserted. */
+    @Test public void keywordNluOnHeldOutSet() throws Exception {
+        evaluate("ml/llm/eval_sms_heldout.csv", "pandastic.evalOutHeldout");
+    }
+
+    /** @return correct counts per slot, then the number of rows as the last element. */
+    private static int[] evaluate(String relative, String outProperty) throws Exception {
+        File file = FakeKnowledge.findRepoFile(relative);
         List<String[]> rows = new ArrayList<>();
         List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
         for (String line : lines.subList(1, lines.size())) if (!line.trim().isEmpty()) rows.add(csv(line));
@@ -27,7 +42,7 @@ public class NluEvalTest {
         int[] correct = new int[slots.length];
         int allCorrect = 0;
         StringBuilder misses = new StringBuilder();
-        StringBuilder out = new StringBuilder("id,lang,intent,crop,symptom,commodity,offer\n");
+        StringBuilder out = new StringBuilder("id,lang,intent,crop,symptom,commodity,offer,intent_prob\n");
         for (String[] r : rows) {
             Slots s = nlu.parse(r[1], null);
             String commodity = "price".equals(s.intent) ? (s.commodity != null ? s.commodity : defaultCommodity(s.crop)) : null;
@@ -41,20 +56,18 @@ public class NluEvalTest {
             if (all) allCorrect++;
             out.append(r[0]);
             for (String p : predicted) out.append(',').append(nz(p));
-            out.append('\n');
+            out.append(',').append(s.intentProb).append('\n');
         }
-        StringBuilder report = new StringBuilder(String.format("KeywordNlu on %d synthetic SMS:%n", rows.size()));
+        StringBuilder report = new StringBuilder(String.format("KeywordNlu on %s (%d synthetic SMS):%n", relative, rows.size()));
         for (int i = 0; i < slots.length; i++) report.append(String.format("  %-9s %5.1f%%%n", slots[i], 100.0 * correct[i] / rows.size()));
         report.append(String.format("  all slots %5.1f%%%n", 100.0 * allCorrect / rows.size()));
         System.out.print(report);
         System.out.print(misses);
-        String target = System.getProperty("pandastic.evalOut");
+        String target = System.getProperty(outProperty);
         if (target != null) try (PrintWriter w = new PrintWriter(target, "UTF-8")) { w.print(out); }
-
-        // Floors, not targets: they catch regressions in the lexicon or the matcher.
-        assertTrue(report.toString(), correct[1] >= 0.85 * rows.size());  // intent
-        assertTrue(report.toString(), correct[2] >= 0.85 * rows.size());  // crop
-        assertTrue(report.toString(), correct[5] >= 0.95 * rows.size());  // offer
+        int[] result = java.util.Arrays.copyOf(correct, correct.length + 1);
+        result[correct.length] = rows.size();
+        return result;
     }
 
     private static boolean same(String want, String got) { return nz(want).equals(nz(got)); }
