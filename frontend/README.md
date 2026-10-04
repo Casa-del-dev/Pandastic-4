@@ -31,8 +31,8 @@ Use `make run-device DEVICE=YOUR_SERIAL` when multiple phones are connected. Nod
 ## Connect the two phones
 
 1. On the stronger phone, select **Capable phone**.
-2. In Settings, add the smaller phone under **Phones that can ask**. Turn on **Automatic SMS replies** and grant the requested SMS permissions. Allow background operation when Android asks.
-3. On the smaller Android phone, select **Basic phone**. Save the stronger phone’s number under **SMS destination** and allow SMS.
+2. Save the smaller phone in Android Contacts. In Settings, select it under **Phones that can ask → Add**. Turn on **Automatic SMS replies** and grant the requested SMS permissions. Allow background operation when Android asks.
+3. On the smaller Android phone, select **Basic phone**. Save the stronger phone in Android Contacts, select it from the **SMS destination** dropdown and allow SMS.
 4. Write a question in Chat and press Send. The reply appears in the same conversation. A basic phone without the app can send the same question using its regular SMS app.
 
 Both phones need carrier service, working SIMs and SMS credit/coverage. Mobile data, internet and Wi-Fi are unnecessary. Carrier charges apply, including multipart messages. Dual-SIM phones use Android’s default SMS SIM; configure that in the phone’s system settings.
@@ -148,6 +148,8 @@ The language model runs through the native **llama.cpp** runtime; llama.cpp does
 
 ## Choose phone numbers from Contacts
 
-On Android, **Settings** reads saved phone contacts after Android grants Contacts access. Search a name or number and tap it to save the SMS destination immediately. In **Automatic replies → Add a phone**, choosing a contact fills its name and number; tap **Add** to allow it. Existing allowed contacts and this phone’s own number are excluded from suggestions. Denied or unavailable Contacts access leaves manual entry available. Contacts remain on the phone.
+On Android, **Settings** reads saved phone contacts after Android grants Contacts access. Tap the search field to open a dropdown, search a name or number, then select a contact to save the SMS destination immediately. Arrow keys and Enter also select an option; Escape or leaving the field closes the dropdown. Tap the selected contact or its × to clear the destination. There is no separate destination-number field or Save button.
 
-The phone’s own number appears automatically at the top of Settings. Real phones use the default SMS SIM’s number, with the legacy telephony API as fallback. Some SIMs/carriers do not expose a number; in that case **Your phone** still offers manual entry. Android may ask for Phone access once. The debug emulator pair uses its carrier-assigned lab numbers (+256772000001 / +256772000002); the lab also adds the opposite phone as a genuine local Contacts entry and avoids duplicate entries on rerun. Release builds and physical phones ignore the lab identity file. `node scripts/contacts-e2e.mjs` tests native Contacts → bridge → Settings suggestions on both configured emulator phones without sending SMS.
+In **Automatic replies → Add a phone**, select a contact from the same dropdown, then tap **Add** to allow it. Tap an allowed contact or its × to remove permission for automatic replies. Existing allowed contacts and this phone’s own number are excluded from suggestions. If Contacts access is denied or unavailable, grant it and try again; add new people in the phone’s Contacts app. Removing a selection or an allowed contact does not delete the Android address-book entry.
+
+The phone’s own number appears automatically at the top of Settings. Real phones use the default SMS SIM’s number, with the legacy telephony API as fallback. Some SIMs/carriers do not expose a number; in that case **Your phone** still offers manual entry. Android may ask for Phone access once. The debug emulator pair uses its carrier-assigned lab numbers (+256772000001 / +256772000002); the lab also adds the opposite phone as a genuine local Contacts entry and avoids duplicate entries on rerun. Release builds and physical phones ignore the lab identity file. `node scripts/contacts-e2e.mjs` tests native Contacts → bridge → Settings dropdown selection/search/removal on both configured emulator phones without sending SMS.
