@@ -1,6 +1,6 @@
 # Pandastic: project memory for Claude sessions
 
-Maintained by agent B (ledger task T50); last updated 2026-10-04 06:29 UTC. **`LEDGER.md` is the source of truth for
+Maintained by agent B (ledger task T50); last updated 2026-10-04 06:36 UTC. **`LEDGER.md` is the source of truth for
 live work: read it after every pull.** Details live in `docs/`. Update this file when the codebase changes in a way
 that makes something here wrong.
 
@@ -36,7 +36,9 @@ B's user: **do not touch frontend/UI** (C's area).
    Push right after every commit. Commit small and often.
 2. Claim before work: add or edit **your own** task row, commit only `LEDGER.md` as `ledger: <ID> claim <task>`.
    The message log is append-only, newest last, `[A|B|C HH:MM]` in **UTC** (`date -u +%H:%M`, never local time).
-   Never reformat `LEDGER.md` (it is in `.prettierignore`). A reformatted copy once wiped 7 entries.
+   Never reformat `LEDGER.md` (it is in `.prettierignore`). A reformatted copy once wiped 7 entries. The ledger was
+   compacted at 06:35 UTC at the user's request (full earlier version: `git show de35257:LEDGER.md`); on a rebase
+   conflict there, keep the compacted version and re-append only your own lines. Open requests are its items O1–O8.
 3. Stay in your dirs; for someone else's file, ask in the log. Shared contracts (`docs/contracts/README.md`, the
    bridge `frontend/src/native.ts` ↔ `NativeBridge.java`) change only with a log message + the owner's ack.
 4. **Never commit** datasets, LLM weights (`*.gguf`), `local.properties`, secrets, Modal tokens. The only binaries
