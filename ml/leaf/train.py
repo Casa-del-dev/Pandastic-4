@@ -202,6 +202,54 @@ def selective_metrics(probs: np.ndarray, y: np.ndarray, labels, min_prob: float,
     }
 
 
+def by_crop(probs: np.ndarray, y: np.ndarray, labels, min_prob: float, min_margin: float) -> dict:
+    """Selective metrics per crop, each slice with the held-out `other` photos. Only coffee is tested on another
+    country (Kenya vs Brazil), so its slice is the one to compare with a coffee-only (p0) model; maize and bean are
+    tested on held-out photos from their training sources."""
+    out = {}
+    for crop in dict.fromkeys(label.split("_")[0] for label in labels if label != "other"):
+        keep = np.array([labels[t] == "other" or labels[t].startswith(crop + "_") for t in y], dtype=bool)
+        m = selective_metrics(probs[keep], y[keep], labels, min_prob, min_margin)
+        out[crop] = {"n_plant": m["n_plant"], "accuracy": round(float((probs[keep].argmax(1) == y[keep]).mean()), 4),
+                     "coverage_at_threshold": round(m["coverage"], 4),
+                     "selective_accuracy": round(m["selective_accuracy"], 4)}
+    return out
+
+
+def describe_sets(rows) -> tuple[str, str]:
+    crops = sorted({r["source"] for r in rows if r["split"] == "test" and r["label"] != "other"} - {"jmuben"})
+    test_set = "coffee: JMuBEN + JMuBEN2 (Kenya), rotation/flip-invariant pHash de-duplicated"
+    if crops:
+        test_set += f"; maize/bean: held-out photos from their training sources ({', '.join(crops)}), not another country"
+    train_set = "BRACOL (Brazil) coffee" + (f" + {', '.join(crops)} maize/bean" if crops else "")
+    return test_set + "; + held-out `other`", train_set + "; PlantDoc/iBean other classes as `other`"
+
+
+def reevaluate(rows, labels, out_dir: Path, device=None, workers=4, log=print) -> dict:
+    """Re-score a trained model (model_best.pt + leaf_classifier.json) on its test split and add the per-crop
+    breakdown to leaf_classifier.json and reports/metrics.json, without retraining."""
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    rows = drop_unreadable(rows, log)
+    meta_path, metrics_path = out_dir / "leaf_classifier.json", out_dir / "reports/metrics.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert meta["labels"] == list(labels), (meta["labels"], labels)
+    model = create_model(len(labels), pretrained=False)
+    model.load_state_dict(torch.load(out_dir / "model_best.pt", map_location="cpu"))
+    model.to(device)
+    logits, y = predict_logits(model, [r for r in rows if r["split"] == "test"], labels, device, workers=workers)
+    probs, y = F.softmax(logits / meta["temperature"], dim=1).numpy(), y.numpy()
+    th = meta["thresholds"]
+    meta["eval"]["test_set"] = describe_sets(rows)[0]
+    meta["eval"]["by_crop"] = by_crop(probs, y, labels, th["min_prob"], th["min_margin"])
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    if metrics_path.exists():
+        metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+        metrics["eval"] = meta["eval"]
+        metrics_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+    log(json.dumps(meta["eval"], indent=2))
+    return meta
+
+
 def choose_thresholds(probs, y, labels, target_accuracy=0.90, max_other_false_accept=0.05):
     """Highest coverage that meets the accuracy target on the calib split; otherwise the most accurate setting."""
     best, fallback = None, None
@@ -300,6 +348,7 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
     if parity > 1e-3:
         raise RuntimeError(f"ONNX output differs from PyTorch by {parity}")
 
+    test_set, train_set = describe_sets(rows)
     metadata = {
         "version": version, "stub": False, "arch": config.ARCH, "input_size": config.INPUT_SIZE,
         "resize": "direct_bilinear", "mean": config.MEAN, "std": config.STD, "labels": list(labels),
@@ -307,14 +356,15 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
         "thresholds": {"min_prob": th["min_prob"], "min_margin": th["min_margin"]},
         "per_class_min_prob": {},
         "eval": {
-            "test_set": "JMuBEN + JMuBEN2 (Kenya), rotation/flip-invariant pHash de-duplicated, + held-out `other`",
+            "test_set": test_set,
             "n": int(len(test_y)), "accuracy": round(test_acc, 4),
             "coverage_at_threshold": round(test_m.get("coverage", 0.0), 4),
             "selective_accuracy": round(test_m.get("selective_accuracy", 0.0), 4),
             "other_false_accept": round(test_m.get("other_false_accept", 0.0), 4),
             "thresholds_met_target": bool(th.get("met_target")), "target_selective_accuracy": target_accuracy,
+            "by_crop": by_crop(test_p, test_y, labels, th["min_prob"], th["min_margin"]) if len(test_y) else {},
         },
-        "training": {"train_set": "BRACOL (Brazil) + PlantDoc/iBean as other", "epochs_run": len(history),
+        "training": {"train_set": train_set, "epochs_run": len(history),
                      "pretrained": pretrained, "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
     }
     (out_dir / "leaf_classifier.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
