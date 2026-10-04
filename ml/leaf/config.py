@@ -1,10 +1,11 @@
 """Labels and dataset registry for the leaf classifier. Every source lists its licence for docs/DATA.md."""
 
-# Contracts section 1. P0 ships coffee + other; P1 adds maize and bean labels (same flat model).
+# Contracts section 1. P0 ships coffee + other; P1 adds the maize and bean labels that have a training source
+# (PlantDoc corn blight / grey leaf spot, iBean Uganda beans). maize_healthy and maize_fall_armyworm need a source
+# first (e.g. Makerere fall armyworm images), so they are not in P1 yet: a label without images cannot be learned.
 P0_LABELS = ["coffee_healthy", "coffee_rust", "coffee_miner", "coffee_cercospora", "coffee_phoma", "other"]
 P1_LABELS = P0_LABELS[:-1] + [
-    "maize_healthy", "maize_fall_armyworm", "maize_leaf_blight", "maize_leaf_spot",
-    "bean_healthy", "bean_angular_leaf_spot", "bean_rust", "other"]
+    "maize_leaf_blight", "maize_leaf_spot", "bean_healthy", "bean_angular_leaf_spot", "bean_rust", "other"]
 
 MEAN = [0.485, 0.456, 0.406]   # ImageNet; matches timm mobilenetv4 pretrained config
 STD = [0.229, 0.224, 0.225]
