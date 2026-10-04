@@ -1,6 +1,9 @@
 local.properties
 .gradle/
 **/build/
+# Android native (CMake) build cache, incl. the fetched llama.cpp source (~1.4 GB)
+.cxx/
+**/.cxx/
 *.iml
 .idea/
 .vscode/
