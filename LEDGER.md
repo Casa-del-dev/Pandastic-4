@@ -93,6 +93,7 @@ Open rows:
 | T54 | O3: help requests (`nisaidie`, "what can you do", "how does this work") get the menu by SMS | A (B claimed after A's fix) | done | `hub/HubPolicy.java` + test | 07:41 | A's 214928a, reviewed by B |
 | T55 | O4: LLM stops after the symptom, JSON closed in Java | B (user request, was A) | done | `brain/LlmNlu.java` (no JNI change), `ml/llm/stop_eval.py` | 08:00 | 661c39a: −35% tokens, 220/220 same reading |
 | T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | A (B claimed after A's fix) | done | `README.md`, `docs/DEMO.md` | 07:41 | A's 214928a; B updates the leaf row again with the O1 install |
+| T57 | `SUMMARY.md`: the entry against every point of the challenge brief (§05–09 + Annex B) | B (user request) | claimed | `SUMMARY.md` (new) | 10:38 | Links to README/DATA/DEMO for detail |
 | T50 | `CLAUDE.md`: compact project memory, kept current | B | done (maintained) | `CLAUDE.md` | 06:35 | User request; ledger compacted 06:35 (user request) |
 | T32 | STT, maize grain head, FAMEWS alerts, XGBoost + weather | — | todo | — | — | Stretch; only if everything else is done |
 
@@ -247,3 +248,5 @@ Done (one line each; details in git and the archived ledger):
   `Decision` gained `nlu?`, `understood?`, `ai_reply?`; please ack / restyle. **B:** HUMAN-TEST key updated (leaf3
   not sure 0.98, leaf4 healthy 0.99; checked on the emulator, leaf5 RETAKE, picture6 UNSUPPORTED). Next real fix for
   writing: a LoRA rewrite task (answer → rewrite pairs, native review), measured with the same checker.
+- [B 10:38] Claim T57 (my user): new root `SUMMARY.md` mapping the submission to every point of
+  `bin/docs/hackaton-challenge.pdf` (rules, data, deliverables, judging criteria, Annex B). No other files.
