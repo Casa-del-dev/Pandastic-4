@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 import requests
-from PIL import Image
+from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data/raw/rocole"
@@ -84,7 +84,8 @@ def main():
     mean, std, size = np.array(meta["mean"], np.float32), np.array(meta["std"], np.float32), meta["input_size"]
     stats = defaultdict(Counter)
     for path, (_, truth) in zip(paths, sample):
-        im = Image.open(path).convert("RGB").resize((size, size), Image.BILINEAR)
+        # Upright first, as the app (and training) do: most RoCoLe photos are stored sideways with an EXIF tag.
+        im = ImageOps.exif_transpose(Image.open(path)).convert("RGB").resize((size, size), Image.BILINEAR)
         x = ((np.asarray(im, np.float32) / 255 - mean) / std).transpose(2, 0, 1)[None]
         logits = session.run(None, {session.get_inputs()[0].name: x})[0][0] / temperature
         p = np.exp(logits - logits.max())

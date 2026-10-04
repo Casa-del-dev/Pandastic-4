@@ -35,7 +35,9 @@
     "min_prob": 0.4,
     "min_margin": 0.3
   },
-  "per_class_min_prob": {},
+  "per_class_min_prob": {
+    "coffee_healthy": 0.95
+  },
   "eval": {
     "test_set": "held-out images from training sources: CCMT (Ghana), iBean (Uganda), JMuBEN (Kenya, lesion close-ups), PlantDoc, RoCoLe (Ecuador, smartphone photos on the plant); + held-out `other`",
     "n": 1364,
@@ -95,6 +97,32 @@
         "accuracy": 0.9289,
         "coverage_at_threshold": 0.9528,
         "selective_accuracy": 0.9446
+      }
+    },
+    "per_class_min_prob_check": {
+      "label": "coffee_healthy",
+      "target_precision": 0.95,
+      "chosen_on": "RoCoLe calib plants (mix)",
+      "pipeline": "640 px JPEG q0.88 then 224 bilinear, as the app",
+      "before": {
+        "n": 360,
+        "coverage": 0.9528,
+        "selective_accuracy": 0.9417,
+        "coffee_healthy_answered": 207,
+        "coffee_healthy_precision": 0.9179,
+        "wrongly_called_coffee_healthy": {
+          "coffee_rust": 17
+        }
+      },
+      "after": {
+        "n": 360,
+        "coverage": 0.7722,
+        "selective_accuracy": 0.964,
+        "coffee_healthy_answered": 142,
+        "coffee_healthy_precision": 0.9507,
+        "wrongly_called_coffee_healthy": {
+          "coffee_rust": 7
+        }
       }
     }
   },
