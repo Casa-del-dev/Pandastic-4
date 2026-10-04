@@ -38,31 +38,35 @@
   "per_class_min_prob": {
     "coffee_healthy": 0.99,
     "bean_healthy": 0.65,
-    "maize_healthy": 0.99
+    "maize_healthy": 0.99,
+    "maize_leaf_blight": 0.75,
+    "maize_leaf_spot": 0.75,
+    "maize_fall_armyworm": 0.75,
+    "maize_streak_virus": 0.75
   },
   "eval": {
     "test_set": "held-out images from training sources: CCMT (Ghana), iBean (Uganda), JMuBEN (Kenya, lesion close-ups), PlantDoc, RoCoLe (Ecuador, smartphone photos on the plant); + held-out `other`",
     "n": 1999,
     "accuracy": 0.9485,
-    "coverage_at_threshold": 0.9656,
-    "selective_accuracy": 0.9378,
-    "other_false_accept": 0.0162,
+    "coverage_at_threshold": 0.8094,
+    "selective_accuracy": 0.9597,
+    "other_false_accept": 0.0104,
     "thresholds_met_target": true,
     "target_selective_accuracy": 0.9,
-    "non_plant_false_accept": 0.011,
+    "non_plant_false_accept": 0.0047,
     "non_plant_test_n": 635,
     "by_crop": {
       "coffee": {
         "n_plant": 640,
         "accuracy": 0.9688,
-        "coverage_at_threshold": 0.9625,
-        "selective_accuracy": 0.974
+        "coverage_at_threshold": 0.7875,
+        "selective_accuracy": 0.9841
       },
       "maize": {
         "n_plant": 364,
         "accuracy": 0.9398,
-        "coverage_at_threshold": 0.9588,
-        "selective_accuracy": 0.8596
+        "coverage_at_threshold": 0.7802,
+        "selective_accuracy": 0.9085
       },
       "bean": {
         "n_plant": 129,
@@ -75,8 +79,8 @@
       "ccmt": {
         "n_plant": 338,
         "accuracy": 0.9435,
-        "coverage_at_threshold": 0.9586,
-        "selective_accuracy": 0.8642
+        "coverage_at_threshold": 0.7929,
+        "selective_accuracy": 0.9067
       },
       "ibean": {
         "n_plant": 129,
@@ -93,14 +97,14 @@
       "plantdoc": {
         "n_plant": 26,
         "accuracy": 0.9697,
-        "coverage_at_threshold": 0.9615,
-        "selective_accuracy": 0.8
+        "coverage_at_threshold": 0.6154,
+        "selective_accuracy": 0.9375
       },
       "rocole": {
         "n_plant": 360,
         "accuracy": 0.9633,
-        "coverage_at_threshold": 0.9417,
-        "selective_accuracy": 0.9528
+        "coverage_at_threshold": 0.6306,
+        "selective_accuracy": 0.9648
       }
     },
     "per_class_min_prob_check": {
@@ -127,6 +131,43 @@
         "wrongly_called_coffee_healthy": {
           "coffee_rust": 4
         }
+      }
+    },
+    "per_crop_min_prob_check": {
+      "rule": "lowest minimum probability at which the crop's calib answers are >= 90% right",
+      "chosen_on": "calib split (all sources)",
+      "floors": {
+        "coffee": null,
+        "maize": 0.75,
+        "bean": null
+      },
+      "test_by_crop_after": {
+        "coffee": {
+          "n_plant": 640,
+          "accuracy": 0.9688,
+          "coverage_at_threshold": 0.7875,
+          "selective_accuracy": 0.9841
+        },
+        "maize": {
+          "n_plant": 364,
+          "accuracy": 0.9398,
+          "coverage_at_threshold": 0.7802,
+          "selective_accuracy": 0.9085
+        },
+        "bean": {
+          "n_plant": 129,
+          "accuracy": 0.9759,
+          "coverage_at_threshold": 1.0,
+          "selective_accuracy": 0.9767
+        }
+      },
+      "test_overall_after": {
+        "coverage": 0.8094,
+        "selective_accuracy": 0.9597,
+        "other_false_accept": 0.0104,
+        "answered": 917,
+        "n_plant": 1133,
+        "n_other": 866
       }
     }
   },
