@@ -17,6 +17,7 @@ epoch when relaunched with the same arguments. Early stopping (patience 4). Line
   others are coffee calib/test; xc: RoCoLe is never trained on (cross-country test). Manifests and run ids carry both, e.g. manifest-p2-xc.csv, leaf-p2-xc-1a2b3c4d.
   modal run modal_app.py --stage reeval --labels p1 --version leaf-p1-...   # adds eval.by_crop to an older model
   --input-size 320: train and export at a higher resolution (own image cache; the app reads input_size from the JSON)
+  --seed 14: another member of the same recipe; then --stage ensemble --version leaf-...,leaf-...,leaf-... averages them
 
 Then fetch the artifacts and install them into the app:
   modal volume get pandastic-models leaf/<version> ./artifacts/
@@ -154,6 +155,27 @@ def reeval(labels: str, coffee_split: str, version: str) -> dict:
     return meta
 
 
+@app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, gpu="L4", cpu=16, memory=32768,
+              timeout=3600)
+def ensemble(labels: str, coffee_split: str, members: list[str], input_size: int = 224, git_sha: str = "") -> dict:
+    """Average trained members (same recipe, other seeds) and calibrate/evaluate/export it like one model."""
+    import hashlib
+    from leaf import config, data, train as trainer
+    data_volume.reload()
+    models_volume.reload()
+    config.INPUT_SIZE = input_size
+    tag = _tag(labels, coffee_split)
+    cached = _cached_manifest(tag, input_size)
+    rows = data.read_manifest(cached if cached.exists() else DATA / f"manifest-{tag}.csv")
+    stats = json.loads((DATA / f"manifest-{tag}.json").read_text())
+    version = f"leaf-{tag}-ens{len(members)}-" + hashlib.sha256(",".join(members).encode()).hexdigest()[:8]
+    meta = trainer.ensemble([MODELS / "leaf" / m for m in members], rows, _labels(labels), MODELS / "leaf" / version,
+                            stats, device="cuda", workers=14, version=version,
+                            lineage={"members": members, "git_sha": git_sha, "manifest": cached.name})
+    models_volume.commit()
+    return json.loads(json.dumps(meta, default=str))
+
+
 @app.function(image=image, volumes={"/data": data_volume}, cpu=16, memory=16384, timeout=3600)
 def photo_stats(tag: str, splits: list[str]) -> dict:
     """QualityGate numbers (plant share, sharpness, luminance) of real dataset photos through the app path."""
@@ -177,7 +199,7 @@ def smoke_test() -> str:
     return r.stdout[-2000:]
 
 
-SOURCES = ["bracol", "jmuben", "jmuben2", "rocole", "plantdoc", "ibean", "ccmt"]
+SOURCES = ["bracol", "jmuben", "jmuben2", "rocole", "plantdoc", "ibean", "ccmt", "caltech101"]
 
 
 @app.function(image=image, timeout=8 * 3600)
@@ -203,6 +225,12 @@ def main(stage: str = "all", labels: str = "p0", coffee_split: str = "mix", epoc
     from leaf import config
     if stage == "reeval":
         print(json.dumps(reeval.remote(labels, coffee_split, version)["eval"], indent=2))
+        return
+    if stage == "ensemble":  # --version member1,member2,member3
+        git_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+        meta = ensemble.remote(labels, coffee_split, version.split(","), input_size, git_sha)
+        print(json.dumps(meta["eval"], indent=2))
+        print(f"\nmodal volume get pandastic-models leaf/{meta['version']} ./artifacts/")
         return
     if stage == "photo-stats":
         print(json.dumps(photo_stats.remote(_tag(labels, coffee_split), ["calib", "test"]), indent=1))

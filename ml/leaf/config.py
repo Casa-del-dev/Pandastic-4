@@ -84,6 +84,15 @@ JMUBEN_FOLDERS = [("cerc", "coffee_cercospora"), ("cersc", "coffee_cercospora"),
                   ("phoma", "coffee_phoma"), ("health", "coffee_healthy"), ("miner", "coffee_miner")]
 
 # P1 mappings (used only when labels = P1_LABELS); anything unmapped from these sources becomes `other`.
+# `other` for every label set: objects, animals and scenes (CaltechDATA, CC BY 4.0), so `other` is not only "a plant
+# we don't support". Without it, 6 of 20 random non-plant photos got a CONFIDENT disease (A, 2026-10-04).
+SOURCES["caltech101"] = {
+    "files": {"caltech-101.zip": "https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip?download=1"},
+    "licence": "CC BY 4.0", "country": "web (objects, animals, scenes)", "role": "other",
+    "page": "https://data.caltech.edu/records/mzrjq-6wc02",
+}
+CALTECH_PER_CATEGORY = 40  # 102 categories (incl. BACKGROUND_Google); capped so faces/airplanes don't dominate
+
 PLANTDOC_P1 = {"corn leaf blight": "maize_leaf_blight", "corn gray leaf spot": "maize_leaf_spot"}
 IBEAN_P1 = {"angular_leaf_spot": "bean_angular_leaf_spot", "bean_rust": "bean_rust", "healthy": "bean_healthy"}
 

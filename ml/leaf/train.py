@@ -243,14 +243,22 @@ def fit_temperature(logits: torch.Tensor, y: torch.Tensor) -> float:
     return float(log_t.exp().clamp(0.05, 20).item())
 
 
-def selective_metrics(probs: np.ndarray, y: np.ndarray, labels, min_prob: float, min_margin: float) -> dict:
-    """What the app's resolver would do: answer only if top1 != other and p1 >= min_prob and margin >= min_margin."""
+def answered_mask(probs: np.ndarray, labels, min_prob: float, min_margin: float, per_class: dict = None):
+    """Resolver: answer only if top1 != other, p1 >= its label's minimum (per_class or min_prob), margin >= min_margin."""
     other = labels.index("other") if "other" in labels else -1
     order = np.argsort(-probs, axis=1)
     top, second = order[:, 0], order[:, 1]
-    p1 = probs[np.arange(len(y)), top]
-    margin = p1 - probs[np.arange(len(y)), second]
-    answered = (top != other) & (p1 >= min_prob) & (margin >= min_margin)
+    p1 = probs[np.arange(len(probs)), top]
+    margin = p1 - probs[np.arange(len(probs)), second]
+    floor = np.array([(per_class or {}).get(labels[t], min_prob) for t in top]) if len(top) else np.zeros(0)
+    return top, (top != other) & (p1 >= floor) & (margin >= min_margin)
+
+
+def selective_metrics(probs: np.ndarray, y: np.ndarray, labels, min_prob: float, min_margin: float,
+                      per_class: dict = None) -> dict:
+    """What the app's resolver would do (answered_mask), scored against the labels."""
+    other = labels.index("other") if "other" in labels else -1
+    top, answered = answered_mask(probs, labels, min_prob, min_margin, per_class)
     is_plant = y != other
     plant_answered = answered & is_plant
     correct = plant_answered & (top == y)
@@ -262,20 +270,21 @@ def selective_metrics(probs: np.ndarray, y: np.ndarray, labels, min_prob: float,
     }
 
 
-def by_crop(probs: np.ndarray, y: np.ndarray, labels, min_prob: float, min_margin: float) -> dict:
+def by_crop(probs: np.ndarray, y: np.ndarray, labels, min_prob: float, min_margin: float, per_class: dict = None) -> dict:
     """Selective metrics per crop, each slice with the held-out `other` photos. The coffee slice is the one to
     compare with a coffee-only (p0) model; by_source separates its cross-country part (RoCoLe) from the rest."""
     out = {}
     for crop in dict.fromkeys(label.split("_")[0] for label in labels if label != "other"):
         keep = np.array([labels[t] == "other" or labels[t].startswith(crop + "_") for t in y], dtype=bool)
-        m = selective_metrics(probs[keep], y[keep], labels, min_prob, min_margin)
+        m = selective_metrics(probs[keep], y[keep], labels, min_prob, min_margin, per_class)
         out[crop] = {"n_plant": m["n_plant"], "accuracy": round(float((probs[keep].argmax(1) == y[keep]).mean()), 4),
                      "coverage_at_threshold": round(m["coverage"], 4),
                      "selective_accuracy": round(m["selective_accuracy"], 4)}
     return out
 
 
-def by_source(probs: np.ndarray, y: np.ndarray, sources, labels, min_prob: float, min_margin: float) -> dict:
+def by_source(probs: np.ndarray, y: np.ndarray, sources, labels, min_prob: float, min_margin: float,
+              per_class: dict = None) -> dict:
     """Selective metrics per photo source, each slice with the held-out `other` photos. Says which numbers are
     cross-country (a source never trained on, e.g. RoCoLe) and which are same-source (held-out images)."""
     sources = np.asarray(sources)
@@ -283,7 +292,7 @@ def by_source(probs: np.ndarray, y: np.ndarray, sources, labels, min_prob: float
     out = {}
     for src in sorted(set(sources[y != other].tolist())):
         keep = (y == other) | (sources == src)
-        m = selective_metrics(probs[keep], y[keep], labels, min_prob, min_margin)
+        m = selective_metrics(probs[keep], y[keep], labels, min_prob, min_margin, per_class)
         out[src] = {"n_plant": m["n_plant"], "accuracy": round(float((probs[keep].argmax(1) == y[keep]).mean()), 4),
                     "coverage_at_threshold": round(m["coverage"], 4),
                     "selective_accuracy": round(m["selective_accuracy"], 4)}
@@ -292,7 +301,7 @@ def by_source(probs: np.ndarray, y: np.ndarray, sources, labels, min_prob: float
 
 SOURCE_NAMES = {"bracol": "BRACOL (Brazil)", "jmuben": "JMuBEN (Kenya, lesion close-ups)",
                 "rocole": "RoCoLe (Ecuador, smartphone photos on the plant)", "ccmt": "CCMT (Ghana)",
-                "plantdoc": "PlantDoc", "ibean": "iBean (Uganda)"}
+                "plantdoc": "PlantDoc", "ibean": "iBean (Uganda)", "caltech101": "Caltech-101 (objects, animals, scenes)"}
 
 
 def describe_sets(rows) -> tuple[str, str]:
@@ -338,6 +347,28 @@ def reevaluate(rows, labels, out_dir: Path, device=None, workers=4, log=print) -
         metrics_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     log(json.dumps(meta["eval"], indent=2))
     return meta
+
+
+def choose_class_floors(probs, y, labels, th: dict, precision=0.95, min_answered=5) -> dict:
+    """A "healthy" answer when the leaf is sick is the most harmful mistake (the farmer does nothing), so every
+    *_healthy label gets the lowest minimum probability at which its calib precision reaches `precision`."""
+    floors = {}
+    for label in labels:
+        if not label.endswith("_healthy"):
+            continue
+        k = labels.index(label)
+        for floor in np.arange(th["min_prob"], 1.0, 0.01):
+            top, answered = answered_mask(probs, labels, th["min_prob"], th["min_margin"], {**floors, label: float(floor)})
+            said = answered & (top == k)
+            # Stop at the first floor that is precise enough, or where the label is (almost) never said any more;
+            # either way that floor is the safe one.
+            if said.sum() < min_answered or (y[said] == k).mean() >= precision:
+                if floor > th["min_prob"]:
+                    floors[label] = round(float(floor), 2)
+                break
+        else:
+            floors[label] = 0.99
+    return floors
 
 
 def choose_thresholds(probs, y, labels, target_accuracy=0.90, max_other_false_accept=0.05):
@@ -442,7 +473,13 @@ def finish(model, rows, labels, out_dir: Path, manifest_stats: dict, history: li
     calib_p, calib_y = probs_of("calib")
     test_p, test_y = probs_of("test")
     th = choose_thresholds(calib_p, calib_y, labels, target_accuracy) if len(calib_y) else {"min_prob": 0.7, "min_margin": 0.25, "met_target": False}
-    test_m = selective_metrics(test_p, test_y, labels, th["min_prob"], th["min_margin"]) if len(test_y) else {}
+    floors = choose_class_floors(calib_p, calib_y, labels, th) if len(calib_y) else {}
+    log(f"per-class minimum probability (calib precision >= 0.95): {floors}")
+    test_m = selective_metrics(test_p, test_y, labels, th["min_prob"], th["min_margin"], floors) if len(test_y) else {}
+    test_sources = np.array([r["source"] for r in split("test")])
+    non_plant = test_sources == "caltech101"
+    non_plant_fa = (float(answered_mask(test_p[non_plant], labels, th["min_prob"], th["min_margin"], floors)[1].mean())
+                    if non_plant.any() else None)
     test_acc = float((test_p.argmax(1) == test_y).mean()) if len(test_y) else 0.0
     log(f"thresholds {th} -> test {test_m}, top-1 accuracy {test_acc:.4f}")
 
@@ -463,7 +500,7 @@ def finish(model, rows, labels, out_dir: Path, manifest_stats: dict, history: li
         "resize": "direct_bilinear", "mean": config.MEAN, "std": config.STD, "labels": list(labels),
         "temperature": round(temperature, 4),
         "thresholds": {"min_prob": th["min_prob"], "min_margin": th["min_margin"]},
-        "per_class_min_prob": {},
+        "per_class_min_prob": floors,
         "eval": {
             "test_set": test_set,
             "n": int(len(test_y)), "accuracy": round(test_acc, 4),
@@ -471,9 +508,11 @@ def finish(model, rows, labels, out_dir: Path, manifest_stats: dict, history: li
             "selective_accuracy": round(test_m.get("selective_accuracy", 0.0), 4),
             "other_false_accept": round(test_m.get("other_false_accept", 0.0), 4),
             "thresholds_met_target": bool(th.get("met_target")), "target_selective_accuracy": target_accuracy,
-            "by_crop": by_crop(test_p, test_y, labels, th["min_prob"], th["min_margin"]) if len(test_y) else {},
+            "non_plant_false_accept": None if non_plant_fa is None else round(non_plant_fa, 4),
+            "non_plant_test_n": int(non_plant.sum()),
+            "by_crop": by_crop(test_p, test_y, labels, th["min_prob"], th["min_margin"], floors) if len(test_y) else {},
             "by_source": by_source(test_p, test_y, [r["source"] for r in split("test")], labels, th["min_prob"],
-                                   th["min_margin"]) if len(test_y) else {},
+                                   th["min_margin"], floors) if len(test_y) else {},
         },
         "training": {"train_set": train_set, **training,
                      "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},

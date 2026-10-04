@@ -17,6 +17,7 @@ import os
 import random
 import shutil
 import subprocess
+import tarfile
 import zipfile
 from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor
@@ -107,6 +108,9 @@ def extract(sources, raw_dir: Path, work_dir: Path, log=print) -> None:
                     raise RuntimeError(f"{archive} has no zip directory; install libarchive-tools (bsdtar)")
                 # bsdtar exits non-zero on the truncated last entry; keep everything it could read.
                 subprocess.run(["bsdtar", "-xf", str(archive), "-C", str(dest)], check=False)
+            for inner in sorted(dest.rglob("*.tar.gz")):  # Caltech-101 ships its images as a tar.gz inside the zip
+                with tarfile.open(inner) as t:
+                    t.extractall(inner.parent)
             (dest / ".done").write_text("ok")
 
 
@@ -213,6 +217,17 @@ def _other_rows(work_dir: Path, labels):
     return rows
 
 
+def _caltech_rows(work_dir: Path, labels):
+    """Caltech-101 objects/animals/scenes as `other`, grouped by category so whole categories are held out."""
+    if "other" not in labels:
+        return []
+    rows = []
+    for category in sorted(p for p in (work_dir / "caltech101").rglob("101_ObjectCategories/*") if p.is_dir()):
+        for p in sorted(_images(category))[: config.CALTECH_PER_CATEGORY]:
+            rows.append({"path": str(p), "label": "other", "source": "caltech101", "group": f"caltech101:{category.name}"})
+    return rows
+
+
 def _split_by_group(rows, fractions, seed, per_label: bool = True):
     """Assign splits per (label, group) so duplicates never cross splits. fractions: [(split, share), ...].
     per_label=False splits whole groups (e.g. a plant's healthy and rusty leaves stay together)."""
@@ -271,7 +286,11 @@ def build_manifest(work_dir: Path, labels, seed: int = 13, max_test_per_class: i
     ccmt = _ccmt_rows(work_dir, labels, workers)
     _split_by_group(ccmt, [("train", 0.7), ("val", 0.1), ("calib", 0.1), ("test", 0.1)], seed)
 
-    rows = bracol + capped + rocole + other + ccmt
+    # Non-plant `other` split by category: the calib and test categories are objects the model never saw.
+    caltech = _caltech_rows(work_dir, labels)
+    _split_by_group(caltech, [("train", 0.6), ("val", 0.1), ("calib", 0.15), ("test", 0.15)], seed)
+
+    rows = bracol + capped + rocole + other + ccmt + caltech
     stats = {
         "counts": {f"{s}/{l}": c for (s, l), c in sorted(Counter((r["split"], r["label"]) for r in rows).items())},
         "by_source": {f"{s}/{src}": c for (s, src), c in sorted(Counter((r["split"], r["source"]) for r in rows).items())},
