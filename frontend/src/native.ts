@@ -1,5 +1,7 @@
 // Bridge to the Android app (window.PandasticNative, see NativeBridge.java).
 // In a desktop browser there is no bridge, so a clearly labelled demo mode answers instead.
+import { isLocalPhone, localPhoneState, sendLocalSms, updateLocalPhone } from './local-phone'
+export { isLocalPhone, localPhoneNumber } from './local-phone'
 
 export type Lang = 'sw' | 'en'
 export type PhoneMode = 'lite' | 'capable'
@@ -102,10 +104,12 @@ declare global {
 
 const native = window.PandasticNative
 export const isDemo = !native
+export const canSms = Boolean(native) || isLocalPhone
 
 export function phoneInfo(): { mode?: PhoneMode; totalRamMb?: number } {
   try {
     if (native) return JSON.parse(native.phoneInfo())
+    if (isLocalPhone) return { mode: localPhoneState()?.mode }
     const mode = localStorage.getItem('pandastic.phone-mode')
     return { mode: mode === 'lite' || mode === 'capable' ? mode : undefined }
   } catch { return {} }
@@ -113,6 +117,7 @@ export function phoneInfo(): { mode?: PhoneMode; totalRamMb?: number } {
 
 export function setPhoneMode(mode: PhoneMode) {
   if (native) native.setPhoneMode(mode)
+  else if (isLocalPhone) void updateLocalPhone('mode', mode)
   else {
     try { localStorage.setItem('pandastic.phone-mode', mode) } catch { /* session only */ }
     if (mode === 'lite') setHubEnabled(false)
@@ -120,11 +125,13 @@ export function setPhoneMode(mode: PhoneMode) {
 }
 
 export function validNumber(number: string): boolean {
+  if (isLocalPhone) return /^\d{4,5}$/.test(number.trim()) && Number(number) >= 1024 && Number(number) <= 65535
   const digits = number.replace(/[^0-9]/g, '')
   return /^\+?[0-9 ()-]+$/.test(number.trim()) && digits.length >= 7 && digits.length <= 15
 }
 
 export function sameNumber(a: string, b: string): boolean {
+  if (isLocalPhone) return validNumber(a) && validNumber(b) && a.trim() === b.trim()
   if (!validNumber(a) || !validNumber(b)) return false
   const digits = (value: string) => value.replace(/[^0-9]/g, '')
   const international = (value: string) => value.trim().startsWith('+') ? digits(value) : value.trim().startsWith('00') ? digits(value).slice(2) : null
@@ -139,6 +146,7 @@ window.addEventListener('pandastic:chat', event => {
   chatListeners.forEach(listener => listener((event as CustomEvent<ChatStatus>).detail))
 })
 export function chatStatus(): ChatStatus {
+  if (isLocalPhone) return localPhoneState()!.chat
   if (!native) return demoChat
   try { return JSON.parse(native.chatStatus()) } catch { return { peer: '', messages: [], smsPermission: false } }
 }
@@ -148,6 +156,7 @@ export function onChatChange(listener: (status: ChatStatus) => void): () => void
 }
 export function setSmsPeer(number: string) {
   if (native) native.setSmsPeer(number)
+  else if (isLocalPhone) void updateLocalPhone('peer', number.trim())
   else {
     demoChat = { ...demoChat, peer: number.trim() }
     try { localStorage.setItem('pandastic.sms-peer', demoChat.peer) } catch { /* session only */ }
@@ -157,6 +166,7 @@ export function setSmsPeer(number: string) {
 export function enableSms() { native?.enableSms() }
 export function clearChatHistory() {
   if (native) native.clearChatHistory()
+  else if (isLocalPhone) void updateLocalPhone('clearChat')
   else {
     demoChat = { ...demoChat, messages: [] }
     chatListeners.forEach(listener => listener(demoChat))
@@ -168,6 +178,7 @@ window.__pandasticSmsReply = (id, result) => {
   smsWaiting.delete(id)
 }
 export function sendSms(number: string, body: string): Promise<SmsResult> {
+  if (isLocalPhone) return sendLocalSms(number, body)
   if (!native) return Promise.resolve({ ok: false, error: 'browser' })
   const id = crypto.randomUUID()
   return new Promise(resolve => {
@@ -277,6 +288,7 @@ window.addEventListener('pandastic:hub', event => {
 })
 
 export function hubStatus(): HubStatus {
+  if (isLocalPhone) return localPhoneState()!.hub
   if (!native) return demoHub
   try { return JSON.parse(native.hubStatus()) } catch { return { ...demoHub, enabled: false, recent: [], contacts: [] } }
 }
@@ -293,21 +305,25 @@ function demoUpdate(change: Partial<HubStatus>) {
 
 export function setHubEnabled(enabled: boolean) {
   if (native) native.setHubEnabled(enabled)
+  else if (isLocalPhone) void updateLocalPhone('enabled', enabled)
   else demoUpdate({ enabled, running: enabled })
 }
 
 export function setHubContacts(contacts: HubContact[]) {
   if (native) native.setHubContacts(JSON.stringify(contacts))
+  else if (isLocalPhone) void updateLocalPhone('contacts', contacts)
   else demoUpdate({ contacts })
 }
 
 export function setHubLang(lang: Lang) {
   if (native) native.setHubLang(lang)
+  else if (isLocalPhone) void updateLocalPhone('lang', lang)
   else demoUpdate({ lang })
 }
 
 export function clearHubHistory() {
   if (native) native.clearHubHistory()
+  else if (isLocalPhone) void updateLocalPhone('clearHub')
   else demoUpdate({ recent: [], answeredToday: 0 })
 }
 

@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:pair": "node local/run-pair.mjs",
+    "test:local": "node --test local/phone-server.test.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0"
   },

@@ -231,3 +231,10 @@ input[aria-invalid='true'] { border-color: #a7443f; }
   .bottom-nav button { min-height: 38px; }
   .conversation { padding-top: 2px; padding-bottom: 8px; }
 }
+
+/* Local phones and speech input share the existing chat composer. */
+.local-phone-note { margin: 0 4px 8px; color: var(--soil-muted); font-size: 12px; text-align: center; }
+.dictate-button { width: 40px; height: 40px; color: var(--soil-muted); }
+.dictate-active { background: #fae4df; color: #a7443f; }
+.dictation-status { color: var(--leaf); font-size: 13px; margin: 0 6px 10px; }
+.model-name { overflow-wrap: anywhere; }

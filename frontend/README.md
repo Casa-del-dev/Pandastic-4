@@ -85,3 +85,39 @@ Fonts, icons and code are bundled offline. No cloud APIs or browser speech recog
 - `android/.../FrontendActivity.java`: offline WebView, camera/gallery picker and permissions.
 - `android/.../NativeBridge.java`: native mode enforcement, model calls and SMS actions.
 - `android/.../hub/ChatStore.java`: bounded local SMS threads and outgoing carrier callbacks.
+
+## Two local browser phones (ports are phone numbers)
+
+Use **Node 22.13+ or Node 24+** for this local lab (it reads the bundled knowledge database using Node's SQLite module). From the repository root:
+
+```sh
+cd frontend
+corepack pnpm install --frozen-lockfile
+corepack pnpm dev:pair          # npm run dev:pair also works with dependencies installed
+```
+
+Open both:
+
+- **Basic phone:** <http://127.0.0.1:5173>, phone number **5173**.
+- **Capable phone:** <http://127.0.0.1:5174>, phone number **5174**.
+
+Setup is automatic: each has the other port as its SMS destination, and the capable phone allows 5173 and has automatic replies enabled. Send **`P 1 12000`** from 5173: it appears on 5174, which replies with the saved coffee reference of UGX 15,500/kg (August 2026), including the 23% gap. Both conversations update immediately. You can also send a manual reply from either phone. On the capable phone, switch the composer to **This phone** for the existing browser AI preview.
+
+These are two separate Vite processes: each owns its state and delivers messages to the other over loopback HTTP. SSE pushes incoming messages into each open browser. The port is the simulated phone number; the transport stays on this computer and incurs no carrier charges. Replies use templates and the repository's SQLite price data. Native Qwen and the leaf classifier still run only in Android; local replies are explicitly labelled as demo replies.
+
+**Settings → Receive & reply** on 5174 controls the helper, allowlist and reply language. Turning the helper off still permits manual messages. Basic mode disables automatic replies. Automatic replies cannot trigger another automatic reply; the helper answers at most 12 questions per allowed phone per hour. An unavailable peer produces a failed send and preserves the draft. An uncertain delivery is marked unknown; check the conversation before retrying.
+
+Messages and settings persist separately in `frontend/.local-phones/` (gitignored), including across browser refreshes and process restarts. Use Settings to clear a phone's history. For a complete reset, stop the pair and remove that directory. **Ctrl+C stops both instances.** If a port is occupied, startup fails instead of silently changing the phone number. To use different numbers:
+
+```sh
+BASIC_PORT=6173 CAPABLE_PORT=6174 corepack pnpm dev:pair
+corepack pnpm test:local        # real HTTP integration tests using two temporary processes
+```
+
+The local lab binds to `127.0.0.1`; open the loopback URLs on this computer. Ordinary `pnpm dev` remains a UI preview, and APK production builds contain no phone server.
+
+## Dictate a message
+
+Tap the **microphone** beside Send, allow microphone access, speak, and tap **Stop**. Recognized words are appended to the existing draft, up to the composer's 480-character limit. Review or edit them, then press Send yourself. Dictation never sends automatically. Both the SMS and **This phone** composers support it; the app language selects English (`en-US`) or Swahili (`sw-KE`).
+
+This uses the browser's `SpeechRecognition` / `webkitSpeechRecognition` API when available. Speech-service and language support vary; browser recognition can require internet and send audio to the browser's speech provider. The UI explains this before use. It reports unavailable recognition, denied microphone access, missing speech and network/service errors while preserving the draft. Switching conversation, language, or screen stops recognition and ignores late results. Android WebViews without this API can use the keyboard's microphone instead; this change does not add native offline STT. See [MDN's SpeechRecognition documentation](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).

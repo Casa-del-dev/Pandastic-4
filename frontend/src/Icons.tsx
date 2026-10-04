@@ -2,6 +2,8 @@ import type { CSSProperties } from 'react'
 
 // Pictograms are drawn thick and simple so they read at arm's length and without words.
 const paths = {
+  microphone: <><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></>,
+  stop: <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>,
   models: <><rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></>,
   message: <><path d="M20 11.5a8 8 0 0 1-8 8H4l-2 2v-10a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z"/><path d="M7 9h8M7 13h5"/></>,
   settings: <><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3" fill="var(--paper, white)"/><circle cx="16" cy="17" r="3" fill="var(--paper, white)"/></>,
