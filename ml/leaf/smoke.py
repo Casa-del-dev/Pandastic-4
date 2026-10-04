@@ -85,6 +85,9 @@ def main() -> None:
         assert meta["labels"] == config.P0_LABELS and meta["stub"] is False
         assert (root / "out/leaf_classifier.onnx").stat().st_size > 1_000_000
         assert (root / "out/reports/metrics.json").exists()
+        assert set(meta["eval"]["by_crop"]) == {"coffee"}, meta["eval"]["by_crop"]
+        again = train.reevaluate(rows, config.P0_LABELS, root / "out", device="cpu", workers=0)
+        assert again["eval"]["by_crop"] == meta["eval"]["by_crop"], (again["eval"]["by_crop"], meta["eval"]["by_crop"])
         print("SMOKE OK:", json.dumps(meta["eval"]))
 
     if args.real_local:

@@ -13,6 +13,7 @@ epoch when relaunched with the same arguments. Early stopping (patience 4). Line
   modal run --detach modal_app.py --stage all          # same, and it keeps running if this machine sleeps
   --labels p1 adds maize blight/grey leaf spot + bean classes; --labels p2 also healthy maize, fall armyworm and
   streak virus from CCMT (Ghana). --smoke runs a 30-step training to test the GPU path cheaply.
+  modal run modal_app.py --stage reeval --labels p1 --version leaf-p1-...   # adds eval.by_crop to an older model
 
 Then fetch the artifacts and install them into the app:
   modal volume get pandastic-models leaf/<version> ./artifacts/
@@ -111,6 +112,18 @@ def train(labels: str, epochs: int, batch_size: int, lr: float, smoke: bool, git
     return json.loads(json.dumps(meta, default=str))
 
 
+@app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, cpu=16, memory=16384,
+              timeout=3600)
+def reeval(labels: str, version: str) -> dict:
+    """Adds the per-crop breakdown to a model trained before it existed (CPU; a few minutes)."""
+    from leaf import data, train as trainer
+    cached = DATA / f"manifest-{labels}-cached.csv"  # readable, pre-resized images when the cache stage has run
+    rows = data.read_manifest(cached if cached.exists() else DATA / f"manifest-{labels}.csv")
+    meta = trainer.reevaluate(rows, _labels(labels), MODELS / "leaf" / version, device="cpu", workers=14)
+    models_volume.commit()
+    return meta
+
+
 SOURCES = ["bracol", "jmuben", "jmuben2", "plantdoc", "ibean", "ccmt"]
 
 
@@ -131,9 +144,12 @@ def pipeline(stage: str, labels: str, epochs: int, batch_size: int, lr: float, s
 
 @app.local_entrypoint()
 def main(stage: str = "all", labels: str = "p0", epochs: int = 12, batch_size: int = 64, lr: float = 1e-3,
-         smoke: bool = False):
+         smoke: bool = False, version: str = ""):
     import subprocess
     from leaf import config
+    if stage == "reeval":
+        print(json.dumps(reeval.remote(labels, version)["eval"], indent=2))
+        return
     git_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     result = pipeline.remote(stage, labels, epochs, batch_size, lr, smoke, git_sha)
     if "cache" in result:
