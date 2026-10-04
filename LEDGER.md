@@ -89,9 +89,9 @@ Open rows:
 | :- | :--- | :---- | :----- | :----------- | :------------ | :---- |
 | T20 | Demo script + video (emulator `adb emu sms send` backup) | A + B | todo | `docs/DEMO.md` | — | Script in DEMO.md §5; video not recorded |
 | T40 | Frontend UI + UX refactor and optimisation (Noor: low literacy, Swahili first, 4 GB phone, offline WebView) | C | todo | `frontend/` | 02:58 | Took over T04; ongoing through T42–T52 |
-| T53 | O1: leaf model check (emulator if B's machine can run one, else JVM/ONNX checks) + install decision | B (user request, was A) | in-progress | assets `leaf_classifier.*`, `ml/reports/`, `scripts/photo-eval.mjs` | 07:41 | Emulator check done: install effb0-ens3 with floors re-chosen on calib through the app (log 07:41); final APK check running |
+| T53 | O1: leaf model check (emulator) + install decision | B (user request, was A) | done | assets `leaf_classifier.*`, `ml/reports/<version>/app_check*`, `ml/leaf/app_floors.py`, `scripts/photo-eval.mjs` | 08:00 | effb0-ens3 installed with app-path floors (a6845f7) |
 | T54 | O3: help requests (`nisaidie`, "what can you do", "how does this work") get the menu by SMS | A (B claimed after A's fix) | done | `hub/HubPolicy.java` + test | 07:41 | A's 214928a, reviewed by B |
-| T55 | O4: LLM stops after the symptom, JSON closed in Java (~30% less generation) | B (user request, was A) | in-progress | `brain/LlmNlu.java` (no JNI change), `ml/llm/stop_eval.py` | 07:41 | Grammar cut at the `,"` after the symptom; laptop eval on all 4 SMS sets running |
+| T55 | O4: LLM stops after the symptom, JSON closed in Java | B (user request, was A) | done | `brain/LlmNlu.java` (no JNI change), `ml/llm/stop_eval.py` | 08:00 | 661c39a: −35% tokens, 220/220 same reading |
 | T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | A (B claimed after A's fix) | done | `README.md`, `docs/DEMO.md` | 07:41 | A's 214928a; B updates the leaf row again with the O1 install |
 | T50 | `CLAUDE.md`: compact project memory, kept current | B | done (maintained) | `CLAUDE.md` | 06:35 | User request; ledger compacted 06:35 (user request) |
 | T32 | STT, maize grain head, FAMEWS alerts, XGBoost + weather | — | todo | — | — | Stretch; only if everything else is done |
@@ -200,3 +200,18 @@ Done (one line each; details in git and the archived ledger):
   median (x86_64 emulator). **Decision: install effb0 with these floors** (I'm committing it with README/DEMO/DATA.md
   after a last `bridge-e2e` on the exact APK). An antialiased resize in `LeafClassifier` (yours) might recover more,
   but both models would need re-checking, so not before the freeze unless you want it.
+- [B 08:00] **O1 done (a6845f7): `leaf-p2-mix-efficientnetb0-ens3-a16129a8` installed**, floors coffee_healthy 0.99,
+  maize_healthy 0.98, maize 0.82, bean_healthy 0.54 (chosen on calib photos through the app, `ml/leaf/app_floors.py`).
+  Final APK on my emulator: held-out coffee 65.0% answered / 97.4% right / **0 rust called healthy** (ens3 3), maize
+  79.2% / 90.6%, beans 100% / 96.1% / 1, non-crop 1/137; bridge e2e **75/75** with the fine-tuned LLM loaded. Report:
+  `ml/reports/leaf-p2-mix-efficientnetb0-ens3-a16129a8/app_check.md`. README leaf row + DEMO §6 updated. **A:** please
+  rebuild before `make human-test`: the human-test answers in HUMAN-TEST.md's photo key may change (my emulator:
+  leaf1–4 rust/rust/healthy/healthy, all CONFIDENT and right except healthy photos near the 0.99 floor). Optional
+  for you: an antialiased resize in `LeafClassifier` (see app_check.md); not before the freeze unless you want it.
+- [B 08:00] **O4 done (661c39a):** `LlmNlu.stopAfterSymptom()` ends the grammar's root rule at the `,"` after the
+  symptom (the token boundary the model writes anyway; checked with the Qwen tokenizer) and `closeJson()` ends the
+  object; no JNI change. `ml/llm/stop_eval.py`, all 220 eval SMS, full vs cut: fine-tuned **220/220 same** lang /
+  intent / crop / symptom, tokens −35%, generation −34%; base 220/220, tokens −33%. Emulator: 4.2–5.0 s per LLM call,
+  the "AI ya simu imeelewa" line unchanged. JVM tests 75/75. `understood()` uses only intent/crop/symptom from the
+  model (offer comes from the keywords), so nothing it shows is lost. **Build note (Windows):** `fetchSpeechModel`
+  calls `node`; without Node, run `bun scripts/fetch-whisper-tiny.mjs` and build with `-x fetchSpeechModel`.
