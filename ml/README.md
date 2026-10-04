@@ -41,6 +41,17 @@ python -m leaf.probe_photos artifacts/<version>   # run it on RoCoLe phone photo
 python -m leaf.install artifacts/<version>        # replaces the stub, copies reports to ml/reports/
 ```
 
+Improving and checking a model (all on held-out data, through the app's photo path where it matters):
+
+```sh
+modal run --detach modal_app.py --stage train --labels p2 --seed 14              # another member of the same recipe
+modal run modal_app.py --stage ensemble --labels p2 --version leaf-...,leaf-...,leaf-...   # average them into one ONNX
+modal run modal_app.py --stage photo-stats --labels p2   # the app's QualityGate numbers on every test photo
+python -m leaf.class_thresholds <dir> --label coffee_healthy --precision 0.98 --write   # stricter healthy floor (calib)
+python -m leaf.probe_nonplant <dir> [<dir> ...]           # CONFIDENT answers on random everyday photos
+python -m leaf.quantize <dir>                             # int8 check (not shipped: -3 pts top-1)
+```
+
 Label sets: `p0` coffee only; `p1` + maize leaf blight / grey leaf spot (PlantDoc) + bean classes (iBean);
 `p2` + healthy maize, fall armyworm, streak virus (CCMT, Ghana). A relaunch with the same arguments resumes from the
 last epoch (run id = hash of manifest, hyper-parameters and code).
@@ -50,7 +61,8 @@ What the pipeline does (`ml/leaf/`):
 - **Data** (`config.py`, `data.py`): coffee from BRACOL (Brazil, whole leaves on white paper), JMuBEN + JMuBEN2
   (Kenya, 128 px lesion close-ups) and **RoCoLe** (Ecuador, smartphone photos of leaves on the plant, split by
   plant); PlantDoc (CC BY 4.0) and iBean (Uganda, MIT) as bean/maize classes or `other`; CCMT raw maize photos
-  (Ghana, CC BY 4.0). All CC BY 4.0 unless noted. Mendeley blocks cloud IPs, so `resolve_ccmt.py` and
+  (Ghana, CC BY 4.0); Caltech-101 (objects, animals, scenes, CC BY 4.0) as non-plant `other`, split by category.
+  All CC BY 4.0 unless noted. Mendeley blocks cloud IPs, so `resolve_ccmt.py` and
   `resolve_rocole.py` (run once from a normal connection) list each image's public S3 URL. JMuBEN is full of rotated
   and flipped copies (the 8,336 rust images are 632 distinct patches), so images are grouped by a rotation/flip-
   invariant perceptual hash and groups never cross splits. BRACOL's published zip is truncated: about 1,400 of its
