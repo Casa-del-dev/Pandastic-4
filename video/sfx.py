@@ -9,7 +9,9 @@ from scipy.io import wavfile
 from scipy.signal import butter, sosfilt
 
 HERE = Path(__file__).resolve().parent
-SR, DUR = 48000, 57.0
+SR = 48000
+TIMELINE = json.loads((HERE / "out/cues.json").read_text())
+DUR = TIMELINE["duration"]
 rng = np.random.default_rng(7)
 
 
@@ -43,6 +45,19 @@ def sweep(f0, f1, dur):
     n = int(SR * dur); return np.linspace(f0, f1, n)
 
 
+def scan(dur=1.1):
+    n = int(SR * dur); shape = np.sin(np.linspace(0, np.pi, n)) ** 2
+    return 0.05 * band(rng.standard_normal(n), 2500, 7000) * shape + 0.025 * tone(sweep(520, 1040, dur), dur, 2.0) * shape
+
+
+def ratchet(dur=1.3, clicks=24):
+    out = np.zeros(int(SR * dur) + SR // 10)
+    for k in range(clicks):  # the clicks slow down like the number does (ease-out)
+        i = int(SR * dur * (1 - (1 - k / clicks) ** (1 / 3)))
+        c = 0.07 * tone(3200 - 40 * k, 0.012, 0.003); out[i:i + len(c)] += c
+    return out
+
+
 SOUNDS = {
     "stamp": lambda: add(0.9 * tone(sweep(130, 52, 0.22), 0.22, 0.07), 0.25 * noise(0.03, 1500, 7000, 0.006)),
     "thud": lambda: add(1.0 * tone(sweep(110, 42, 0.42), 0.42, 0.13), 0.2 * noise(0.05, 800, 4000, 0.01)),
@@ -53,13 +68,16 @@ SOUNDS = {
     "whoosh": lambda: 0.22 * band(rng.standard_normal(int(SR * 0.32)), 300, 3500) * np.sin(np.linspace(0, np.pi, int(SR * 0.32))) ** 2,
     "rise": lambda: 0.07 * tone(sweep(330, 660, 0.45), 0.45, 0.5) * np.linspace(1, 0, int(SR * 0.45)),
     "snip": lambda: np.concatenate([0.35 * noise(0.012, 3000, 9000, 0.003), np.zeros(int(SR * 0.035)), 0.35 * noise(0.012, 3000, 9000, 0.003)]),
+    "scan": scan,
+    "roll": ratchet,
+    "pop": lambda: add(0.14 * tone(sweep(950, 620, 0.07), 0.07, 0.025), 0.05 * noise(0.006, 2000, 8000, 0.002)),
     "send": lambda: 0.16 * tone(sweep(800, 1700, 0.13), 0.13, 0.08),
     "chime": lambda: np.concatenate([0.2 * (tone(1318.5, 0.16, 0.09) + 0.3 * tone(2637, 0.16, 0.05)),
                                      0.2 * (tone(1760, 0.32, 0.16) + 0.3 * tone(3520, 0.32, 0.08))]),
 }
 
 fx = np.zeros(int(SR * DUR) + SR)
-for t, kind in json.loads((HERE / "out/cues.json").read_text()):
+for t, kind in TIMELINE["cues"]:
     s = SOUNDS[kind](); i = int(t * SR); fx[i:i + len(s)] += s[: len(fx) - i]
 
 raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(HERE / "media/music.mp3"), "-t", str(DUR), "-ac", "2", "-ar", str(SR),

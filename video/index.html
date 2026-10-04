@@ -2,360 +2,608 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Pandastic technical walkthrough</title>
+<title>Pandastic walkthrough</title>
 <style>
-@font-face { font-family: Bricolage; src: url(../frontend/node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2) format("woff2"); font-weight: 200 800; }
-@font-face { font-family: Atkinson; src: url(../frontend/node_modules/@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2) format("woff2"); font-weight: 200 800; }
-@font-face { font-family: Mono; src: url(file:///C:/Windows/Fonts/JetBrainsMonoNLNerdFont-Regular.ttf); font-weight: 400; }
-@font-face { font-family: Mono; src: url(file:///C:/Windows/Fonts/JetBrainsMonoNLNerdFont-Bold.ttf); font-weight: 700; }
+@font-face { font-family: Archivo; src: url(media/fonts/archivo.woff2) format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; }
+@font-face { font-family: Fragment; src: url(media/fonts/fragment-mono.woff2) format("woff2"); font-weight: 400; }
 :root {
-  --soil: #29382f; --night: #1c2620; --leaf: #305a4c; --leafsoft: #eaf0e9; --mist: #f5f6f1; --paper: #fdfdf9;
-  --line: #dfe4d9; --muted: #6f786f; --red: #a7443f; --redsoft: #f6e3df; --lcd: #c7d1bd; --lcdink: #1f2b22;
+  --soil: #29382f; --night: #18211c; --leaf: #305a4c; --leaf2: #9fd1b1; --leafsoft: #e6eee4; --mist: #f4f5ef;
+  --paper: #fcfcf8; --line: #dde3d6; --muted: #6c766d; --red: #b0443c; --lcd: #c9d3bf; --lcdink: #1f2b22;
 }
 * { box-sizing: border-box; margin: 0; }
 html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--mist); }
-body { font-family: Atkinson, sans-serif; color: var(--soil); -webkit-font-smoothing: antialiased; }
-#stage { position: absolute; inset: 0; overflow: hidden; }
-.scene { position: absolute; inset: 0; display: none; }
+body { font-family: Archivo, sans-serif; font-weight: 500; color: var(--soil); -webkit-font-smoothing: antialiased; }
+#cam { position: absolute; inset: 0; overflow: hidden; }
+.layer { position: absolute; inset: 0; }
 .dark { background: var(--night); color: var(--mist); }
 .light { background: var(--mist); }
 .abs { position: absolute; }
-.h { font-family: Bricolage; font-weight: 760; letter-spacing: -0.035em; line-height: 0.95; }
-.label { font-family: Atkinson; font-weight: 700; font-size: 24px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
-.mono { font-family: Mono, monospace; }
-#grain { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; opacity: 0.55; }
+.hd { font-weight: 800; font-stretch: 84%; letter-spacing: -0.022em; line-height: 0.98; }
+.kick { font-family: Fragment, monospace; font-size: 22px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: Fragment, monospace; }
+/* masked line reveal: the text slides up from behind its own baseline */
+.m { display: block; overflow: hidden; padding: 0.16em 0 0.16em; margin: -0.16em 0 -0.16em; }
+.m > span { display: inline-block; transform: translateY(115%); }
 
-/* phone */
-.phone { position: absolute; width: 470px; height: 1000px; border-radius: 58px; background: #18201b; padding: 15px;
-  box-shadow: 0 30px 60px -30px rgba(20, 30, 24, 0.55); }
-.phone .screen { width: 100%; height: 100%; border-radius: 44px; overflow: hidden; background: #f8f8f5; position: relative; }
-.phone .screen img { position: absolute; left: 0; top: 0; width: 100%; }
-.phone .speaker { position: absolute; top: 26px; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #0d120f; z-index: 2; }
+/* the daughter's phone */
+#phone { position: absolute; left: 150px; top: 40px; width: 470px; height: 1000px; border-radius: 60px; background: #151c18;
+  padding: 15px; transform-origin: 0 0; box-shadow: 0 50px 80px -40px rgba(20, 30, 24, 0.55), 0 0 0 2px #2c3530 inset; }
+#phone .screen { width: 100%; height: 100%; border-radius: 46px; overflow: hidden; background: #f8f8f5; position: relative; }
+#phone .screen img { position: absolute; left: 0; top: 0; width: 100%; }
+#phone .cam { position: absolute; top: 27px; left: 50%; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: #0b0f0d; z-index: 3; }
 
-/* right panel pieces */
-.photo { position: absolute; border-radius: 18px; overflow: hidden; box-shadow: 0 2px 0 var(--line); }
+/* leaf photo card (flips from the rust photo to the healthy one) */
+#card { position: absolute; left: 760px; top: 190px; width: 330px; height: 587px; perspective: 1600px; transform-origin: 0 0; }
+#flip { position: absolute; inset: 0; transform-style: preserve-3d; }
+.face { position: absolute; inset: 0; border-radius: 20px; overflow: hidden; backface-visibility: hidden; background: #000;
+  box-shadow: 0 30px 50px -28px rgba(20, 30, 24, 0.6); }
+.face.back { transform: rotateY(180deg); }
+.face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.face img.mask { image-rendering: pixelated; }
+.scan { position: absolute; left: -10px; right: -10px; height: 4px; background: #c8f0d4; box-shadow: 0 0 22px 6px rgba(160, 240, 190, 0.7); }
+.gridtag { position: absolute; left: 14px; bottom: 14px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 22, 18, 0.8); color: #d6efe0; font-family: Fragment; font-size: 18px; }
+.check { display: flex; align-items: center; gap: 18px; height: 66px; font-size: 38px; font-weight: 600; }
+.check svg { flex: none; }
+.chip { display: inline-flex; align-items: center; gap: 12px; padding: 12px 22px; border-radius: 999px; background: var(--leafsoft); color: var(--leaf); font-weight: 700; font-size: 28px; }
+.bar { position: absolute; height: 58px; }
+.bar .name { position: absolute; left: 0; top: 8px; font-size: 32px; font-weight: 600; }
+.bar .track { position: absolute; left: 200px; right: 110px; top: 10px; height: 38px; background: var(--line); border-radius: 7px; overflow: hidden; }
+.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--leaf); border-radius: 7px; }
+.bar .val { position: absolute; right: 0; top: 6px; font-family: Fragment; font-size: 34px; }
+.stamp { position: absolute; padding: 14px 28px 12px; border: 6px solid currentColor; border-radius: 12px; font-weight: 900; font-stretch: 72%;
+  font-size: 62px; letter-spacing: 0.01em; text-transform: uppercase; background: rgba(252, 252, 248, 0.85); white-space: nowrap; }
+#thresh { position: absolute; left: 0; top: 0; width: 5px; height: 78px; background: var(--red); border-radius: 3px; }
+.photo { position: absolute; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 50px -30px rgba(20, 30, 24, 0.55); }
 .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.check { font-size: 36px; font-weight: 600; display: flex; align-items: center; gap: 18px; height: 58px; }
-.tick { width: 40px; height: 40px; border-radius: 50%; background: var(--leaf); color: white; display: grid; place-items: center; font-size: 26px; font-weight: 800; }
-.chip { display: inline-block; padding: 12px 22px; border-radius: 999px; background: var(--leafsoft); color: var(--leaf); font-weight: 700; font-size: 28px; }
-.bar { position: absolute; height: 54px; }
-.bar .track { position: absolute; left: 260px; right: 120px; top: 8px; height: 38px; background: var(--line); border-radius: 6px; }
-.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--leaf); }
-.bar .name { position: absolute; left: 0; top: 6px; font-size: 30px; font-weight: 600; }
-.bar .val { position: absolute; right: 0; top: 4px; font-family: Mono; font-size: 32px; font-weight: 700; }
-.stamp { position: absolute; padding: 18px 30px; border: 6px solid currentColor; border-radius: 10px; font-family: Bricolage; font-weight: 780;
-  letter-spacing: -0.01em; text-transform: uppercase; transform-origin: 50% 50%; background: rgba(255,255,255,0.75); }
-.thresh { position: absolute; width: 5px; background: var(--red); }
-.receipt { position: absolute; background: var(--paper); border: 2px solid var(--line); border-radius: 6px; padding: 28px 40px; }
-.row { position: absolute; left: 40px; right: 40px; }
-.row .num { font-family: Mono; font-weight: 700; color: var(--leaf); font-size: 26px; }
-.row .what { font-family: Atkinson; font-weight: 700; font-size: 24px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-.row .body { font-size: 34px; margin-top: 6px; }
-.json { font-family: Mono; font-size: 25px; color: var(--soil); background: #f0f3ec; padding: 10px 16px; border-radius: 6px; display: inline-block; white-space: pre; }
-.mark { background: linear-gradient(transparent 58%, #dce8d6 58%); }
+
+/* question */
+#bub { position: absolute; left: 760px; top: 168px; padding: 22px 32px 24px; border-radius: 30px; background: #e4eae0; font-size: 40px; white-space: nowrap; }
+#bub .w { position: relative; display: inline-block; }
+#bub .hl { position: absolute; left: -4px; right: -4px; bottom: 2px; height: 14px; background: #b9d7b0; transform-origin: 0 50%; z-index: -1; border-radius: 3px; }
+#bub .txt { position: relative; z-index: 1; }
+#bub .tag { position: absolute; left: 0; top: 86px; font-family: Fragment; font-size: 22px; color: var(--leaf); white-space: nowrap; }
+#bub .tag::before { content: ""; position: absolute; left: 6px; top: -22px; width: 2px; height: 18px; background: var(--leaf); }
+#caret { display: inline-block; width: 3px; height: 40px; background: var(--soil); vertical-align: -6px; margin-left: 3px; }
+.row { position: absolute; left: 760px; width: 1100px; }
+.verb { position: absolute; left: 0; top: 0; font-weight: 850; font-stretch: 72%; font-size: 52px; letter-spacing: 0.01em; text-transform: uppercase; line-height: 1; }
+.who { position: absolute; left: 0; top: 62px; font-family: Fragment; font-size: 18px; padding: 6px 12px; border-radius: 8px; white-space: nowrap; }
+.who.model { background: var(--leafsoft); color: var(--leaf); }
+.who.code { background: var(--soil); color: #eef2ea; }
+.what { position: absolute; left: 300px; top: 2px; width: 800px; font-size: 36px; line-height: 1.25; }
+.toks { display: flex; flex-wrap: wrap; gap: 5px; }
+.tok { font-family: Fragment; font-size: 26px; padding: 4px 8px; border-radius: 6px; background: #ffffff; border: 1.5px solid #c9d4c4; white-space: pre; }
+.tok.ghost { border-style: dashed; color: #9aa59b; background: transparent; }
+#snipline { position: absolute; width: 0; border-left: 3px dashed var(--red); }
+.src { display: inline-block; margin-left: 14px; font-family: Fragment; font-size: 20px; color: var(--muted); padding: 4px 10px; border: 1.5px solid var(--line); border-radius: 6px; vertical-align: 6px; }
 
 /* basic phone */
-.basic { position: absolute; width: 380px; height: 760px; border-radius: 60px 60px 70px 70px; background: #2a2f2c; padding: 46px 40px; }
-.basic .lcd { width: 300px; height: 330px; background: var(--lcd); border-radius: 10px; padding: 16px 18px; font-family: Mono; color: var(--lcdink);
-  font-size: 19px; line-height: 1.32; overflow: hidden; box-shadow: inset 0 0 0 3px #a9b59f; }
-.basic .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; margin-top: 34px; }
-.basic .key { height: 50px; border-radius: 22px; background: #3b423e; color: #d8ddd5; font-family: Atkinson; font-weight: 700; font-size: 24px; display: grid; place-items: center; }
-.basic .key.on { background: #66736b; }
-.pill { position: absolute; padding: 12px 22px; border-radius: 999px; border: 2px solid var(--line); background: var(--paper); font-weight: 700; font-size: 26px; }
-.sizebar { position: absolute; height: 64px; border-radius: 6px; }
+#basic { position: absolute; left: 190px; top: 400px; width: 350px; height: 640px; border-radius: 56px 56px 66px 66px; background: #2a302c; padding: 40px 32px;
+  box-shadow: 0 40px 60px -36px rgba(20, 30, 24, 0.6); }
+#lcd { width: 286px; height: 318px; background: var(--lcd); border-radius: 10px; padding: 14px 16px; font-family: Fragment; color: var(--lcdink);
+  font-size: 18px; line-height: 1.3; overflow: hidden; box-shadow: inset 0 0 0 3px #a9b59f; }
+#keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; margin-top: 30px; }
+.key { height: 46px; border-radius: 20px; background: #3b423e; color: #d8ddd5; font-weight: 700; font-size: 22px; display: grid; place-items: center; }
+.key.on { background: #7d8a81; color: white; }
+.pill { position: absolute; padding: 12px 22px; border-radius: 999px; border: 2px solid var(--line); background: var(--paper); font-weight: 650; font-size: 28px; white-space: nowrap; }
+.badge { position: absolute; padding: 10px 18px; border-radius: 10px; background: var(--leaf); color: white; font-weight: 700; font-size: 26px; white-space: nowrap; }
+
+/* proof */
+.col { position: absolute; top: 330px; width: 560px; }
+.big { font-weight: 850; font-stretch: 66%; font-size: 250px; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; height: 250px; display: flex; }
+.odo { display: inline-block; overflow: hidden; height: 1em; line-height: 1em; vertical-align: top; }
+.odo > span { display: block; }
+.cap { font-size: 40px; font-weight: 650; margin-top: 34px; line-height: 1.15; }
+.sub { font-family: Fragment; font-size: 22px; color: var(--muted); margin-top: 14px; }
+.sizebar { position: absolute; left: 160px; height: 70px; border-radius: 8px; }
+.sizel { position: absolute; font-size: 38px; font-weight: 700; white-space: nowrap; }
+.sizel .mono { font-size: 34px; margin-right: 14px; }
+
+#wipe { position: absolute; top: -40px; bottom: -40px; width: 2600px; background: var(--leaf); }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; }
 </style>
 </head>
 <body>
-<div id="stage">
+<div id="cam">
 
-  <!-- A · cold open -->
-  <section class="scene dark" id="A">
-    <div class="abs label" id="A0" style="left:160px; top:150px; color:#9fb0a2">Noor · coffee, maize, beans · Ondera highlands</div>
-    <div class="abs h" id="A1" style="left:150px; top:300px; font-size:170px">No Wi-Fi.</div>
-    <div class="abs h" id="A2" style="left:150px; top:480px; font-size:170px">No data bundle.</div>
-    <div class="abs" id="A3" style="left:160px; top:720px; font-size:58px; font-weight:700; color:#cfe0d2">One Android phone in the house: her daughter's.</div>
-    <div class="abs" id="A4" style="left:0; top:0; width:1920px; height:1080px; background:var(--night)">
-      <svg class="abs" style="left:160px; top:330px" width="200" height="200" viewBox="0 0 80 80">
+  <!-- the light page: title, leaf photo, question, SMS. One canvas; the phone stays on it. -->
+  <section class="layer light" id="L">
+    <div id="phone"><div class="cam"></div><div class="screen"><img id="scrA"><img id="scrB"></div></div>
+    <div id="T" class="layer">
+      <svg class="abs" id="Tlogo" style="left:752px; top:228px" width="120" height="120" viewBox="0 0 80 80">
         <circle cx="21" cy="21" r="12" fill="#2B1E16"/><circle cx="59" cy="21" r="12" fill="#2B1E16"/>
-        <ellipse cx="40" cy="43" rx="29" ry="28" fill="#ffffff"/>
+        <ellipse cx="40" cy="43" rx="29" ry="28" fill="#ffffff" stroke="#2B1E16" stroke-width="2.4"/>
         <ellipse cx="28" cy="39" rx="9" ry="11" transform="rotate(25 28 39)" fill="#2B1E16"/>
         <ellipse cx="52" cy="39" rx="9" ry="11" transform="rotate(-25 52 39)" fill="#2B1E16"/>
         <circle cx="30" cy="37" r="2.7" fill="white"/><circle cx="50" cy="37" r="2.7" fill="white"/>
         <ellipse cx="40" cy="50" rx="5" ry="3.5" fill="#2B1E16"/>
         <path d="M40 53v4m-7-1q7 9 14 0" stroke="#2B1E16" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <path d="M58 61c6-1 11-6 11-12-6 0-11 5-11 12Z" fill="#7fc49b"/>
+        <path d="M58 61c6-1 11-6 11-12-6 0-11 5-11 12Z" fill="#5fae80"/>
       </svg>
-      <div class="abs h" style="left:400px; top:330px; font-size:200px">Pandastic</div>
-      <div class="abs" id="A5" style="left:410px; top:560px; font-size:50px; font-weight:600; color:#cfe0d2">An offline farm helper that runs entirely on that phone.</div>
+      <div class="abs hd" id="T1" style="left:740px; top:380px; font-size:250px; font-stretch:78%"><div class="m"><span>Pandastic</span></div></div>
+      <div class="abs" id="T2" style="left:752px; top:660px; font-size:60px; font-weight:650; color:var(--leaf)"><div class="m"><span>Everything runs on that phone.</span></div></div>
     </div>
-  </section>
 
-  <!-- B + C · the daughter's phone -->
-  <section class="scene light" id="BC">
-    <div class="phone" id="phone" style="left:150px; top:40px"><div class="speaker"></div><div class="screen">
-      <img id="shot" src="media/shot-rust.png">
-    </div></div>
-    <div class="abs label" id="Blabel" style="left:740px; top:96px">At home · on the daughter's phone · offline</div>
-
-    <!-- B · leaf -->
-    <div id="B">
-      <div class="abs h" id="Bh" style="left:735px; top:150px; font-size:96px">A photo of the leaf.</div>
-      <div class="photo" id="Bphoto" style="left:740px; top:300px; width:300px; height:533px"><img id="Bimg" src="media/leaf-rust.jpg"></div>
-      <div class="abs" id="Bchecks" style="left:1090px; top:300px">
-        <div class="check" id="Bc0"><span class="tick">✓</span>Sharp enough</div>
-        <div class="check" id="Bc1"><span class="tick">✓</span>Bright enough</div>
-        <div class="check" id="Bc2"><span class="tick">✓</span>A plant: <span class="mono" id="Bshare">0.90</span></div>
+    <!-- B · leaf photo -->
+    <div id="Bw" class="layer">
+    <div class="abs kick" id="Bk" style="left:760px; top:112px"><div class="m"><span>At home · a leaf photo · on the phone, offline</span></div></div>
+    <div id="card">
+      <div id="flip">
+        <div class="face" id="faceR"><img src="media/leaf-rust.jpg"><img class="mask" id="maskR" src="media/mask-rust.png"><div class="scan" id="scanR"></div><div class="gridtag" id="tagR">plant pixels · 64 × 64</div></div>
+        <div class="face back" id="faceH"><img src="media/leaf-healthy.jpg"><img class="mask" id="maskH" src="media/mask-healthy.png"><div class="scan" id="scanH"></div><div class="gridtag" id="tagH">plant pixels · 64 × 64</div></div>
       </div>
-      <div class="abs" id="Bmodel" style="left:1090px; top:510px"><span class="chip">3 × EfficientNet-B0 · 13 MB · on the phone</span></div>
-      <div class="bar" id="Bbar0" style="left:1090px; top:600px; width:740px"><div class="name" id="Bn0">Leaf rust</div><div class="track"><div class="fill" id="Bf0"></div></div><div class="val" id="Bv0">0.00</div></div>
-      <div class="bar" id="Bbar1" style="left:1090px; top:670px; width:740px"><div class="name" id="Bn1">Healthy</div><div class="track"><div class="fill" id="Bf1"></div></div><div class="val" id="Bv1">0.00</div></div>
-      <div class="thresh" id="Bthresh" style="left:0; top:585px; height:160px"></div>
-      <div class="abs" id="Bthreshlabel" style="top:752px; font-size:26px; font-weight:700; color:var(--red)">“Healthy” needs 0.99</div>
-      <div class="stamp" id="Bok" style="left:1090px; top:820px; font-size:52px; color:var(--leaf)">Confident · leaf rust</div>
-      <div class="abs" id="Bokadv" style="left:1094px; top:930px; font-size:30px; width:760px; color:var(--soil)">“Prune to open the bush. Copper only if the officer agrees.” <span style="color:var(--muted)">CABI PlantwisePlus</span></div>
-      <div class="stamp" id="Bno" style="left:1090px; top:820px; font-size:52px; color:var(--red)">Not sure · ask a person</div>
-      <div class="abs" id="Bnoadv" style="left:1094px; top:930px; font-size:30px; width:760px">Same 0.98. A false “healthy” is the worst answer: <b>don't spray yet.</b></div>
-      <div class="abs h" id="Bblur" style="left:735px; top:420px; font-size:110px">Blurry?<br><span style="color:var(--leaf)">Take it again.</span></div>
-      <div class="abs h" id="Bleaf" style="left:735px; top:420px; font-size:110px">Not a leaf?<br><span style="color:var(--leaf)">Turned away.</span></div>
+    </div>
+    <div class="abs" id="checks" style="left:1150px; top:196px">
+      <div class="check" id="ck0"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="21" fill="#305a4c"/><path d="M13 24l7 7 13-15" stroke="white" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="34" stroke-dashoffset="34"/></svg><span>Sharp enough</span></div>
+      <div class="check" id="ck1"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="21" fill="#305a4c"/><path d="M13 24l7 7 13-15" stroke="white" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="34" stroke-dashoffset="34"/></svg><span>Bright enough</span></div>
+      <div class="check" id="ck2"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="21" fill="#305a4c"/><path d="M13 24l7 7 13-15" stroke="white" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="34" stroke-dashoffset="34"/></svg><span>A plant: <span class="mono" id="share">0%</span> of pixels</span></div>
+    </div>
+    <div class="abs" id="model" style="left:1150px; top:418px"><span class="chip">3 × EfficientNet-B0 · 13 MB · int8</span></div>
+    <div class="bar" id="bar0" style="left:1150px; top:510px; width:690px"><div class="name">Leaf rust</div><div class="track"><div class="fill" id="f0"></div></div><div class="val" id="v0">0.00</div></div>
+    <div class="bar" id="bar1" style="left:1150px; top:584px; width:690px"><div class="name">Healthy</div><div class="track"><div class="fill" id="f1"></div></div><div class="val" id="v1">0.00</div></div>
+    <div id="thresh"></div>
+    <div class="abs mono" id="threshL" style="left:0; top:0; font-size:24px; color:var(--red); white-space:nowrap">“Healthy” needs 0.99</div>
+    <div class="stamp" id="okS" style="left:1150px; top:712px; color:var(--leaf)">Confident · leaf rust</div>
+    <div class="stamp" id="noS" style="left:1150px; top:712px; color:var(--red)">Not sure · ask a person</div>
+    <div class="abs" id="noSub" style="left:1154px; top:852px; font-size:38px; font-weight:600; white-space:nowrap"><div class="m"><span>A wrong “healthy” is the worst mistake.</span></div></div>
+    <div class="photo" id="mB" style="left:760px; top:190px; width:309px; height:560px"><img src="media/in-blurry.jpg"></div>
+    <div class="abs hd" id="mBt" style="left:760px; top:800px; font-size:68px"><div class="m"><span>Blurry?</span></div><div class="m"><span style="color:var(--leaf)">Take it again.</span></div></div>
+    <div class="photo" id="mL" style="left:1240px; top:344px; width:560px; height:416px"><img src="media/in-notleaf.jpg"></div>
+    <div class="abs hd" id="mLt" style="left:1240px; top:800px; font-size:68px"><div class="m"><span>Not a leaf?</span></div><div class="m"><span style="color:var(--leaf)">Turned away.</span></div></div>
     </div>
 
-    <!-- C · question -->
-    <div id="C">
-      <div class="abs h" id="Ch" style="left:735px; top:150px; font-size:96px">A question, in her words.</div>
-      <div class="abs" id="Cq" style="left:740px; top:290px; font-size:40px; padding:22px 30px; background:#e7ece4; border-radius:28px; max-width:1040px">“<span id="Cqt"></span>”</div>
-      <div class="receipt" id="Creceipt" style="left:740px; top:400px; width:1060px; height:640px">
-        <div class="row" id="Cr0" style="top:26px"><span class="num">1 </span><span class="what">Keywords</span>
-          <div class="body mono" style="font-size:30px">offers → price · coffee → crop · 12000 → offer</div></div>
-        <div class="row" id="Cr1" style="top:136px"><span class="num">2 </span><span class="what">Qwen3.5-0.8B · fine-tuned · on the phone · grammar-locked</span>
-          <div class="body"><span class="json" id="Cjson"></span><div id="Ccut" style="font-family:Mono; font-size:26px; color:var(--red); margin-top:10px">✂ generation stops after the symptom · 19 tokens</div></div></div>
-        <div class="row" id="Cr2" style="top:300px"><span class="num">3 </span><span class="what">Code, not the model</span>
-          <div class="body mono" style="font-size:32px">12,000 vs 15,500 UGX/kg → <b id="Cgap">0.0%</b></div></div>
-        <div class="row" id="Cr3" style="top:405px"><span class="num">4 </span><span class="what">Fixed template + cited source</span>
-          <div class="body" style="font-size:30px">Arabica parchment, farm-gate Aug 2026: UGX 15,500/kg (MAAIF/UCDA). Offer 12,000 is 23% below. Ask the cooperative before selling.</div></div>
-        <div class="row" id="Cr4" style="top:556px"><div class="body" style="font-size:32px; font-weight:700"><span class="mark">Phone AI understood: price, coffee, 12,000.</span> <span style="font-weight:400; color:var(--muted); font-size:26px">She sees what it read.</span></div></div>
-      </div>
-      <div class="abs h" id="Cend" style="left:735px; top:330px; font-size:104px; width:1080px">Every fact she reads comes from a cited source.<div style="color:var(--leaf); font-size:58px; letter-spacing:-0.02em; line-height:1.1; margin-top:34px">The model reads the message.<br>Code decides the answer.</div></div>
+    <!-- C · a question -->
+    <div id="C" class="layer">
+      <div class="abs kick" id="Ck" style="left:760px; top:112px"><div class="m"><span>A question · typed or dictated · offline</span></div></div>
+      <div id="bub"><span id="bubT"></span><span id="caret"></span></div>
+      <div class="row" id="r0" style="top:352px"><div class="verb">Reads</div><div class="who model">Qwen3.5-0.8B fine-tuned</div>
+        <div class="what"><div class="toks" id="toks"></div>
+          <div class="abs" id="snipL" style="left:0; top:108px; font-size:30px; font-weight:650; color:var(--red); white-space:nowrap">
+            <svg width="30" height="30" viewBox="0 0 24 24" style="vertical-align:-5px; margin-right:8px"><circle cx="6" cy="6" r="3" fill="none" stroke="#b0443c" stroke-width="2"/><circle cx="6" cy="18" r="3" fill="none" stroke="#b0443c" stroke-width="2"/><path d="M8.5 7.5L20 18M8.5 16.5L20 6" stroke="#b0443c" stroke-width="2" stroke-linecap="round"/></svg>Stops after the symptom: 35% fewer tokens</div></div></div>
+      <div id="snipline"></div>
+      <div class="row" id="r1" style="top:560px"><div class="verb">Decides</div><div class="who code">code</div>
+        <div class="what">12,000 vs 15,500 UGX/kg <svg width="40" height="24" viewBox="0 0 40 24" style="margin:0 6px"><path d="M2 12h32m-9-8l9 8-9 8" stroke="#29382f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b id="gap" class="mono" style="font-weight:400">−0.0%</b><span class="src" id="src">MAAIF/UCDA · Aug 2026</span></div></div>
+      <div class="row" id="r2" style="top:684px"><div class="verb">Rewords</div><div class="who model">Qwen3.5-2B</div>
+        <div class="what">the cited answer, in plain words, <span style="color:var(--muted)">in the chat only</span></div></div>
+      <div class="row" id="r3" style="top:808px"><div class="verb">Checks</div><div class="who code">code</div>
+        <div class="what">every word against the answer<br><span style="color:var(--muted)">SMS always get the fixed text</span></div></div>
+      <div class="abs hd" id="Cfin" style="left:760px; top:938px; font-size:84px; color:var(--leaf)"><div class="m"><span>Code has the last word.</span></div></div>
     </div>
-  </section>
 
-  <!-- D · SMS bonus -->
-  <section class="scene light" id="D">
-    <div class="abs label" style="left:160px; top:96px">Plus · if Noor has signal</div>
-    <div class="abs h" id="Dh" style="left:150px; top:150px; font-size:96px">She can ask from the slope, by SMS.</div>
-    <div class="basic" id="Dbasic" style="left:220px; top:300px">
-      <div class="lcd" id="Dlcd"></div>
-      <div class="keys" id="Dkeys">
+    <!-- D · SMS, if Noor has signal -->
+    <div id="D" class="layer">
+      <div class="abs kick" id="Dk" style="left:150px; top:112px"><div class="m"><span>Plus · if Noor has signal</span></div></div>
+      <div class="abs hd" id="Dh" style="left:146px; top:156px; font-size:86px"><div class="m"><span>She can also ask by SMS, from the field.</span></div></div>
+      <svg class="abs" id="arcs" style="left:0; top:0" width="1920" height="1080">
+        <mask id="mOut" maskUnits="userSpaceOnUse"><path id="arcOutM" d="M560 500 Q 975 300 1385 520" stroke="white" stroke-width="12" fill="none"/></mask>
+        <mask id="mBack" maskUnits="userSpaceOnUse"><path id="arcBackM" d="M1385 720 Q 975 830 560 660" stroke="white" stroke-width="12" fill="none"/></mask>
+        <path id="arcOut" d="M560 500 Q 975 300 1385 520" stroke="#9fb3a5" stroke-width="4" fill="none" stroke-dasharray="14 12" mask="url(#mOut)"/>
+        <path id="arcBack" d="M1385 720 Q 975 830 560 660" stroke="#9fb3a5" stroke-width="4" fill="none" stroke-dasharray="14 12" mask="url(#mBack)"/>
+      </svg>
+      <div class="abs kick" id="arcL" style="left:826px; top:336px"><div class="m"><span>Carrier SMS · no internet</span></div></div>
+      <div class="abs" id="env"><svg width="74" height="52" viewBox="0 0 74 52"><rect x="2" y="2" width="70" height="48" rx="8" fill="#305a4c"/><path d="M6 8l31 22 31-22" stroke="white" stroke-width="4" fill="none" stroke-linejoin="round"/></svg></div>
+      <div id="basic"><div id="lcd"></div><div id="keys">
         <div class="key">1</div><div class="key">2</div><div class="key">3</div><div class="key">4</div><div class="key">5</div><div class="key">6</div>
-        <div class="key">7</div><div class="key">8</div><div class="key">9</div><div class="key">*</div><div class="key">0</div><div class="key">#</div>
+        <div class="key">7</div><div class="key">8</div><div class="key">9</div><div class="key">*</div><div class="key">0</div><div class="key">#</div></div></div>
+      <div class="badge" id="auto" style="left:1036px; top:596px">Answered automatically</div>
+      <div class="abs" id="gist" style="left:640px; top:800px; width:700px">
+        <div class="kick" style="margin-bottom:12px"><div class="m"><span>The reply, in English</span></div></div>
+        <div style="font-size:36px; line-height:1.25; font-weight:600"><div class="m"><span>“…UGX 15,500/kg. 12,000 is 23% below.</span></div><div class="m"><span>Ask the cooperative before selling.”</span></div></div>
       </div>
+      <div class="pill" id="p0" style="left:640px; top:982px">Only numbers she lists</div>
+      <div class="pill" id="p1" style="left:990px; top:982px">11 s reply (emulator)</div>
     </div>
-    <svg class="abs" id="Dline" style="left:640px; top:560px" width="560" height="60"><line x1="0" y1="30" x2="560" y2="30" stroke="#b9c3b3" stroke-width="4" stroke-dasharray="12 12"/></svg>
-    <div class="abs" id="Ddot" style="top:566px; padding:8px 16px; border-radius:8px; background:var(--leaf); color:white; font-family:Mono; font-weight:700; font-size:24px">SMS</div>
-    <div class="abs label" style="left:760px; top:640px">Carrier SMS · no internet</div>
-    <div class="phone" id="Dphone" style="left:1230px; top:330px; width:300px; height:620px; border-radius:42px; padding:11px"><div class="screen" style="border-radius:32px">
-      <img src="media/shot-price.png">
-    </div></div>
-    <div class="abs" id="Dans" style="left:1580px; top:420px; font-size:30px; font-weight:700; width:300px; color:var(--leaf)">Answered on the phone, automatically.</div>
-    <div class="abs" id="Dtr" style="left:650px; top:720px; font-size:28px; color:var(--muted); width:520px; line-height:1.3">“…farm-gate Aug 2026: UGX 15,500/kg. 12,000 is 23% below. Ask the cooperative before selling.”</div>
-    <div class="pill" id="Dp0" style="left:1240px; top:975px">Only numbers she lists</div>
-    <div class="pill" id="Dp1" style="left:1560px; top:975px">≤ 2 SMS</div>
-    <div class="pill" id="Dp2" style="left:650px; top:975px">Real reply time: 11 s (emulator)</div>
+
+  </section>
+
+  <!-- A · cold open -->
+  <section class="layer dark" id="A">
+    <div class="abs kick" id="A0" style="left:160px; top:150px; color:#8fa394"><div class="m"><span>Noor · coffee, maize, beans · Ondera highlands</span></div></div>
+    <div class="abs hd" id="A1" style="left:150px; top:262px; font-size:200px"><div class="m"><span>No Wi-Fi.</span></div></div>
+    <div class="abs hd" id="A2" style="left:150px; top:452px; font-size:200px"><div class="m"><span>No data bundle.</span></div></div>
+    <div class="abs" id="A3" style="left:158px; top:716px; font-size:70px; font-weight:650; line-height:1.12"><div class="m"><span>One smartphone in the house:</span></div><div class="m"><span style="color:var(--leaf2)">her daughter's.</span></div></div>
   </section>
 
   <!-- E · proof -->
-  <section class="scene light" id="E">
-    <div class="abs label" style="left:160px; top:150px">Measured on data it never saw · through the real app</div>
-    <div class="abs h" id="E0" style="left:150px; top:290px; font-size:330px">97.4%</div>
-    <div class="abs" id="E0c" style="left:165px; top:640px; font-size:48px; font-weight:600; width:1500px">right when it answers · 360 coffee phone photos</div>
-    <div class="abs h" id="E1" style="left:150px; top:290px; font-size:330px">0</div>
-    <div class="abs" id="E1c" style="left:165px; top:640px; font-size:48px; font-weight:600; width:1500px">rust leaves called “healthy”<br><span style="color:var(--muted); font-size:38px">136 of 137 photos that are not crop leaves: turned away</span></div>
-    <div class="abs h" id="E2" style="left:150px; top:290px; font-size:330px">93%<span style="color:var(--muted); font-size:170px"> vs 83%</span></div>
-    <div class="abs" id="E2c" style="left:165px; top:640px; font-size:48px; font-weight:600; width:1600px">SMS understood · on-phone model + keywords vs keywords alone<br><span style="color:var(--muted); font-size:38px">30 messages written after training</span></div>
+  <section class="layer light" id="E">
+    <div class="abs kick" id="Ek" style="left:150px; top:150px"><div class="m"><span>Test data it never saw · run through the real app</span></div></div>
+    <div class="col" style="left:150px"><div class="big" id="n0"></div><div id="e0">
+      <div class="cap"><div class="m"><span>right when it answers</span></div></div><div class="sub"><div class="m"><span>360 coffee phone photos</span></div></div></div></div>
+    <div class="col" style="left:790px"><div class="big"><span id="n1" style="display:inline-block">0</span></div><div id="e1">
+      <div class="cap"><div class="m"><span>rust leaves called “healthy”</span></div></div><div class="sub"><div class="m"><span>of 161</span></div></div></div></div>
+    <div class="col" style="left:1420px"><div class="big" id="n2"></div><div id="e2">
+      <div class="cap"><div class="m"><span>SMS answered right,</span></div><div class="m"><span>with Qwen3.5-0.8B</span></div></div><div class="sub"><div class="m"><span>keywords alone: 83% · 30 new SMS</span></div></div></div></div>
   </section>
 
-  <!-- F · small -->
-  <section class="scene light" id="F">
-    <div class="abs label" style="left:160px; top:150px">Small enough for a 4 GB phone · drawn to scale</div>
-    <div class="sizebar" id="F0" style="left:160px; top:330px; background:var(--soil)"></div>
-    <div class="abs" id="F0l" style="top:338px; font-size:40px; font-weight:700">0.4 MB  advice, prices, keywords</div>
-    <div class="sizebar" id="F1" style="left:160px; top:470px; background:var(--leaf)"></div>
-    <div class="abs" id="F1l" style="top:478px; font-size:40px; font-weight:700">13 MB  leaf model</div>
-    <div class="sizebar" id="F2" style="left:160px; top:610px; background:repeating-linear-gradient(90deg, #8ea596 0 22px, #a8bcad 22px 44px)"></div>
-    <div class="abs" id="F2l" style="left:180px; top:618px; font-size:40px; font-weight:700; color:white">542 MB  language model · optional</div>
-    <div class="abs h" id="Fh" style="left:150px; top:780px; font-size:88px">No internet. Ever.</div>
+  <!-- F · sizes -->
+  <section class="layer light" id="F">
+    <div class="abs kick" id="Fk" style="left:160px; top:150px"><div class="m"><span>All of it on the phone · sizes to scale</span></div></div>
+    <div class="sizebar" id="F0" style="top:250px; background:var(--soil)"></div><div class="sizel" id="F0l" style="top:259px"><span class="mono">0.4 MB</span>advice, prices, words</div>
+    <div class="sizebar" id="F1" style="top:360px; background:var(--leaf)"></div><div class="sizel" id="F1l" style="top:369px"><span class="mono">13 MB</span>leaf model</div>
+    <div class="sizebar" id="F2" style="top:470px; background:#7f9b89"></div><div class="sizel" id="F2l" style="top:479px"><span class="mono">542 MB</span>Qwen3.5-0.8B · reads · optional</div>
+    <div class="sizebar" id="F3" style="top:580px; background:repeating-linear-gradient(90deg, #9db3a4 0 26px, #b2c4b7 26px 52px)"></div><div class="sizel" id="F3l" style="top:589px"><span class="mono">1.28 GB</span>Qwen3.5-2B · rewords · optional</div>
+    <div class="abs hd" id="Fh" style="left:150px; top:780px; font-size:100px"><div class="m"><span>Answers never touch the internet.</span></div></div>
   </section>
 
   <!-- G · outro -->
-  <section class="scene dark" id="G">
-    <div class="abs h" id="G0" style="left:150px; top:250px; font-size:190px">Not sure?<br><span style="color:#9fd1b1">Ask a person.</span></div>
-    <div class="abs" id="G1" style="left:160px; top:690px; font-size:44px; font-weight:700">Pandastic · Team Pandastic 4</div>
-    <div class="abs" id="G2" style="left:160px; top:752px; font-size:36px; color:#cfe0d2">Luca Apolloni · Eren Homburg · Matteo Pelossi</div>
-    <div class="abs mono" id="G3" style="left:160px; top:830px; font-size:30px; color:#9fd1b1">github.com/Casa-del-dev/Pandastic-4</div>
-    <div class="abs" id="G4" style="left:160px; top:960px; font-size:20px; color:#86978a; width:1600px">Photos: RoCoLe (CC BY 4.0) · Prices: MAAIF/UCDA, WFP · Advice: CABI PlantwisePlus and others · Music: “Warm Fuzz” by HoliznaCC0 (CC0) · App screens: Android emulator</div>
+  <section class="layer dark" id="G">
+    <div class="abs hd" id="G0" style="left:150px; top:190px; font-size:200px"><div class="m"><span>Not sure?</span></div><div class="m"><span style="color:var(--leaf2)">Ask a person.</span></div></div>
+    <div class="abs" id="G1" style="left:158px; top:650px; font-size:46px; font-weight:750"><div class="m"><span>Team Pandastic 4</span></div></div>
+    <div class="abs" id="G2" style="left:158px; top:714px; font-size:38px; color:#cfe0d2"><div class="m"><span>Luca Apolloni · Eren Homburg · Matteo Pelossi</span></div></div>
+    <div class="abs mono" id="G3" style="left:158px; top:800px; font-size:30px; color:var(--leaf2)"><div class="m"><span>github.com/Casa-del-dev/Pandastic-4</span></div></div>
+    <div class="abs" id="G4" style="left:158px; top:960px; font-size:21px; color:#8a9b8e; width:1640px"><div class="m"><span>Photos: RoCoLe (CC BY 4.0) · Prices: MAAIF/UCDA, WFP · Advice: CABI PlantwisePlus and others · Models: Qwen3.5 (Apache-2.0) · Music: “Warm Fuzz” by HoliznaCC0 (CC0) · App screens: Android emulator</span></div></div>
   </section>
 
+  <div id="wipe"></div>
+  <div id="fade"></div>
 </div>
 
 <script>
-const BEAT = 60 / 126.5, B = k => 0.94 + 2 * BEAT * k;   // strong hits of the track, every 0.949 s
-const END = 57.0;
-const SCENES = { A: [0, B(4)], BC: [B(4), B(31)], D: [B(31), B(41)], E: [B(41), B(50)], F: [B(50), B(54)], G: [B(54), END + 1] };
+// ───────────────────────── timing ─────────────────────────
+const BEAT = 60 / 126.5, B = k => 0.94 + 2 * BEAT * k;   // the track's strong hits, every 0.949 s
+const END = 58.0;
+const PAN = B(4.5), PAN_D = 0.95;                         // cold open → title: the camera pans down onto the light page
+const T_IN = B(5.5), T_OUT = B(8) - 0.4;
+const SCR_RUST = B(7.6), FLY = B(8), FLY_D = 0.85, SCAN = B(9), SCAN_D = 1.25, MODEL = B(10.5), BARS = B(11), OK = B(12);
+const FLIP = B(13.5), FLIP_D = 0.75, SCAN2 = B(14) + 0.15, SCAN2_D = 0.75, THRESH = B(14.5), BARS2 = B(15), NO = B(16);
+const MONT = B(18.5), C0 = B(21);
+const TYPE = C0 + 0.35, CPS = 40, HL = B(23), R0 = B(24), TOK = R0 + 0.3, TPS = 15, GHOST = B(25.5), SNIP = B(26);
+const R1 = B(27), R2 = B(28.5), R3 = B(29.5), FIN = B(31);
+const D0 = B(33.5), KEYS = B(34.5), KPS = 8, SEND = B(35.5), FLY_SMS = 0.85, BACK = B(37), REPLY = B(38), PILLS = B(39.5);
+const E0 = B(43), E_1 = B(43.5), E_2 = B(45.5), E_3 = B(47.5);
+const F0 = B(51.5), G0 = B(56);
+
+const QUESTION = 'A buyer offers 12000 for my coffee, is it fair?';
+const KEYWORDS = { offers: 'price', coffee: 'crop', '12000': 'offer' };
+// Qwen3.5-0.8B's own tokens for its answer (llama-tokenize); the app's grammar ends after the symptom.
+const TOKENS = ['{"', 'lang', '":"', 'en', '","', 'intent', '":"', 'price', '","', 'crop', '":"', 'coffee', '","', 'sym', 'ptom', '":', 'null', ',"'];
+const GHOSTS = ['com', 'modity', '":"', 'coffee', '_ar', 'ab', 'ica', '_p', 'arch', 'ment', '","', 'offer', '":', '1', '2', '0', '0', '0', '}'];
+const SMS_IN = 'P 1 12000';
+const SMS_OUT = 'Pandastic: Kahawa Arabica (parchment), bei ya shambani Ago 2026: UGX 15,500/kg (MAAIF/UCDA). Bei ya 12,000 iko chini kwa 23%. Uliza chama kabla ya kuuza.';
+const SHARE = { rust: 90, healthy: 50 };                   // what the app reported for these two photos
+
+// ───────────────────────── helpers ─────────────────────────
 const $ = id => document.getElementById(id);
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-const out = x => 1 - Math.pow(1 - clamp(x), 3);            // ease-out cubic
-const expo = x => (x = clamp(x)) >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
 const p = (t, a, d) => clamp((t - a) / d);
-function vis(el, on) { el.style.visibility = on ? 'visible' : 'hidden'; }
-function rise(el, t, a, d = 0.32, dy = 46) {             // slides up into place, snaps
-  const k = expo(p(t, a, d)); vis(el, t >= a);
-  el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * dy}px)`;
-}
-function stamp(el, t, a, rot = -2) {                       // lands hard, settles
-  const k = expo(p(t, a, 0.22)); vis(el, t >= a);
-  el.style.opacity = clamp(k * 1.6); el.style.transform = `scale(${1.28 - 0.28 * k}) rotate(${rot * k}deg)`;
-}
-function window_(el, t, a, b) { vis(el, t >= a && t < b); }
-function type(el, text, t, a, cps) { const n = Math.floor(clamp((t - a) * cps, 0, text.length)); el.textContent = t < a ? '' : text.slice(0, n); return n; }
+const lerp = (a, b, k) => a + (b - a) * k;
+const out3 = x => 1 - (1 - x) ** 3, out5 = x => 1 - (1 - x) ** 5, in3 = x => x ** 3;
+const io3 = x => x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2;
+const io5 = x => x < 0.5 ? 16 * x ** 5 : 1 - (-2 * x + 2) ** 5 / 2;
+const back = x => { const c = 1.5; return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2; };
 
+function put(el, { x = 0, y = 0, s = 1, r = 0, o = 1, sx, ry } = {}) {
+  el.style.transform = `translate(${x}px, ${y}px) scale(${s})${sx !== undefined ? ` scaleX(${sx})` : ''}${ry !== undefined ? ` rotateY(${ry}deg)` : ''} rotate(${r}deg)`;
+  el.style.opacity = o; el.style.visibility = o > 0.002 ? 'visible' : 'hidden';
+}
+// Masked lines: each `.m > span` slides up into view from a, and up out of view from b.
+function lines(el, t, a, b = 1e9, gap = 0.08, d = 0.8) {
+  const spans = el.querySelectorAll('.m > span');
+  spans.forEach((s, i) => {
+    const k = out5(p(t, a + i * gap, d)), q = in3(p(t, b + i * 0.05, 0.42));
+    s.style.transform = `translateY(${(1 - k) * 115 - q * 115}%) rotate(${(1 - k) * 2.5}deg)`;
+  });
+  el.style.visibility = t >= a && t < b + 0.42 + spans.length * 0.05 ? 'visible' : 'hidden';
+}
+// Rises into place and drops out.
+function rise(el, t, a, b = 1e9, dy = 40, d = 0.7) {
+  const k = out5(p(t, a, d)), q = in3(p(t, b, 0.4));
+  put(el, { y: (1 - k) * dy - q * dy * 0.6, o: Math.min(k * 1.4, 1) * (1 - q) });
+}
+// A stamp lands hard and settles; it lifts off when it leaves.
+function stamp(el, t, a, b = 1e9, rot = -2) {
+  const k = out5(p(t, a, 0.28)), q = in3(p(t, b, 0.3));
+  put(el, { s: lerp(1.55, 1, k) * (1 + q * 0.08), r: lerp(-7, rot, k), o: clamp(k * 2.2) * (1 - q) });
+}
+const IMPACTS = [];
+const impact = (time, amp = 1) => IMPACTS.push([time, amp]);
+function shake(t) {
+  let x = 0, y = 0;
+  for (const [ti, a] of IMPACTS) {
+    const u = t - ti; if (u < 0 || u > 0.4) continue;
+    const e = a * Math.exp(-u / 0.075);
+    x += 4 * e * Math.sin(u * 2 * Math.PI * 17 + 1.3); y += 8 * e * Math.sin(u * 2 * Math.PI * 23);
+  }
+  return [x, y];
+}
 // Sound cues for sfx.py, from the same timeline.
 const CUES = [];
 const cue = (time, kind) => CUES.push([+time.toFixed(3), kind]);
 
+// ───────────────────────── build ─────────────────────────
+const bub = $('bubT');
+QUESTION.split(' ').forEach((w, i) => {
+  const span = document.createElement('span'); span.className = 'w';
+  const clean = w.replace(/[,?]/g, '');
+  span.innerHTML = (KEYWORDS[clean] ? `<span class="hl"></span><span class="tag">${KEYWORDS[clean]}</span>` : '') + '<span class="txt"></span>';
+  span.dataset.word = w; bub.appendChild(span);
+  if (i < QUESTION.split(' ').length - 1) bub.appendChild(document.createTextNode(' '));
+});
+const toks = $('toks');
+TOKENS.forEach(s => { const e = document.createElement('span'); e.className = 'tok'; e.textContent = s; toks.appendChild(e); });
+GHOSTS.forEach(s => { const e = document.createElement('span'); e.className = 'tok ghost'; e.textContent = s; toks.appendChild(e); });
+function odometer(el, text) {                            // digits become rolling columns
+  el.innerHTML = [...text].map(c => /\d/.test(c)
+    ? `<span class="odo"><span>${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(d => `<span style="display:block">${d}</span>`).join('')}</span></span>`
+    : `<span>${c}</span>`).join('');
+}
+odometer($('n0'), '00.0%'); odometer($('n2'), '00%');
+function roll(el, value, decimals) {                     // a real odometer: a digit turns while the ones below pass 9
+  const cols = [...el.querySelectorAll('.odo > span')];
+  const u = value * 10 ** decimals;
+  cols.forEach((col, i) => {
+    const k = cols.length - 1 - i, unit = 10 ** k, x = u / unit;
+    let pos = k === 0 ? x % 10 : Math.floor(x) % 10 + Math.max(0, (u % unit) - (unit - 1));
+    col.style.transform = `translateY(${-pos}em)`;
+    if (i === 0) col.parentElement.style.opacity = clamp(x);   // no leading zero
+  });
+}
+
+// ───────────────────────── render ─────────────────────────
 function render(t) {
-  for (const [id, [a, b]] of Object.entries(SCENES)) $(id).style.display = t >= a && t < b ? 'block' : 'none';
-  if (t < B(4)) renderA(t); else if (t < B(31)) renderBC(t); else if (t < B(41)) renderD(t);
-  else if (t < B(50)) renderE(t); else if (t < B(54)) renderF(t); else renderG(t);
+  const [sx, sy] = shake(t);
+  $('cam').style.transform = `translate(${sx}px, ${sy}px)`;
+  renderA(t); renderL(t); renderE(t); renderF(t); renderG(t); renderWipe(t);
+  $('fade').style.opacity = in3(p(t, END - 0.5, 0.5));
 }
 
 function renderA(t) {
-  push($('A'), t, 0, 4.7);
-  rise($('A0'), t, 0.15, 0.4, 20);
-  stamp($('A1'), t, B(0), 0); stamp($('A2'), t, B(1), 0); rise($('A3'), t, B(2), 0.3);
-  vis($('A4'), t >= B(3)); rise($('A5'), t, B(3) + 0.25, 0.35);
+  const k = io3(p(t, PAN, PAN_D));
+  $('A').style.transform = `translateY(${-k * 1080}px)`;
+  $('A').style.display = t < PAN + PAN_D ? 'block' : 'none';
+  lines($('A0'), t, 0.25);
+  lines($('A1'), t, B(0)); lines($('A2'), t, B(1)); lines($('A3'), t, B(2), 1e9, B(2.5) - B(2));
 }
 
-function renderBC(t) {
-  // phone: slides in once, then the screen changes with the story
-  const ph = $('phone'); const k = expo(p(t, B(4), 0.4)); ph.style.transform = `translateY(${(1 - k) * 1100}px)`;
-  const shot = t < B(10) ? 'rust' : t < B(14) ? 'notsure' : t < B(15.5) ? 'blurry' : t < B(17) ? 'notleaf' : 'price';
-  const img = $('shot'); if (!img.src.endsWith(`shot-${shot}.png`)) img.src = `media/shot-${shot}.png`;
-  // scroll the screenshot a little while it is on screen, like a person reading it
-  const since = { rust: B(4), notsure: B(10), blurry: B(14), notleaf: B(15.5), price: B(17) }[shot];
-  const span = { rust: 0, notsure: 0, blurry: 0, notleaf: 0, price: 120 }[shot];
-  img.style.transform = `translateY(${-span * out(p(t, since + 0.6, 4))}px)`;
-  rise($('Blabel'), t, B(4) + 0.1);
-  const inB = t < B(17); $('B').style.display = inB ? 'block' : 'none'; $('C').style.display = inB ? 'none' : 'block';
-  if (inB) renderB(t); else renderC(t);
+// The light page: title, leaf, question, SMS; it ends under the green wipe.
+function renderL(t) {
+  const pan = io3(p(t, PAN, PAN_D));
+  $('L').style.display = t >= PAN && t < E0 ? 'block' : 'none';
+  $('L').style.transform = `translateY(${(1 - pan) * 1080}px)`;
+  renderPhone(t);
+  // title
+  const lk = back(p(t, T_IN - 0.15, 0.6)), lq = in3(p(t, T_OUT, 0.35));
+  put($('Tlogo'), { s: lk * (1 - lq), r: (1 - lk) * -20, o: clamp(lk * 2) * (1 - lq) });
+  lines($('T1'), t, T_IN, T_OUT); lines($('T2'), t, T_IN + 0.3, T_OUT + 0.05);
+  renderB(t); renderC(t); renderD(t);
+}
+
+const SCREENS = [[0, 'hello'], [SCR_RUST, 'rust'], [FLIP, 'notsure'], [MONT, 'blurry'], [MONT + 1.2, 'notleaf'], [C0 - 0.35, 'price'], [D0 - 0.1, 'sms']];
+function renderPhone(t) {
+  // C → D: the phone steps back to the right side of the frame, where it waits for Noor's SMS
+  const z = io3(p(t, D0 - 0.5, 1.0));
+  const ph = $('phone');
+  ph.style.transform = `translate(${z * 1250}px, ${z * 250}px) scale(${1 - z * 0.26})`;
+  let i = 0; while (i + 1 < SCREENS.length && t >= SCREENS[i + 1][0]) i++;
+  const [at, name] = SCREENS[i], prev = SCREENS[Math.max(0, i - 1)][1];
+  const k = i === 0 ? 1 : out5(p(t, at, 0.55));
+  const a = $('scrA'), b = $('scrB');
+  if (!a.src.endsWith(`shot-${prev}.png`)) a.src = `media/shot-${prev}.png`;
+  if (!b.src.endsWith(`shot-${name}.png`)) b.src = `media/shot-${name}.png`;
+  put(a, { y: -k * 40, o: i === 0 ? 0 : 1 - k });
+  put(b, { y: (1 - k) * 70, o: k });
 }
 
 function renderB(t) {
-  const second = t >= B(10), montage = t >= B(14);
-  rise($('Bh'), t, B(4) + 0.15); window_($('Bh'), t, -1, B(14));
-  for (const id of ['Bphoto', 'Bchecks', 'Bmodel', 'Bbar0', 'Bbar1']) $(id).style.display = montage ? 'none' : 'block';
-  $('Bimg').src = second ? 'media/leaf-healthy.jpg' : 'media/leaf-rust.jpg';
-  stamp($('Bphoto'), t, second ? B(10) : B(5), second ? 1.5 : -1.5);
-  const c0 = second ? B(10) + 0.25 : B(6);
-  for (let i = 0; i < 3; i++) rise($('Bc' + i), t, c0 + i * BEAT * 0.5, 0.2, 20);
-  $('Bshare').textContent = second ? '0.50' : '0.90';
-  rise($('Bmodel'), t, second ? -1 : B(7), 0.3);
-  // bars: rust photo → rust 0.98; healthy photo → healthy 0.98 under the 0.99 line
-  const fa = second ? B(11) : B(8), f = out(p(t, fa, 0.7));
-  const v0 = second ? 0.01 : 0.98, v1 = second ? 0.98 : 0.01;
-  $('Bf0').style.width = (f * v0 * 100) + '%'; $('Bf1').style.width = (f * v1 * 100) + '%';
-  $('Bf1').style.background = second ? 'var(--red)' : 'var(--leaf)';
-  $('Bv0').textContent = (f * v0).toFixed(2); $('Bv1').textContent = (f * v1).toFixed(2);
-  rise($('Bbar0'), t, second ? B(10) + 0.9 : B(8) - 0.15, 0.2, 14); rise($('Bbar1'), t, second ? B(10) + 0.9 : B(8) - 0.05, 0.2, 14);
-  // the 0.99 line sits on the healthy bar's track
-  const trackLeft = 1090 + 260, trackW = 740 - 260 - 120;
-  $('Bthresh').style.left = (trackLeft + trackW * 0.99 - 2) + 'px'; $('Bthreshlabel').style.left = (trackLeft + trackW * 0.99 - 300) + 'px';
-  const th = second && !montage; stamp($('Bthresh'), t, th ? B(10) + 1.1 : 999, 0); stamp($('Bthreshlabel'), t, th ? B(10) + 1.2 : 999, 0);
-  window_($('Bthresh'), t, B(10) + 1.1, montage ? -1 : B(14)); window_($('Bthreshlabel'), t, B(10) + 1.2, montage ? -1 : B(14));
-  stamp($('Bok'), t, B(9)); window_($('Bok'), t, B(9), B(10)); rise($('Bokadv'), t, B(9) + 0.3); window_($('Bokadv'), t, B(9) + 0.3, B(10));
-  stamp($('Bno'), t, B(12), 2); window_($('Bno'), t, B(12), B(14)); rise($('Bnoadv'), t, B(12) + 0.3); window_($('Bnoadv'), t, B(12) + 0.3, B(14));
-  stamp($('Bblur'), t, B(14), 0); window_($('Bblur'), t, B(14), B(15.5));
-  stamp($('Bleaf'), t, B(15.5), 0); window_($('Bleaf'), t, B(15.5), B(17));
+  const end = C0 - 0.45;                                   // the vertical push to the question
+  const push = io3(p(t, end, 0.9)) * -1080;
+  lines($('Bk'), t, FLY);
+  // the photo leaves the chat on the phone and lands on the table; then it flips to the second photo
+  const card = $('card'), f = io3(p(t, FLY, FLY_D));
+  const lift = Math.sin(Math.PI * f) * -50;
+  const outM = in3(p(t, MONT - 0.35, 0.45));
+  put(card, { x: lerp(386 - 760, 0, f), y: lerp(66 - 190, 0, f) + lift - outM * 60, s: lerp(0.473, 1, f), r: (1 - f) * -6 + Math.sin(Math.PI * f) * 3, o: (t >= FLY ? 1 : 0) * (1 - outM) });
+  const fl = io5(p(t, FLIP, FLIP_D));
+  $('flip').style.transform = `translateZ(${Math.sin(Math.PI * fl) * 120}px) rotateY(${fl * 180}deg)`;
+  scanFace('R', t, SCAN, SCAN_D, MODEL); scanFace('H', t, SCAN2, SCAN2_D, BARS2 - 0.2);
+  // quality gate
+  const second = t >= FLIP;
+  const c0 = second ? SCAN2 : SCAN, cd = second ? SCAN2_D : SCAN_D;
+  const ticks = [c0 + cd * 0.25, c0 + cd * 0.55, c0 + cd + 0.05];
+  ['ck0', 'ck1', 'ck2'].forEach((id, i) => {
+    rise($(id), t, SCAN + 0.1 + i * 0.12, MONT - 0.35, 24, 0.6);
+    const reset = second ? out3(p(t, FLIP, 0.3)) : 0;      // the second photo is checked again
+    const draw = out3(p(t, ticks[i], 0.3));
+    const v = second && t < ticks[i] ? 1 - reset : draw;
+    $(id).querySelector('path').style.strokeDashoffset = 34 * (1 - v);
+    $(id).querySelector('circle').style.fill = v > 0.02 ? '#305a4c' : '#c4cec0';
+  });
+  const shareK = out3(p(t, c0, cd));
+  $('share').textContent = Math.round(shareK * (second ? SHARE.healthy : SHARE.rust)) + '%';
+  // the model and its two highest answers
+  rise($('model'), t, MODEL, MONT - 0.35, 30);
+  rise($('bar0'), t, MODEL + 0.25, MONT - 0.3, 20); rise($('bar1'), t, MODEL + 0.35, MONT - 0.25, 20);
+  const fillA = io3(p(t, BARS, 0.9)) * (1 - in3(p(t, FLIP, 0.35))), fillB = io3(p(t, BARS2, 0.95));
+  const rust = second ? 0.01 * fillB : 0.98 * fillA, healthy = second ? 0.98 * fillB : 0.01 * fillA;
+  $('f0').style.width = rust * 100 + '%'; $('f1').style.width = healthy * 100 + '%';
+  $('f1').style.background = second ? 'var(--red)' : 'var(--leaf)';
+  $('v0').textContent = rust.toFixed(2); $('v1').textContent = healthy.toFixed(2);
+  // the floor for "healthy": 0.99 on the healthy bar's track
+  const tx = 1150 + 200 + (690 - 200 - 110) * 0.99 - 2;
+  const tk = back(p(t, THRESH, 0.5)), tq = in3(p(t, MONT - 0.35, 0.3));
+  const bump = t > BARS2 + 0.8 ? Math.exp(-(t - BARS2 - 0.8) / 0.12) * Math.sin((t - BARS2 - 0.8) * 60) * 6 : 0;
+  put($('thresh'), { x: tx + bump, y: 574 - (1 - tk) * 120, o: clamp(tk * 3) * (1 - tq) });
+  const lk = out5(p(t, THRESH + 0.2, 0.5));
+  put($('threshL'), { x: tx + 4 - $('threshL').offsetWidth, y: 660 + (1 - lk) * 16, o: lk * (1 - tq) });
+  stamp($('okS'), t, OK, FLIP - 0.1);
+  stamp($('noS'), t, NO, MONT - 0.35, 2);
+  lines($('noSub'), t, NO + 0.3, MONT - 0.35);
+  // the gate's other answers
+  rise($('mB'), t, MONT, 1e9, 60); lines($('mBt'), t, MONT + 0.15);
+  rise($('mL'), t, MONT + 0.25, 1e9, 60); lines($('mLt'), t, MONT + 0.4);
+  $('Bw').style.transform = `translateY(${push}px)`;
+  $('Bw').style.display = t < C0 + 0.5 ? 'block' : 'none';
+}
+function scanFace(f, t, a, d, off) {
+  const k = io3(p(t, a, d)), o = 1 - out3(p(t, off, 0.4));
+  const on = t >= a;
+  $('mask' + f).style.clipPath = `inset(0 0 ${(1 - k) * 100}% 0)`;
+  $('mask' + f).style.opacity = on ? o : 0;
+  put($('scan' + f), { y: k * 587 - 2, o: on && k < 1 ? 1 : 0 });
+  put($('tag' + f), { o: on ? o * clamp((t - a) * 4) : 0 });
 }
 
-const QUESTION = 'A buyer offers 12000 for my coffee, is it fair?';
-const JSON_OUT = '{"lang":"en","intent":"price","crop":"coffee","symptom":null,"';
 function renderC(t) {
-  const end = t >= B(29);
-  rise($('Ch'), t, B(17)); window_($('Ch'), t, B(17), B(29));
-  rise($('Cq'), t, B(17) + 0.2, 0.25, 20); type($('Cqt'), QUESTION, t, B(17) + 0.3, 40); window_($('Cq'), t, B(17) + 0.2, B(29));
-  rise($('Creceipt'), t, B(18.5), 0.3, 30); $('Creceipt').style.display = t >= B(18.5) && t < B(29) ? 'block' : 'none';
-  rise($('Cr0'), t, B(19), 0.25, 18); rise($('Cr1'), t, B(20.5), 0.25, 18);
-  type($('Cjson'), JSON_OUT, t, B(20.5) + 0.2, 34); vis($('Cjson'), t >= B(20.5) + 0.2 && t < B(29));
-  stamp($('Ccut'), t, B(23), 0); window_($('Ccut'), t, B(23), B(29));
-  rise($('Cr2'), t, B(24), 0.25, 18);
-  const g = out(p(t, B(24) + 0.2, 0.7)); $('Cgap').textContent = '−' + (22.6 * g).toFixed(1) + '%';
-  rise($('Cr3'), t, B(25.5), 0.25, 18); rise($('Cr4'), t, B(27), 0.25, 18);
-  stamp($('Cend'), t, B(29), 0); window_($('Cend'), t, B(29), 99);
+  const start = C0 - 0.45, end = D0 - 0.55;
+  const push = (1 - io3(p(t, start, 0.9))) * 1080;
+  const C = $('C'); C.style.display = t >= start && t < D0 + 0.6 ? 'block' : 'none';
+  C.style.transform = `translateY(${push}px)`;
+  lines($('Ck'), t, C0, end);
+  // her question, typed, then the keywords light up
+  rise($('bub'), t, C0, end, 30);
+  const n = Math.floor(clamp((t - TYPE) * CPS, 0, QUESTION.length));
+  let used = 0;
+  [...$('bubT').querySelectorAll('.w')].forEach((w, i) => {
+    const word = w.dataset.word; const show = clamp(n - used, 0, word.length); used += word.length + 1;
+    w.querySelector('.txt').textContent = word.slice(0, show);
+    const hl = w.querySelector('.hl'), tag = w.querySelector('.tag');
+    if (hl) {
+      const order = Object.keys(KEYWORDS).indexOf(word.replace(/[,?]/g, ''));
+      const k = out3(p(t, HL + order * 0.22, 0.35));
+      hl.style.transform = `scaleX(${k})`;
+      put(tag, { y: (1 - out5(p(t, HL + order * 0.22 + 0.1, 0.5))) * -12, o: out5(p(t, HL + order * 0.22 + 0.1, 0.5)) });
+    }
+  });
+  $('caret').style.opacity = n < QUESTION.length && t >= TYPE ? 1 : (Math.floor(t * 2.4) % 2 ? 0.9 : 0) * (t < HL ? 1 : 0);
+  // the rows: who does what
+  [['r0', R0], ['r1', R1], ['r2', R2], ['r3', R3]].forEach(([id, a], i) => {
+    const r = $(id), k = out5(p(t, a, 0.7)), q = in3(p(t, end + i * 0.06, 0.4));
+    put(r.querySelector('.verb'), { x: (1 - k) * -40, o: k * (1 - q) });
+    put(r.querySelector('.who'), { x: (1 - out5(p(t, a + 0.12, 0.7))) * -40, o: out5(p(t, a + 0.12, 0.7)) * (1 - q) });
+    if (id !== 'r0') put(r.querySelector('.what'), { y: (1 - out5(p(t, a + 0.2, 0.7))) * 24, o: out5(p(t, a + 0.2, 0.7)) * (1 - q) });
+    else put(r.querySelector('.what'), { o: 1 - q });
+  });
+  // the model's tokens, one by one; the rest of its old answer is cut off and falls away
+  const chips = [...$('toks').children];
+  const fall = in3(p(t, SNIP + 0.1, 0.55));
+  chips.forEach((c, i) => {
+    if (i < TOKENS.length) {
+      const k = back(p(t, TOK + i / TPS, 0.3));
+      put(c, { s: lerp(0.5, 1, k), y: (1 - k) * 10, o: clamp(k * 2) });
+    } else {
+      const j = i - TOKENS.length, k = out3(p(t, GHOST + j * 0.015, 0.35));
+      const drift = fall * (220 + (j % 5) * 40);
+      put(c, { y: drift, r: fall * ((j % 3) - 1) * 14, o: k * 0.9 * clamp(1 - fall * 1.6) });
+    }
+  });
+  const last = chips[TOKENS.length - 1], cut = in3(p(t, SNIP - 0.05, 0.001));
+  const sl = $('snipline'), lr = last.getBoundingClientRect(), cr = C.getBoundingClientRect();
+  sl.style.left = (lr.right - cr.left + 2) + 'px'; sl.style.top = (lr.top - cr.top - 16) + 'px';
+  sl.style.height = (out3(p(t, SNIP - 0.05, 0.22)) * (lr.height + 32)) + 'px';
+  sl.style.opacity = cut * (1 - in3(p(t, SNIP + 0.9, 0.4)));
+  rise($('snipL'), t, SNIP + 0.5, end, 18);
+  const g = out3(p(t, R1 + 0.35, 0.9)); $('gap').textContent = '−' + (22.6 * g).toFixed(1) + '%';
+  put($('src'), { o: out3(p(t, R1 + 0.9, 0.5)) });
+  lines($('Cfin'), t, FIN, end + 0.1);
+  // at the last line, the two code steps light up
+  const glow = out3(p(t, FIN, 0.5)) * (1 - p(t, end, 0.3));
+  document.querySelectorAll('#C .who.code').forEach(w => { w.style.boxShadow = `0 0 0 ${glow * 5}px rgba(48, 90, 76, ${0.35 * glow})`; });
 }
 
-const SMS_IN = 'P 1 12000';
-const SMS_OUT = 'Pandastic: Kahawa Arabica (parchment), bei ya shambani Ago 2026: UGX 15,500/kg (MAAIF/UCDA). Bei ya 12,000 iko chini kwa 23%. Uliza chama kabla ya kuuza.\nAI ya simu imeelewa: bei, kahawa, 12,000.';
 function renderD(t) {
-  rise($('Dh'), t, B(31) + 0.05);
-  const bk = expo(p(t, B(31), 0.4)); $('Dbasic').style.transform = `translateX(${(1 - bk) * -700}px)`;
-  const pk = expo(p(t, B(31) + 0.15, 0.4)); $('Dphone').style.transform = `translateX(${(1 - pk) * 900}px)`;
-  const lcd = $('Dlcd'); const typed = type({ set textContent(v) { lcd.dataset.typed = v } }, SMS_IN, t, B(32), 9);
-  const keys = [...$('Dkeys').children];
-  keys.forEach(k => k.classList.remove('on'));
-  if (t >= B(32) && typed < SMS_IN.length) { const ch = SMS_IN[typed] ?? ''; const kk = keys.find(k => k.textContent === ch); if (kk) kk.classList.add('on'); }
-  const sendAt = B(33.4), backAt = B(36), replyAt = B(36.8);
-  if (t < replyAt) lcd.innerHTML = `<b>To: Home</b><br><br>${(lcd.dataset.typed || '')}<span style="opacity:${Math.floor(t * 2.2) % 2 ? 1 : 0}">▌</span>` + (t >= sendAt ? '<br><br>Sent ✓' : '');
-  else lcd.innerHTML = '<b>From: Home</b><br>' + SMS_OUT.slice(0, Math.floor((t - replyAt) * 140)).replace('\n', '<br>');
-  const dot = $('Ddot'); const going = p(t, sendAt, 0.55), coming = p(t, backAt, 0.55);
-  vis(dot, (t >= sendAt && going < 1) || (t >= backAt && coming < 1));
-  const x = t < backAt ? 640 + out(going) * 500 : 1140 - out(coming) * 500; dot.style.left = x + 'px';
-  rise($('Dans'), t, B(34.6), 0.3); window_($('Dans'), t, B(34.6), 99);
-  rise($('Dtr'), t, B(37.6), 0.3, 14); rise($('Dp2'), t, B(38.1), 0.25, 14); rise($('Dp0'), t, B(38.6), 0.25, 14); rise($('Dp1'), t, B(39.1), 0.25, 14);
+  const D = $('D'); D.style.display = t >= D0 - 0.6 ? 'block' : 'none';
+  lines($('Dk'), t, D0 + 0.1); lines($('Dh'), t, D0 + 0.2, 1e9, 0.12);
+  const bk = out5(p(t, D0 - 0.25, 1.0));
+  put($('basic'), { x: (1 - bk) * -620, r: (1 - bk) * -8, o: t >= D0 - 0.25 ? 1 : 0 });
+  // Noor types the code; the keys she presses light up
+  const typed = Math.floor(clamp((t - KEYS) * KPS, 0, SMS_IN.length));
+  const keys = [...$('keys').children]; keys.forEach(k => k.classList.remove('on'));
+  if (t >= KEYS && typed < SMS_IN.length) { const kk = keys.find(k => k.textContent === SMS_IN[typed]); if (kk) kk.classList.add('on'); }
+  const caret = `<span style="display:inline-block; width:10px; height:18px; margin-left:2px; vertical-align:-3px; background:#1f2b22; opacity:${Math.floor(t * 2.4) % 2 ? 1 : 0}"></span>`;
+  const lcd = $('lcd');
+  if (t < REPLY) lcd.innerHTML = `<b>To: Home</b><br><br>${SMS_IN.slice(0, t >= KEYS ? typed : 0)}${t < SEND ? caret : ''}${t >= SEND ? '<br><br>Sent' : ''}`;
+  else lcd.innerHTML = '<b>From: Home</b><br>' + SMS_OUT.slice(0, Math.floor((t - REPLY) * 130));
+  // the SMS travels to the house phone and the reply comes back
+  const out = $('arcOut'), bck = $('arcBack'), L1 = out.getTotalLength(), L2 = bck.getTotalLength();
+  const g1 = io3(p(t, SEND, FLY_SMS)), g2 = io3(p(t, BACK, FLY_SMS));
+  $('arcOutM').setAttribute('stroke-dasharray', `${L1 * g1} ${L1 + 10}`); $('arcBackM').setAttribute('stroke-dasharray', `${L2 * g2} ${L2 + 10}`);
+  out.style.opacity = t >= SEND ? 1 : 0; bck.style.opacity = t >= BACK ? 1 : 0;
+  const env = $('env');
+  if (t >= SEND && t < BACK + FLY_SMS + 0.1) {
+    const going = t < BACK, pt = going ? out.getPointAtLength(L1 * g1) : bck.getPointAtLength(L2 * g2);
+    const g = going ? g1 : g2, arrive = going ? p(t, SEND + FLY_SMS, 0.15) : p(t, BACK + FLY_SMS, 0.15);
+    put(env, { x: pt.x - 37, y: pt.y - 26, s: 1 + Math.sin(Math.PI * g) * 0.25, r: (going ? -1 : 1) * (g - 0.5) * 30, o: 1 - arrive });
+  } else put(env, { o: 0 });
+  lines($('arcL'), t, SEND + 0.25);
+  rise($('auto'), t, SEND + FLY_SMS + 0.1, 1e9, 20);
+  lines($('gist'), t, REPLY + 0.2, 1e9, 0.1);
+  rise($('p0'), t, PILLS, 1e9, 20); rise($('p1'), t, PILLS + 0.2, 1e9, 20);
 }
 
-function push(el, t, a, d) { el.style.scale = String(1 + 0.025 * clamp((t - a) / d)); }
+function renderWipe(t) {
+  // a green panel with a slanted edge sweeps across: the light page leaves, the numbers arrive
+  const k = io3(p(t, E0 - 0.6, 1.2));
+  const w = $('wipe');
+  w.style.display = t > E0 - 0.6 && t < E0 + 0.6 ? 'block' : 'none';
+  w.style.left = lerp(1920 + 200, -2600 - 200, k) + 'px';
+  w.style.clipPath = 'polygon(220px 0, 100% 0, calc(100% - 220px) 100%, 0 100%)';
+}
+
 function renderE(t) {
-  push($('E'), t, B(41), 9);
-  const slides = [['E0', 'E0c', B(41)], ['E1', 'E1c', B(44)], ['E2', 'E2c', B(47)]];
-  slides.forEach(([n, c, a], i) => { const b = i < 2 ? slides[i + 1][2] : 999; stamp($(n), t, a, 0); rise($(c), t, a + 0.25, 0.3, 20); window_($(n), t, a, b); window_($(c), t, a + 0.25, b); });
-  if (t >= B(41) && t < B(44)) $('E0').textContent = (97.4 * out(p(t, B(41), 0.55))).toFixed(1) + '%';
+  const up = io3(p(t, F0 - 0.45, 0.9));
+  $('E').style.display = t >= E0 && t < F0 + 0.5 ? 'block' : 'none';
+  $('E').style.transform = `translateY(${-up * 1080}px)`;
+  lines($('Ek'), t, E0 + 0.3);
+  // 97.4% rolls up; 0 slams down; 93% rolls on from the keywords' 83%
+  rise($('n0'), t, E_1, 1e9, 30, 0.5); roll($('n0'), 97.4 * out3(p(t, E_1, 1.4)), 1);
+  lines($('e0'), t, E_1 + 0.35, 1e9, 0.15);
+  stamp($('n1'), t, E_2, 1e9, 0); lines($('e1'), t, E_2 + 0.3, 1e9, 0.15);
+  rise($('n2'), t, E_3, 1e9, 30, 0.5); roll($('n2'), lerp(83, 93, io3(p(t, E_3 + 0.55, 1.0))), 0);
+  lines($('e2'), t, E_3 + 0.3, 1e9, 0.15);
 }
 
 function renderF(t) {
-  const full = 1600, mb = [0.4, 13, 542];
-  ['F0', 'F1', 'F2'].forEach((id, i) => {
-    const a = B(50) + i * BEAT; const w = Math.max(6, full * mb[i] / 542) * out(p(t, a, 0.5));
-    $(id).style.width = w + 'px'; vis($(id), t >= a);
-    const l = $(id + 'l'); if (i < 2) l.style.left = (160 + Math.max(6, full * mb[i] / 542) + 24) + 'px'; rise(l, t, a + 0.15, 0.25, 12);
+  const inK = io3(p(t, F0 - 0.45, 0.9)), outK = io3(p(t, G0 - 0.45, 0.9));
+  $('F').style.display = t >= F0 - 0.45 && t < G0 + 0.5 ? 'block' : 'none';
+  $('F').style.transform = `translateY(${(1 - inK) * 1080 - outK * 1080}px)`;
+  lines($('Fk'), t, F0 + 0.1);
+  const full = 1500, mb = [0.4, 13, 542, 1280];
+  mb.forEach((v, i) => {
+    const a = B(52) + i * 0.24, w = Math.max(8, full * v / 1280), k = io3(p(t, a, 0.8));
+    $('F' + i).style.width = (w * k) + 'px'; $('F' + i).style.visibility = t >= a ? 'visible' : 'hidden';
+    const l = $('F' + i + 'l');
+    l.style.left = (i < 3 ? 160 + w + 26 : 186) + 'px';
+    const lk = out5(p(t, a + (i < 3 ? 0.55 : 0.25), 0.6));
+    put(l, { x: (1 - lk) * -20, o: lk });
   });
-  stamp($('Fh'), t, B(52), 0);
+  lines($('Fh'), t, B(53.5));
 }
 
 function renderG(t) {
-  push($('G'), t, B(54), 5);
-  stamp($('G0'), t, B(54), 0); rise($('G1'), t, B(55), 0.3); rise($('G2'), t, B(55) + 0.2, 0.3); rise($('G3'), t, B(55) + 0.4, 0.3); rise($('G4'), t, B(56), 0.4, 10);
+  const k = io3(p(t, G0 - 0.45, 0.9));
+  $('G').style.display = t >= G0 - 0.45 ? 'block' : 'none';
+  $('G').style.transform = `translateY(${(1 - k) * 1080}px)`;
+  lines($('G0'), t, G0 + 0.05, 1e9, 0.14);
+  lines($('G1'), t, B(57)); lines($('G2'), t, B(57) + 0.15); lines($('G3'), t, B(57) + 0.3); lines($('G4'), t, B(57.5));
 }
 
-// cues (time, kind) for the sound pass
-cue(B(0), 'stamp'); cue(B(1), 'stamp'); cue(B(2), 'tick'); cue(B(3), 'stamp');
-cue(B(4), 'whoosh'); cue(B(5), 'shutter'); for (let i = 0; i < 3; i++) cue(B(6) + i * BEAT * 0.5, 'tick');
-cue(B(7), 'tick'); cue(B(8), 'rise'); cue(B(9), 'stamp');
-cue(B(10), 'shutter'); for (let i = 0; i < 3; i++) cue(B(10) + 0.25 + i * BEAT * 0.5, 'tick'); cue(B(11), 'rise'); cue(B(10) + 1.1, 'tick'); cue(B(12), 'thud');
-cue(B(14), 'stamp'); cue(B(15.5), 'stamp');
-cue(B(17), 'whoosh'); for (let i = 0; i < QUESTION.length; i += 3) cue(B(17) + 0.3 + i / 40, 'key');
-cue(B(19), 'tick'); cue(B(20.5), 'tick'); for (let i = 0; i < JSON_OUT.length; i += 2) cue(B(20.5) + 0.2 + i / 34, 'type'); cue(B(23), 'snip');
-cue(B(24), 'tick'); cue(B(25.5), 'tick'); cue(B(27), 'tick'); cue(B(29), 'stamp');
-cue(B(31), 'whoosh'); for (let i = 0; i < SMS_IN.length; i++) cue(B(32) + i / 9, 'key'); cue(B(33.4), 'send'); cue(B(36.8), 'chime');
-cue(B(38.1), 'tick'); cue(B(38.6), 'tick'); cue(B(39.1), 'tick');
-cue(B(41), 'stamp'); cue(B(44), 'stamp'); cue(B(47), 'stamp');
-cue(B(50), 'tick'); cue(B(50) + BEAT, 'tick'); cue(B(50) + 2 * BEAT, 'tick'); cue(B(52), 'stamp');
-cue(B(54), 'stamp');
+// impacts (a short camera shake) and sound cues, from the same timeline
+impact(OK + 0.08, 0.8); impact(NO + 0.08, 1); impact(E_2 + 0.08, 0.9); impact(FIN + 0.05, 0.35);
+cue(B(0), 'thud'); cue(B(1), 'thud'); cue(B(2), 'tick'); cue(B(2.5), 'tick');
+cue(PAN, 'whoosh'); cue(T_IN, 'stamp');
+cue(SCR_RUST, 'shutter'); cue(FLY, 'whoosh'); cue(SCAN, 'scan');
+[0.25, 0.55].forEach(f => cue(SCAN + SCAN_D * f, 'tick')); cue(SCAN + SCAN_D + 0.05, 'tick');
+cue(MODEL, 'pop'); cue(BARS, 'rise'); cue(OK, 'stamp');
+cue(FLIP, 'whoosh'); cue(SCAN2, 'scan'); [0.25, 0.55].forEach(f => cue(SCAN2 + SCAN2_D * f, 'tick')); cue(SCAN2 + SCAN2_D + 0.05, 'tick');
+cue(THRESH, 'tick'); cue(BARS2, 'rise'); cue(NO, 'thud');
+cue(MONT, 'pop'); cue(MONT + 0.25, 'pop');
+cue(C0 - 0.45, 'whoosh'); for (let i = 0; i < QUESTION.length; i += 2) cue(TYPE + i / CPS, 'key');
+[0, 1, 2].forEach(i => cue(HL + i * 0.22, 'tick'));
+cue(R0, 'pop'); for (let i = 0; i < TOKENS.length; i++) cue(TOK + i / TPS, 'type'); cue(SNIP, 'snip');
+cue(R1, 'pop'); cue(R2, 'pop'); cue(R3, 'pop'); cue(FIN, 'stamp');
+cue(D0 - 0.5, 'whoosh'); for (let i = 0; i < SMS_IN.length; i++) cue(KEYS + i / KPS, 'key');
+cue(SEND, 'send'); cue(SEND + FLY_SMS, 'tick'); cue(BACK, 'send'); cue(REPLY, 'chime'); cue(PILLS, 'pop'); cue(PILLS + 0.2, 'pop');
+cue(E0 - 0.6, 'whoosh'); cue(E_1, 'roll'); cue(E_2, 'stamp'); cue(E_3 + 0.55, 'roll');
+cue(F0 - 0.45, 'whoosh'); [0, 1, 2, 3].forEach(i => cue(B(52) + i * 0.24, 'tick')); cue(B(53.5), 'thud');
+cue(G0 - 0.45, 'whoosh'); cue(G0 + 0.05, 'stamp');
 
-// Film grain is added by ffmpeg in build.sh (cheaper than a blended canvas, and it moves like real grain).
+// Film grain and motion blur are added in build.sh (ffmpeg).
 window.ready = (async () => {
+  await Promise.all(['800 100px Archivo', '500 40px Archivo', '400 20px Fragment'].map(f => document.fonts.load(f)));
   await document.fonts.ready;
-  const srcs = ['shot-rust', 'shot-notsure', 'shot-blurry', 'shot-notleaf', 'shot-price'].map(n => `media/${n}.png`).concat(['media/leaf-rust.jpg', 'media/leaf-healthy.jpg']);
+  const srcs = ['hello', 'rust', 'notsure', 'blurry', 'notleaf', 'price', 'sms'].map(n => `media/shot-${n}.png`)
+    .concat(['leaf-rust.jpg', 'leaf-healthy.jpg', 'mask-rust.png', 'mask-healthy.png', 'in-blurry.jpg', 'in-notleaf.jpg'].map(n => `media/${n}`));
   await Promise.all(srcs.map(s => { const i = new Image(); i.src = s; return i.decode().catch(() => null); }));
-  return { duration: END, cues: CUES };
+  return { duration: END, cues: CUES.sort((a, b) => a[0] - b[0]) };
 })();
 const q = new URLSearchParams(location.search); render(q.has('t') ? +q.get('t') : 0);
 </script>
