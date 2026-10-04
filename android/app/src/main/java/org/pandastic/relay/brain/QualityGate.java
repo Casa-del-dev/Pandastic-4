@@ -16,11 +16,11 @@ public final class QualityGate {
     static final double MAX_SATURATED = 0.6;
     /**
      * Below this share of green-to-yellow plant pixels the photo is treated as "not a crop leaf" (UNSUPPORTED).
-     * The classifier's `other` class was trained on plant photos only: on 20 random non-plant photos (city,
-     * sea, animals, machines) it was CONFIDENT 6 times (maize leaf blight, coffee miner). Those 6 had 0.00
-     * plant share; held-out RoCoLe leaves had 0.47 to 0.91. Lenient on purpose; check on the phone.
+     * A second net behind the classifier's `other` class: random non-plant photos that a plant-only `other`
+     * called CONFIDENT had share 0.00. Chosen on data (B, ml/leaf/photo_stats.py, calib+test through the app
+     * path): at 0.05 no RoCoLe/PlantDoc photo and 6 of 684 CCMT maize photos are rejected (0.10: 9).
      */
-    public static final double MIN_PLANT_SHARE = 0.10;
+    public static final double MIN_PLANT_SHARE = 0.05;
 
     private QualityGate() {}
 

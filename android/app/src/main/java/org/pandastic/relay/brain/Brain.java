@@ -38,12 +38,15 @@ public final class Brain {
      * when the classifier could not run.
      */
     public Decision answerPhoto(String qualityIssue, ClassifierResult result, String text, String lang) {
-        String cropHint = null;
+        // Photo + words: the words go through the same understanding as an SMS (keywords, then the language
+        // model if one is loaded) and give the crop, the symptom the farmer describes and the reply language.
+        String cropHint = null, symptomHint = null;
         if (text != null && !text.trim().isEmpty()) {
             Slots slots = nlu.parse(text, lang);
             cropHint = slots.crop;
+            symptomHint = slots.symptom;
             if (lang == null) lang = slots.lang;
         }
-        return resolver.photo(qualityIssue, result, cropHint, lang == null ? "sw" : lang);
+        return resolver.photo(qualityIssue, result, cropHint, symptomHint, lang == null ? "sw" : lang);
     }
 }

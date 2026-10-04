@@ -19,7 +19,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import requests
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 ADB = str(Path.home() / "Android/Sdk/platform-tools/adb") if (Path.home() / "Android/Sdk/platform-tools/adb").exists() else "adb"
@@ -69,7 +69,8 @@ def photos():
         target = CACHE / f"leaf{n}.jpg"  # neutral names: the tester must not see the answer
         if not target.exists():
             data = requests.get(r["s3_url"], timeout=120).content
-            Image.open(io.BytesIO(data)).convert("RGB").save(target, quality=92)
+            # Keep the photo upright: RoCoLe files carry EXIF orientation, which saving would drop (B, 05:01).
+            ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB").save(target, quality=92)
         out.append((target, r["label"], r["filename"]))
     blurred = CACHE / "leaf5.jpg"
     Image.open(out[2][0]).filter(ImageFilter.GaussianBlur(14)).save(blurred, quality=92)

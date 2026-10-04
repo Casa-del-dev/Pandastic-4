@@ -17,63 +17,80 @@ export function adbFor(serial) {
   return (...args) => execFileSync(ADB, [...target, ...args], { encoding: 'utf8' }).trim()
 }
 
-/** Opens a DevTools session on the app's WebView (starting the app if needed); port must differ per device. */
+/**
+ * Opens a DevTools session on the app's WebView (starting the app if needed); port must differ per device.
+ * The UI sometimes reloads its page or restarts its activity (e.g. after choosing the phone mode): evaluate()
+ * then reconnects to the new page, reinstalls the helpers and retries once instead of hanging.
+ */
 export async function connectApp(serial = process.env.DEVICE, port = 9333) {
   const adb = adbFor(serial)
-  let pid = ''
-  try { pid = adb('shell', 'pidof', PACKAGE) } catch { /* not running */ }
-  // A WebView in the background does not answer DevTools: always bring the app to the front (state is kept).
-  adb('shell', 'am', 'start', '-W', '-n', `${PACKAGE}/.FrontendActivity`)
-  if (!pid) {
-    await sleep(2500)
-    pid = adb('shell', 'pidof', PACKAGE)
-  }
-  pid = pid.split(/\s+/)[0]
-  adb('forward', `tcp:${port}`, `localabstract:webview_devtools_remote_${pid}`)
-  let pages = []
-  for (let i = 0; i < 20 && !pages.length; i++) {
-    try {
-      const list = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(3000) })
-      pages = (await list.json()).filter(p => p.type === 'page')
+  let ws, pending = new Map(), next = 0, url = ''
+
+  async function open() {
+    let pid = ''
+    try { pid = adb('shell', 'pidof', PACKAGE) } catch { /* not running */ }
+    // A WebView in the background does not answer DevTools: always bring the app to the front (state is kept).
+    adb('shell', 'am', 'start', '-W', '-n', `${PACKAGE}/.FrontendActivity`)
+    if (!pid) {
+      await sleep(2500)
+      pid = adb('shell', 'pidof', PACKAGE)
     }
-    catch { await sleep(500) }
+    pid = pid.split(/\s+/)[0]
+    adb('forward', `tcp:${port}`, `localabstract:webview_devtools_remote_${pid}`)
+    let pages = []
+    for (let i = 0; i < 20 && !pages.length; i++) {
+      try {
+        const list = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(3000) })
+        pages = (await list.json()).filter(p => p.type === 'page')
+      } catch { /* not up yet */ }
+      if (!pages.length) await sleep(500)
+    }
+    if (!pages.length) throw new Error(`${serial ?? 'device'}: no WebView page (debug build? app in the foreground?)`)
+    url = pages[0].url
+    const socket = new WebSocket(pages[0].webSocketDebuggerUrl)
+    await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = () => reject(new Error('DevTools socket failed')) })
+    const waiting = pending = new Map()
+    socket.onclose = () => {  // the page went away: fail what is waiting instead of hanging
+      for (const done of waiting.values()) done({ error: { message: 'WebView went away (app restarted or page reloaded?)' } })
+      waiting.clear()
+    }
+    socket.onmessage = event => {
+      const msg = JSON.parse(event.data)
+      if (waiting.has(msg.id)) { waiting.get(msg.id)(msg); waiting.delete(msg.id) }
+    }
+    ws = socket
   }
-  if (!pages.length) throw new Error(`${serial ?? 'device'}: no WebView page (debug build? app in the foreground?)`)
-  const ws = new WebSocket(pages[0].webSocketDebuggerUrl)
-  await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = () => reject(new Error('DevTools socket failed')) })
-  let next = 0
-  const pending = new Map()
-  ws.onclose = () => {  // the page reloaded or the app died: fail what is waiting instead of hanging
-    for (const done of pending.values()) done({ error: { message: 'WebView went away (app crashed or page reloaded?)' } })
-    pending.clear()
-  }
-  ws.onmessage = event => {
-    const msg = JSON.parse(event.data)
-    if (pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id) }
-  }
-  /** Evaluates an expression in the page; awaits promises; returns the value. */
-  const evaluateOnce = expression => new Promise((resolve, reject) => {
+
+  /** Evaluates an expression in the page; awaits promises; returns the value. Gives up after timeoutMs. */
+  const evaluateOnce = (expression, timeoutMs) => new Promise((resolve, reject) => {
     const id = ++next
-    pending.set(id, msg => {
+    const waiting = pending
+    const timer = setTimeout(() => { waiting.delete(id); reject(new Error(`no answer from the page in ${timeoutMs / 1000} s`)) }, timeoutMs)
+    waiting.set(id, msg => {
+      clearTimeout(timer)
       if (msg.error) return reject(new Error(msg.error.message))
       if (msg.result.exceptionDetails) return reject(new Error(msg.result.exceptionDetails.exception?.description ?? 'page exception'))
       resolve(msg.result.result.value)
     })
     ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }))
   })
-  // The UI reloads its page on some changes (e.g. choosing the phone mode): then the helpers are gone.
-  // Wait for the new page, reinstall them and retry once.
-  const evaluate = async expression => {
-    try { return await evaluateOnce(expression) }
+  const evaluate = async (expression, timeoutMs = 240000) => {
+    try { return await evaluateOnce(expression, timeoutMs) }
     catch (e) {
-      if (!/context was destroyed|__e2e is not defined|Cannot find context/.test(e.message)) throw e
+      if (!/context was destroyed|__e2e is not defined|Cannot find context|went away|no answer from the page/.test(e.message)) throw e
       await sleep(1500)
-      await evaluateOnce(INSTALL)
-      return evaluateOnce(expression)
+      try { ws.close() } catch { /* already closed */ }
+      await open()
+      await evaluateOnce(INSTALL, 10000)
+      return evaluateOnce(expression, timeoutMs)
     }
   }
+  await open()
   await evaluate(INSTALL)
-  return { evaluate, adb, url: pages[0].url, close: () => { ws.close(); try { adb('forward', '--remove', `tcp:${port}`) } catch { /* gone */ } } }
+  return {
+    evaluate, adb, get url() { return url },
+    close: () => { try { ws.close() } catch { /* gone */ } try { adb('forward', '--remove', `tcp:${port}`) } catch { /* gone */ } },
+  }
 }
 
 // In-page helpers: answers to our ids go to us, everything else still reaches the app's own handler.

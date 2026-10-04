@@ -32,6 +32,15 @@ final class Resolver {
 
     /** Contracts §2 steps 1-4. cropHint comes from the question text (may be null). */
     Decision photo(String qualityIssue, ClassifierResult result, String cropHint, String lang) {
+        return photo(qualityIssue, result, cropHint, null, lang);
+    }
+
+    /**
+     * symptomHint is what the farmer's words describe (may be null). A photo is only CONFIDENT when the words
+     * don't contradict it: "the leaves have rust" with a photo that looks healthy (or like another disease)
+     * becomes UNCERTAIN and names both, so a person checks.
+     */
+    Decision photo(String qualityIssue, ClassifierResult result, String cropHint, String symptomHint, String lang) {
         Decision d = base("photo", lang);
         if (qualityIssue != null) {
             d.status = "RETAKE";
@@ -70,6 +79,14 @@ final class Resolver {
             d.candidates = d.runnerUp == null || "other".equals(d.runnerUp) ? new String[]{label} : new String[]{label, d.runnerUp};
             d.title = Templates.askPerson(lang);
             d.message = Templates.uncertain(label, d.candidates.length > 1 ? d.candidates[1] : null, lang);
+            return d;
+        }
+        if (symptomHint != null && !label.equals(crop + "_" + symptomHint)) {
+            String described = LABELS.contains(crop + "_" + symptomHint) ? crop + "_" + symptomHint : null;
+            d.status = "UNCERTAIN";
+            d.candidates = described == null ? new String[]{label} : new String[]{label, described};
+            d.title = Templates.askPerson(lang);
+            d.message = Templates.uncertain(label, described, lang);
             return d;
         }
         d.status = "CONFIDENT";
