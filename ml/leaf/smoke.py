@@ -102,6 +102,18 @@ def main() -> None:
         again = train.reevaluate(rows, config.P0_LABELS, root / "out", device="cpu", workers=0)
         assert again["eval"]["by_crop"] == meta["eval"]["by_crop"], (again["eval"]["by_crop"], meta["eval"]["by_crop"])
         assert again["eval"]["by_source"] == meta["eval"]["by_source"]
+        # Ensemble of two seeds: int8-stored weights, log-probabilities out, same contract.
+        train.run(rows, config.P0_LABELS, root / "out2", stats, epochs=1, batch_size=8, pretrained=False,
+                  device="cpu", workers=0, max_steps=3, version="leaf-smoke-s14", seed=14)
+        ens = train.ensemble([root / "out", root / "out2"], rows, config.P0_LABELS, root / "ens", stats, device="cpu",
+                             workers=0, version="leaf-smoke-ens2")
+        size = lambda d: (root / d / "leaf_classifier.onnx").stat().st_size
+        assert size("ens") < 0.75 * (size("out") + size("out2")), (size("ens"), size("out"))
+        assert ens["labels"] == config.P0_LABELS and len(ens["training"]["members"]) == 2
+        import onnxruntime as ort
+        out = ort.InferenceSession(str(root / "ens/leaf_classifier.onnx")).run(None, {"input": np.zeros((1, 3, 224, 224), np.float32)})[0]
+        assert abs(np.exp(out).sum() - 1) < 1e-3, np.exp(out).sum()  # log-probabilities
+        print(f"ENSEMBLE OK: {size('ens') // 1024} KB vs 2 x {size('out') // 1024} KB")
         print("SMOKE OK:", json.dumps(meta["eval"]))
 
     if args.real_local:

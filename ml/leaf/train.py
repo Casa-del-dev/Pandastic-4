@@ -419,6 +419,17 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
     save_atomic(model.state_dict(), out_dir / "model_best.pt")  # survives a crash in calibration or export
     if on_checkpoint:
         on_checkpoint()
+    training = {"epochs_run": len(history), "pretrained": pretrained, "epochs_max": epochs, "batch_size": batch_size,
+                "lr": lr, "early_stop_patience": patience}
+    return finish(model, rows, labels, out_dir, manifest_stats, history, version, device, workers, target_accuracy,
+                  log, training, lineage)
+
+
+def finish(model, rows, labels, out_dir: Path, manifest_stats: dict, history: list, version: str, device: str,
+           workers: int, target_accuracy: float, log, training: dict, lineage: dict = None, arch: str = None) -> dict:
+    """Calibrate (temperature on val, thresholds on calib), evaluate on test, export ONNX + leaf_classifier.json +
+    reports. Shared by a trained model (run) and an averaged one (ensemble)."""
+    model = model.to(device)
     split = lambda name: [r for r in rows if r["split"] == name]
     val_logits, val_y = predict_logits(model, split("val"), labels, device, workers=workers)
     temperature = fit_temperature(val_logits, val_y)
@@ -437,6 +448,8 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
 
     onnx_path = out_dir / "leaf_classifier.onnx"
     export_onnx(model, onnx_path)
+    if isinstance(model, Ensemble):
+        compress_weights(onnx_path)  # int8 weights + scales in the file; computed in fp32 after loading
     sample_rows = (split("test") or split("val") or split("train"))[:8]
     samples = torch.stack([to_tensor(load_rgb(r["path"])) for r in sample_rows])
     parity = onnx_parity(model, onnx_path, samples)
@@ -446,7 +459,7 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
 
     test_set, train_set = describe_sets(rows)
     metadata = {
-        "version": version, "stub": False, "arch": config.ARCH, "input_size": config.INPUT_SIZE,
+        "version": version, "stub": False, "arch": arch or config.ARCH, "input_size": config.INPUT_SIZE,
         "resize": "direct_bilinear", "mean": config.MEAN, "std": config.STD, "labels": list(labels),
         "temperature": round(temperature, 4),
         "thresholds": {"min_prob": th["min_prob"], "min_margin": th["min_margin"]},
@@ -462,15 +475,91 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
             "by_source": by_source(test_p, test_y, [r["source"] for r in split("test")], labels, th["min_prob"],
                                    th["min_margin"]) if len(test_y) else {},
         },
-        "training": {"train_set": train_set, "epochs_run": len(history),
-                     "pretrained": pretrained, "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                     "epochs_max": epochs, "batch_size": batch_size, "lr": lr, "early_stop_patience": patience},
+        "training": {"train_set": train_set, **training,
+                     "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
         "lineage": lineage or {},
     }
     (out_dir / "leaf_classifier.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     write_reports(out_dir, labels, test_p, test_y, calib_p, calib_y, history, manifest_stats, metadata, th)
     log(f"wrote {onnx_path} ({onnx_path.stat().st_size // 1024} KB) + leaf_classifier.json + reports/")
     return metadata
+
+
+class Ensemble(torch.nn.Module):
+    """Average of the members' probabilities, each at its own fitted temperature. Returns log-probabilities, which
+    the app uses as logits (softmax(log p) = p), so the classifier contract (§1) does not change."""
+
+    def __init__(self, members, temperatures):
+        super().__init__()
+        self.members = torch.nn.ModuleList(members)
+        self.register_buffer("inv_t", torch.tensor([1.0 / t for t in temperatures], dtype=torch.float32))
+
+    def forward(self, x):
+        probs = torch.stack([F.softmax(m(x) * self.inv_t[i], dim=1) for i, m in enumerate(self.members)]).mean(0)
+        return torch.log(probs.clamp_min(1e-8))
+
+
+@torch.no_grad()
+def round_weights_int8(model) -> None:
+    """Round every conv/linear weight to int8 per output channel, in place, so that the PyTorch model evaluated
+    here is exactly what compress_weights() stores in the ONNX file."""
+    for module in model.modules():
+        if isinstance(module, (torch.nn.Conv2d, torch.nn.Linear)):
+            w = module.weight
+            scale = w.abs().flatten(1).amax(1).clamp_min(1e-12) / 127
+            shape = (-1,) + (1,) * (w.dim() - 1)
+            w.copy_((w / scale.view(shape)).round().clamp(-127, 127) * scale.view(shape))
+
+
+def compress_weights(path: Path) -> None:
+    """Store each Conv/Gemm weight as int8 + per-channel scale behind a DequantizeLinear node. ONNX Runtime folds
+    it back to fp32 when the session loads, so inference stays fp32; only the file gets ~4x smaller."""
+    import onnx
+    from onnx import helper, numpy_helper
+    m = onnx.load(str(path))
+    inits = {i.name: i for i in m.graph.initializer}
+    weights = {n.input[1] for n in m.graph.node if n.op_type in ("Conv", "Gemm") and len(n.input) > 1 and n.input[1] in inits}
+    nodes = []
+    for name in sorted(weights):
+        w = numpy_helper.to_array(inits[name]).astype(np.float32)
+        if w.ndim < 2:
+            continue
+        scale = np.maximum(np.abs(w.reshape(w.shape[0], -1)).max(1), 1e-12) / 127
+        q = np.clip(np.round(w / scale.reshape((-1,) + (1,) * (w.ndim - 1))), -127, 127).astype(np.int8)
+        m.graph.initializer.remove(inits[name])
+        m.graph.initializer.extend([numpy_helper.from_array(q, name + "_q"),
+                                    numpy_helper.from_array(scale.astype(np.float32), name + "_scale"),
+                                    numpy_helper.from_array(np.zeros(w.shape[0], np.int8), name + "_zp")])
+        nodes.append(helper.make_node("DequantizeLinear", [name + "_q", name + "_scale", name + "_zp"], [name], axis=0))
+    existing = list(m.graph.node)  # dequantize first; the convs then read the fp32 weights under their old names
+    del m.graph.node[:]
+    m.graph.node.extend(nodes + existing)
+    onnx.checker.check_model(m)
+    onnx.save(m, str(path))
+
+
+def ensemble(member_dirs: list, rows, labels, out_dir: Path, manifest_stats: dict, device=None, workers=4,
+             target_accuracy=0.90, version=None, log=print, lineage: dict = None) -> dict:
+    """Average trained models (same recipe, other seeds), then calibrate, evaluate and export like a single model."""
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = drop_unreadable(rows, log)
+    members, temperatures, versions = [], [], []
+    for d in member_dirs:
+        meta = json.loads((d / "leaf_classifier.json").read_text(encoding="utf-8"))
+        assert meta["labels"] == list(labels) and meta["input_size"] == config.INPUT_SIZE, d
+        m = create_model(len(labels), pretrained=False)
+        m.load_state_dict(torch.load(d / "model_best.pt", map_location="cpu"))
+        members.append(m.eval())
+        temperatures.append(meta["temperature"])
+        versions.append(meta["version"])
+    model = Ensemble(members, temperatures).eval()
+    round_weights_int8(model)
+    log(f"{version}: ensemble of {versions}, temperatures {temperatures}")
+    training = {"members": versions, "member_temperatures": temperatures,
+                "weights": "int8 per output channel (DequantizeLinear), computed in fp32"}
+    return finish(model, rows, labels, out_dir, manifest_stats, [], version, device, workers, target_accuracy, log,
+                  training, lineage, arch=f"ensemble of {len(members)} x {config.ARCH}")
 
 
 def write_reports(out_dir, labels, test_p, test_y, calib_p, calib_y, history, manifest_stats, metadata, th):
