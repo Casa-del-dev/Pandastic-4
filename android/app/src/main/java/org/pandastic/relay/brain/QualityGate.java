@@ -14,6 +14,13 @@ public final class QualityGate {
     static final double MIN_LUMINANCE = 35;
     /** Share of blown-out pixels above this means too bright. A white background alone is fine. */
     static final double MAX_SATURATED = 0.6;
+    /**
+     * Below this share of green-to-yellow plant pixels the photo is treated as "not a crop leaf" (UNSUPPORTED).
+     * The classifier's `other` class was trained on plant photos only: on 20 random non-plant photos (city,
+     * sea, animals, machines) it was CONFIDENT 6 times (maize leaf blight, coffee miner). Those 6 had 0.00
+     * plant share; held-out RoCoLe leaves had 0.47 to 0.91. Lenient on purpose; check on the phone.
+     */
+    public static final double MIN_PLANT_SHARE = 0.10;
 
     private QualityGate() {}
 
@@ -24,6 +31,28 @@ public final class QualityGate {
         small.getPixels(argb, 0, SIDE, 0, 0, SIDE, SIDE);
         if (small != bitmap) small.recycle();
         return check(argb, SIDE);
+    }
+
+    /** Share of pixels with a leaf colour (hue ~47-162 degrees, not grey, not black), on a 64 px copy. */
+    public static double plantShare(Bitmap bitmap) {
+        Bitmap small = Bitmap.createScaledBitmap(bitmap, 64, 64, true);
+        int[] argb = new int[64 * 64];
+        small.getPixels(argb, 0, 64, 0, 0, 64, 64);
+        if (small != bitmap) small.recycle();
+        return plantShare(argb);
+    }
+
+    static double plantShare(int[] argb) {
+        int plant = 0;
+        for (int c : argb) {
+            float r = ((c >> 16) & 0xFF) / 255f, g = ((c >> 8) & 0xFF) / 255f, b = (c & 0xFF) / 255f;
+            float max = Math.max(r, Math.max(g, b)), min = Math.min(r, Math.min(g, b)), chroma = max - min;
+            if (max < 0.12f || chroma / max < 0.18f) continue;  // too dark or too grey
+            float hue = max == r ? ((g - b) / chroma) / 6f : max == g ? (2 + (b - r) / chroma) / 6f : (4 + (r - g) / chroma) / 6f;
+            if (hue < 0) hue += 1;
+            if (hue >= 0.13f && hue <= 0.45f) plant++;
+        }
+        return argb.length == 0 ? 0 : (double) plant / argb.length;
     }
 
     /** Pure-Java core, so it can be unit-tested on the JVM. */

@@ -133,10 +133,16 @@ public final class BrainHost {
         LeafClassifier model = classifier();
         Brain brain = brain();
         ClassifierResult result = issue == null && model != null ? model.classify(bitmap) : null;
+        // A photo with almost no leaf colour is not a crop leaf, whatever the classifier says (it was never
+        // shown streets, animals or machines): answer "not a leaf I know" instead of a confident disease.
+        double plantShare = QualityGate.plantShare(bitmap);
+        boolean notAPlant = result != null && plantShare < QualityGate.MIN_PLANT_SHARE;
+        if (notAPlant) result = result.asOther();
         if (brain == null) return interimPhoto(issue, result, model != null && model.stub, lang).toString();
         // Without a classifier the Brain sees no result and answers "not sure — ask a person".
         JSONObject decision = new JSONObject(brain.answerPhoto(issue, result, text, lang).toJson());
-        return decision.put("stub", model != null && model.stub).toString();
+        return decision.put("stub", model != null && model.stub)
+            .put("plant_share", Math.round(plantShare * 100) / 100.0).put("not_a_plant", notAPlant).toString();
     }
 
     /** Typed or SMS question → decision JSON. Call from the worker thread. */

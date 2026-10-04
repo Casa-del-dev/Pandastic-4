@@ -39,6 +39,18 @@ public final class ClassifierResult {
         return second;
     }
 
+    /**
+     * The same result with all probability on `other`, for a photo the plant-colour check rejected
+     * (QualityGate.MIN_PLANT_SHARE): the resolver then answers UNSUPPORTED. Unchanged if there is no `other` label.
+     */
+    public ClassifierResult asOther() {
+        int other = java.util.Arrays.asList(labels).indexOf("other");
+        if (other < 0) return this;
+        float[] onlyOther = new float[probs.length];
+        onlyOther[other] = 1f;
+        return new ClassifierResult(modelVersion, labels, onlyOther, minProb, minMargin, perClassMinProb);
+    }
+
     /** Minimum probability required for this label to count as confident. */
     public float minProbFor(String label) {
         Float value = perClassMinProb.get(label);
