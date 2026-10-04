@@ -89,6 +89,7 @@ scripts/                             android-emulator.sh, bridge-e2e.mjs, sms-la
 ## Models in the app
 
 **Leaf classifier `leaf-p2-mix-ens3-0483c29f`** (installed in cff9e12):
+
 - 3 × MobileNetV4-Conv-Small (timm, ImageNet-pretrained, 3 seeds) averaged inside one ONNX file. Weights stored as
   int8, compute in fp32, 7.7 MB. Same I/O contract: `input` [1,3,224,224], direct bilinear resize, ImageNet
   mean/std, output `logits` [1,14]. The app sets ORT `session.disable_quant_qdq` (5 ms vs 15 ms per photo, laptop).

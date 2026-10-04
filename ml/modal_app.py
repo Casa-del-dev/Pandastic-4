@@ -171,6 +171,10 @@ def ensemble(labels: str, coffee_split: str, members: list[str], input_size: int
     cached = _cached_manifest(tag, input_size)
     rows = data.read_manifest(cached if cached.exists() else DATA / f"manifest-{tag}.csv")
     stats = json.loads((DATA / f"manifest-{tag}.json").read_text())
+    arch = json.loads((MODELS / "leaf" / members[0] / "leaf_classifier.json").read_text())["arch"]
+    if arch != config.ARCH:  # members trained with --arch: rebuild them with their own backbone
+        tag += "-" + arch.split(".")[0].replace("mobilenetv4_", "").replace("_", "")
+        config.ARCH = arch
     version = f"leaf-{tag}-ens{len(members)}-" + hashlib.sha256(",".join(members).encode()).hexdigest()[:8]
     meta = trainer.ensemble([MODELS / "leaf" / m for m in members], rows, _labels(labels), MODELS / "leaf" / version,
                             stats, device="cuda", workers=14, version=version,
