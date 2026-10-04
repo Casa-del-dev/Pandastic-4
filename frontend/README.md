@@ -91,10 +91,10 @@ Fonts, icons and code are bundled offline. No cloud APIs or browser speech recog
 Use **Node 22.13+ or Node 24+** for this local lab (it reads the bundled knowledge database using Node's SQLite module). From the repository root, run the one-command launcher:
 
 ```sh
-./run.sh
+./run.sh --web
 ```
 
-It installs frontend dependencies when missing, starts both phones, waits until they are ready, and opens their browser tabs. If both phones are already running, it opens the existing pair. `./run.sh --no-open` skips opening tabs. Ctrl+C shuts down a pair started by this launcher. You can run the underlying commands manually too:
+It installs frontend dependencies when missing, starts both phones, waits until they are ready, and opens their browser tabs. If both phones are already running, it opens the existing pair. `./run.sh --web --no-open` skips opening tabs. Ctrl+C shuts down a pair started by this launcher. You can run the underlying commands manually too:
 
 ```sh
 cd frontend
@@ -128,14 +128,16 @@ Tap the **microphone** beside Send, allow microphone access, speak, and tap **St
 
 This uses the browser's `SpeechRecognition` / `webkitSpeechRecognition` API when available. Speech-service and language support vary; browser recognition can require internet and send audio to the browser's speech provider. The UI explains this before use. It reports unavailable recognition, denied microphone access, missing speech and network/service errors while preserving the draft. Switching conversation, language, or screen stops recognition and ignores late results. Android WebViews without this API can use the keyboard's microphone instead; this change does not add native offline STT. See [MDN's SpeechRecognition documentation](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).
 
-## One-command Android SMS lab
+## Two actual Android phones (default launcher)
 
 From the repository root:
 
 ```sh
-./run.sh --android
+./run.sh
 ```
 
-The launcher checks the SDK and build prerequisites, starts the helper and Basic phone AVDs, waits for both to boot, builds the APK, installs it on both phones, configures their SMS roles and allowlist, and runs the simulated carrier. Type `P 1 12000` in the Basic phone's chat. Ctrl+C stops the carrier; the emulators stay open.
+`./run.sh --android` does the same thing. This is the full Android app in two emulator windows, including native SQLite, the leaf classifier and the optional Qwen model.
 
-The helper uses your existing AVD; select it with `EMULATOR_NAME=Your_AVD ./run.sh --android` when several exist. The launcher creates `pandastic_basic` if needed, using the already-installed Android 35 Google APIs x86_64 system image. It does not download SDK images or Qwen weights: install the Android prerequisites from the root README first, and import the language model separately in Models. Keyword answers and the bundled classifier work without Qwen. Existing imported models and message histories are preserved; setup updates phone modes, destinations and the helper allowlist. `./run.sh --help` lists the options.
+The launcher checks the SDK and build prerequisites, starts the helper and Basic phone AVDs, waits for both to boot, builds the APK, installs it on both phones, configures their SMS roles and allowlist, restarts their activities so the UI reads the new roles, and runs the simulated carrier. A per-pair lock prevents duplicate relays when the launcher is run again. Type `P 1 12000` in the Basic phone's chat. Ctrl+C stops the carrier; the emulators stay open.
+
+The helper uses your existing AVD; select it with `EMULATOR_NAME=Your_AVD ./run.sh --android` when several exist. The launcher creates `pandastic_basic` if needed, reusing the helper’s already-installed Android system image. It copies hardware configuration only: the Basic phone starts with its own fresh userdata, without copying the helper’s messages, accounts, models, SD card or snapshots. SDK command-line tools and an extra Android 35 system-image download are unnecessary. Existing Basic AVDs are reused; `BASIC_AVD=Your_Basic_AVD` selects another. It does not download SDK images or Qwen weights: install the Android prerequisites from the root README first, and import the language model separately in Models. Keyword answers and the bundled classifier work without Qwen. Existing imported models and message histories are preserved; setup updates phone modes, destinations and the helper allowlist. `./run.sh --help` lists the options.

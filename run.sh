@@ -3,7 +3,7 @@
 set -euo pipefail
 repo_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd "$repo_directory"
-mode=web
+mode=android
 open_browser=true
 for option in "$@"; do
     case "$option" in
@@ -12,16 +12,18 @@ for option in "$@"; do
         --no-open) open_browser=false ;;
         -h|--help)
             cat <<'HELP'
-Usage: ./run.sh [--web | --android] [--no-open]
+Usage: ./run.sh [--android | --web] [--no-open]
 
-  ./run.sh              Install missing dependencies and open both browser phones.
-  ./run.sh --no-open    Start the browser phones without opening browser tabs.
-  ./run.sh --android    Build the Android app, boot two emulators, configure SMS,
-                        and keep the simulated carrier running.
+  ./run.sh              Build the real Android app, boot two emulator phones,
+                        configure SMS and keep the simulated carrier running.
+  ./run.sh --android    Same as the default.
+  ./run.sh --web        Start the optional browser phone simulation.
+  ./run.sh --web --no-open  Start browser phones without opening tabs.
 
 Browser numbers default to 5173 and 5174 (BASIC_PORT / CAPABLE_PORT override).
-Android uses an existing helper AVD and pandastic_basic (creates the latter when
-its Android 35 system image is already installed). EMULATOR_NAME selects the helper.
+Android uses an existing helper AVD and pandastic_basic (creates the latter from
+the helper's installed image). EMULATOR_NAME selects the helper; BASIC_AVD selects
+the Basic phone. Both run the actual APK with separate storage.
 Ctrl+C stops the browser pair or Android relay. Android emulators remain open.
 Node 22.13+ is required for browser phones. Android also needs the SDK, JDK 17,
 NDK and CMake described in README.md. Import Qwen separately in the Android app.
@@ -133,13 +135,14 @@ emulator_command=${EMULATOR:-$sdk_directory/emulator/emulator}
 command -v "$adb_command" >/dev/null || fail "adb is missing at $adb_command. Set SDK_DIR to your Android SDK."
 command -v "$emulator_command" >/dev/null || fail "The emulator is missing at $emulator_command. Install it in Android Studio."
 command -v java >/dev/null || fail 'JDK 17 is required to build the Android app.'
+command -v flock >/dev/null || fail 'flock is required to keep one SMS relay per phone pair (install util-linux).'
 command -v timeout >/dev/null || fail 'GNU timeout is required for bounded emulator startup checks.'
 if ! command -v corepack >/dev/null && ! command -v pnpm >/dev/null; then
     fail 'Android builds require Corepack or pnpm. Install pnpm@10.13.1, then rerun ./run.sh --android.'
 fi
 export ANDROID_HOME="$sdk_directory" ANDROID_SDK_ROOT="$sdk_directory" ADB="$adb_command"
 avd_names=$("$emulator_command" -list-avds)
-basic_avd=pandastic_basic
+basic_avd=${BASIC_AVD:-pandastic_basic}
 helper_avd=${EMULATOR_NAME:-}
 if [[ -z "$helper_avd" ]]; then
     helper_names=()
@@ -152,17 +155,16 @@ if [[ -z "$helper_avd" ]]; then
     helper_avd=${helper_names[0]}
 fi
 [[ "$helper_avd" != "$basic_avd" ]] || fail 'The helper and Basic phone must use different AVDs.'
+# Hold a per-pair lock across setup and the relay. Re-running must not deliver SMS twice.
+exec 9> "${TMPDIR:-/tmp}/pandastic-sms-${UID}-${helper_avd}-${basic_avd}.lock"
+if ! flock -n 9; then
+    printf 'The Android phone pair and SMS relay are already running. Use the open emulator windows.\n'
+    exit 0
+fi
 basic_exists=false
 while IFS= read -r name; do [[ "${name//$'\r'/}" != "$basic_avd" ]] || basic_exists=true; done <<< "$avd_names"
 if ! "$basic_exists"; then
-    [[ -d "$sdk_directory/system-images/android-35/google_apis/x86_64" ]] || fail 'Install the Android 35 Google APIs x86_64 system image in Android Studio, then rerun this script.'
-    avdmanager_command="$sdk_directory/cmdline-tools/latest/bin/avdmanager"
-    if [[ ! -x "$avdmanager_command" ]]; then
-        avdmanager_command=$(command -v avdmanager || true)
-    fi
-    [[ -n "$avdmanager_command" ]] || fail 'Install Android SDK Command-line Tools in Android Studio to create the Basic phone AVD.'
-    printf 'Creating the Basic phone virtual device…\n'
-    "$avdmanager_command" create avd -n "$basic_avd" -k 'system-images;android-35;google_apis;x86_64' -d small_phone <<< 'no'
+    node scripts/create-basic-avd.mjs "$sdk_directory" "$helper_avd" "$basic_avd"
 fi
 
 # Existing helper handles boot readiness, crash detection and timeouts for both devices.
@@ -173,5 +175,10 @@ BASIC=$(bash scripts/android-emulator.sh start --adb "$adb_command" --emulator "
 export HUB BASIC
 make build SDK_DIR="$sdk_directory"
 node scripts/sms-lab.mjs setup --install
+# Setup changes native preferences; restart the activities so React reads the chosen
+# roles on first render, rather than leaving a stale onboarding/local-chat screen.
+for phone_serial in "$HUB" "$BASIC"; do
+    "$adb_command" -s "$phone_serial" shell am start -W -S -n org.pandastic.relay/.FrontendActivity
+done
 printf '\nBoth Android phones are ready. Send P 1 12000 in the Basic phone chat.\nCtrl+C stops the carrier; the emulators stay open.\n'
 exec node scripts/sms-lab.mjs relay
