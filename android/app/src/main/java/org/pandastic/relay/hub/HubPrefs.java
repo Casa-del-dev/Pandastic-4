@@ -6,7 +6,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-/** Hub settings chosen by the phone's owner: on/off, which numbers may ask, reply language. */
+/**
+ * Hub settings chosen by the phone's owner: on/off, which numbers may ask, reply language.
+ * The allowlist is a cost and spam control, not authentication: caller ID can be spoofed. A spoofer
+ * still never sees an answer (replies go to the allowlisted number) and replies are rate-limited.
+ */
 public final class HubPrefs {
     private static final String FILE = "hub";
     private static final String ENABLED = "enabled";
@@ -49,12 +53,11 @@ public final class HubPrefs {
 
     /** Contact name for an allowed sender, or null when the sender must be ignored. */
     public String contactName(String sender) {
-        String key = matchKey(sender);
-        if (key == null) return null;
+        if (matchKey(sender) == null) return null;
         JSONArray contacts = contacts();
         for (int i = 0; i < contacts.length(); i++) {
             JSONObject contact = contacts.optJSONObject(i);
-            if (contact != null && key.equals(matchKey(contact.optString("number")))) {
+            if (contact != null && sameNumber(sender, contact.optString("number"))) {
                 String name = contact.optString("name");
                 return name.isEmpty() ? "" : name;
             }
@@ -62,7 +65,26 @@ public final class HubPrefs {
         return null;
     }
 
-    /** Last 9 digits, so +256 700… and 0700… match. Null for short codes and alphanumeric senders. */
+    /**
+     * Two international numbers (+… or 00…) must match in full, so +254 7… never matches +256 7….
+     * Otherwise the last 9 digits decide, so +256 700… and a locally written 0700… match.
+     */
+    static boolean sameNumber(String a, String b) {
+        String keyA = matchKey(a), keyB = matchKey(b);
+        if (keyA == null || !keyA.equals(keyB)) return false;
+        String fullA = international(a), fullB = international(b);
+        return fullA == null || fullB == null || fullA.equals(fullB);
+    }
+
+    /** Digits with the country code, or null if the number is written in local form. */
+    private static String international(String number) {
+        String trimmed = number.trim();
+        if (trimmed.startsWith("+")) return digits(trimmed);
+        if (trimmed.startsWith("00")) return digits(trimmed).substring(2);
+        return null;
+    }
+
+    /** Last 9 digits, used for local-form matching. Null for short codes and alphanumeric senders. */
     static String matchKey(String number) {
         if (number == null) return null;
         if (!number.trim().matches("\\+?[0-9 ()-]+")) return null;
