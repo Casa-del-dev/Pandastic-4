@@ -251,10 +251,57 @@ def build_manifest(work_dir: Path, labels, seed: int = 13, max_test_per_class: i
     return rows, stats
 
 
+# ---------------------------------------------------------------- pre-resized cache
+
+CACHE_SHORT_SIDE = 320  # a 60%-area random crop of a 320 px image is still >= 224 px
+
+
+def _cache_one(job):
+    """Decode, orient and shrink one image; the cached JPEG is what training and evaluation read."""
+    src, dst, short_side = job
+    if os.path.exists(dst):
+        return True
+    try:
+        from PIL import Image, ImageFile, ImageOps
+        ImageFile.LOAD_TRUNCATED_IMAGES = True  # a few source JPEGs end a few bytes early
+        with Image.open(src) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+        w, h = im.size
+        scale = short_side / min(w, h)
+        if scale < 1:
+            im = im.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.BILINEAR)
+        tmp = dst + ".tmp"
+        im.save(tmp, "JPEG", quality=95)
+        os.replace(tmp, dst)
+        return True
+    except Exception:
+        return False
+
+
+def build_cache(rows, cache_dir: Path, short_side: int = CACHE_SHORT_SIDE, workers: int = os.cpu_count() or 2,
+                log=print):
+    """Decode every image once, before any GPU starts.
+
+    Full-size JPEG decoding per epoch left the L4 ~90% idle, and a non-image file crashed evaluation after
+    12 epochs. Unreadable files are dropped here instead. Idempotent: cached files are reused across runs.
+    """
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    jobs = [(r["path"], str(cache_dir / (hashlib.sha1(r["path"].encode()).hexdigest() + ".jpg")), short_side) for r in rows]
+    with ProcessPoolExecutor(workers) as pool:
+        ok = list(pool.map(_cache_one, jobs, chunksize=32))
+    kept = [{**r, "original": r["path"], "path": dst} for r, (_, dst, _), good in zip(rows, jobs, ok) if good]
+    dropped = [r["path"] for r, good in zip(rows, ok) if not good]
+    if dropped:
+        log(f"cache: dropped {len(dropped)} unreadable files, e.g. {dropped[:3]}")
+    log(f"cache: {len(kept)} images at short side {short_side} px in {cache_dir}")
+    return kept, dropped
+
+
 def write_manifest(rows, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    fields = ["path", "label", "source", "split", "group"] + (["original"] if rows and "original" in rows[0] else [])
     with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["path", "label", "source", "split", "group"])
+        w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(rows)
 

@@ -2,6 +2,7 @@
 import csv
 import json
 import math
+import os
 import random
 import time
 from datetime import datetime, timezone
@@ -98,22 +99,57 @@ def create_model(num_classes: int, pretrained: bool):
     return timm.create_model(config.ARCH, pretrained=pretrained, num_classes=num_classes)
 
 
+def loader_options(device: str, workers: int) -> dict:
+    """Keep the GPU fed: pinned memory, workers that survive across epochs, a few batches prefetched."""
+    options = {"num_workers": workers, "pin_memory": device == "cuda"}
+    if workers > 0:
+        options.update(persistent_workers=True, prefetch_factor=4)
+    return options
+
+
+def to_device(x: torch.Tensor, device: str) -> torch.Tensor:
+    if device == "cuda":  # channels_last is faster for convolutions on tensor cores
+        return x.to(device, non_blocking=True, memory_format=torch.channels_last)
+    return x.to(device)
+
+
 @torch.no_grad()
 def predict_logits(model, rows, labels, device, batch_size=128, workers=4):
     model.eval()
-    loader = DataLoader(LeafDataset(rows, labels, train=False), batch_size=batch_size, num_workers=workers)
+    options = loader_options(device, workers)
+    options.pop("persistent_workers", None)  # one pass only
+    loader = DataLoader(LeafDataset(rows, labels, train=False), batch_size=batch_size, **options)
     out, ys = [], []
     for x, y in loader:
-        out.append(model(x.to(device)).float().cpu())
+        out.append(model(to_device(x, device)).float().cpu())
         ys.append(y)
     if not out:
         return torch.zeros(0, len(labels)), torch.zeros(0, dtype=torch.long)
     return torch.cat(out), torch.cat(ys)
 
 
-def train_model(rows, labels, epochs=12, batch_size=64, lr=1e-3, pretrained=True, device="cpu",
-                workers=4, max_steps=None, log=print, seed=13):
+def seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
     torch.manual_seed(seed)
+
+
+def save_atomic(obj, path: Path) -> None:
+    """Write to a temp file, then rename: a run killed mid-save never leaves a corrupt checkpoint."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
+
+
+def train_model(rows, labels, epochs=12, batch_size=64, lr=1e-3, pretrained=True, device="cpu",
+                workers=4, max_steps=None, log=print, seed=13, ckpt_dir: Path = None, on_checkpoint=None,
+                patience: int = 4):
+    """Train with per-epoch checkpoints. If ckpt_dir holds last.pt from an interrupted run, resume from it.
+
+    on_checkpoint() is called after each checkpoint (on Modal: commit the Volume so it survives the container).
+    Early stopping: stop after `patience` epochs without a better validation accuracy.
+    """
+    seed_everything(seed)
     train_rows = [r for r in rows if r["split"] == "train"]
     val_rows = [r for r in rows if r["split"] == "val"]
     backgrounds = [r["path"] for r in train_rows if r["label"] == "other"][:2000]
@@ -121,10 +157,12 @@ def train_model(rows, labels, epochs=12, batch_size=64, lr=1e-3, pretrained=True
     counts = np.bincount([dataset.index[r["label"]] for r in train_rows], minlength=len(labels))
     weights = [1.0 / max(1, counts[dataset.index[r["label"]]]) for r in train_rows]  # class-balanced sampling
     sampler = WeightedRandomSampler(weights, num_samples=len(train_rows), replacement=True)
-    loader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=workers, drop_last=len(train_rows) > batch_size,
-                        worker_init_fn=_seed_worker)
+    loader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, drop_last=len(train_rows) > batch_size,
+                        worker_init_fn=_seed_worker, **loader_options(device, workers))
 
     model = create_model(len(labels), pretrained).to(device)
+    if device == "cuda":
+        model = model.to(memory_format=torch.channels_last)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.05)
     steps = epochs * max(1, len(loader))
     if max_steps:
@@ -134,12 +172,26 @@ def train_model(rows, labels, epochs=12, batch_size=64, lr=1e-3, pretrained=True
                                                   else 0.5 * (1 + math.cos(math.pi * (s - warmup) / max(1, steps - warmup))))
     use_amp = device == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
-    best_state, best_val, step, history = None, -1.0, 0, []
-    for epoch in range(epochs):
+    best_state, best_val, step, history, start_epoch, stale = None, -1.0, 0, [], 0, 0
+    last = ckpt_dir / "last.pt" if ckpt_dir else None
+    if last and last.exists():
+        ck = torch.load(last, map_location="cpu", weights_only=False)
+        model.load_state_dict(ck["model"])
+        optimizer.load_state_dict(ck["optimizer"])
+        scheduler.load_state_dict(ck["scheduler"])
+        scaler.load_state_dict(ck["scaler"])
+        best_state, best_val, step, history = ck["best_state"], ck["best_val"], ck["step"], ck["history"]
+        start_epoch, stale = ck["epoch"], ck.get("stale", 0)
+        torch.set_rng_state(ck["torch_rng"])
+        log(f"resumed from {last} after epoch {start_epoch} (best val_acc {best_val:.4f})")
+    for epoch in range(start_epoch, epochs):
+        if stale >= patience:
+            log(f"early stop: no val_acc gain for {patience} epochs (best {best_val:.4f})")
+            break
         model.train()
         started, total, seen = time.time(), 0.0, 0
         for x, y in loader:
-            x, y = x.to(device), y.to(device)
+            x, y = to_device(x, device), y.to(device, non_blocking=True)
             with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=use_amp):
                 loss = F.cross_entropy(model(x), y, label_smoothing=0.1)
             optimizer.zero_grad(set_to_none=True)
@@ -157,11 +209,19 @@ def train_model(rows, labels, epochs=12, batch_size=64, lr=1e-3, pretrained=True
         history.append({"epoch": epoch + 1, "train_loss": total / max(1, seen), "val_acc": val_acc, "seconds": time.time() - started})
         log(f"epoch {epoch + 1}/{epochs} loss {total / max(1, seen):.4f} val_acc {val_acc:.4f}")
         if val_acc > best_val:
-            best_val, best_state = val_acc, {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            best_val, best_state, stale = val_acc, {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}, 0
+        else:
+            stale += 1
+        if last:
+            save_atomic({"epoch": epoch + 1, "step": step, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                         "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(), "best_state": best_state,
+                         "best_val": best_val, "history": history, "stale": stale, "torch_rng": torch.get_rng_state()}, last)
+            if on_checkpoint:
+                on_checkpoint()
         if max_steps and step >= max_steps:
             break
     model.load_state_dict(best_state)
-    return model, history
+    return model.to(memory_format=torch.contiguous_format), history
 
 
 # ---------------------------------------------------------------- calibration + thresholds
@@ -266,15 +326,21 @@ def drop_unreadable(rows, log=print, workers=32):
 
 
 def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size=64, lr=1e-3, pretrained=True,
-        device=None, workers=4, max_steps=None, target_accuracy=0.90, version=None, log=print) -> dict:
+        device=None, workers=4, max_steps=None, target_accuracy=0.90, version=None, log=print,
+        on_checkpoint=None, lineage: dict = None, patience: int = 4) -> dict:
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = drop_unreadable(rows, log)
     version = version or "leaf-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     log(f"{version}: {sum(r['split'] == 'train' for r in rows)} train rows on {device}, labels {labels}")
 
-    model, history = train_model(rows, labels, epochs, batch_size, lr, pretrained, device, workers, max_steps, log)
-    torch.save(model.state_dict(), out_dir / "model_best.pt")  # survives a crash in calibration or export
+    ckpt_dir = out_dir / "checkpoints"
+    ckpt_dir.mkdir(exist_ok=True)
+    model, history = train_model(rows, labels, epochs, batch_size, lr, pretrained, device, workers, max_steps, log,
+                                 ckpt_dir=ckpt_dir, on_checkpoint=on_checkpoint, patience=patience)
+    save_atomic(model.state_dict(), out_dir / "model_best.pt")  # survives a crash in calibration or export
+    if on_checkpoint:
+        on_checkpoint()
     split = lambda name: [r for r in rows if r["split"] == name]
     val_logits, val_y = predict_logits(model, split("val"), labels, device, workers=workers)
     temperature = fit_temperature(val_logits, val_y)
@@ -315,7 +381,9 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
             "thresholds_met_target": bool(th.get("met_target")), "target_selective_accuracy": target_accuracy,
         },
         "training": {"train_set": "BRACOL (Brazil) + PlantDoc/iBean as other", "epochs_run": len(history),
-                     "pretrained": pretrained, "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+                     "pretrained": pretrained, "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                     "epochs_max": epochs, "batch_size": batch_size, "lr": lr, "early_stop_patience": patience},
+        "lineage": lineage or {},
     }
     (out_dir / "leaf_classifier.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     write_reports(out_dir, labels, test_p, test_y, calib_p, calib_y, history, manifest_stats, metadata, th)
