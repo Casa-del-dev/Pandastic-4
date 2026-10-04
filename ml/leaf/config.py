@@ -25,14 +25,16 @@ SOURCES = {
         "licence": "CC BY 4.0", "country": "Brazil", "role": "train",
         "page": "https://data.mendeley.com/datasets/yy2k5y8mxg/1",
     },
-    # Cross-source calibration + test for coffee. Kenya (Kirinyaga). Contains rotated/flipped copies: de-duplicated.
+    # Train/val/test for coffee. Kenya (Kirinyaga). 128 px close-ups of single lesions, not whole leaves, so a model
+    # trained on BRACOL alone calls every one `other`: it is trained on (split by duplicate group) and tested
+    # same-source. Contains rotated/flipped copies: de-duplicated.
     "jmuben": {
         "files": {
             "cercospora.zip": MENDELEY.format(dataset="t2r6rszp5c", file="8657d2a2-c9a1-4733-9dbc-00c83aa3575a"),
             "rust.zip": MENDELEY.format(dataset="t2r6rszp5c", file="8c7c2915-f979-43f6-b3fd-b3bc7407da87"),
             "phoma.zip": MENDELEY.format(dataset="t2r6rszp5c", file="82625dd3-e908-4224-93b5-06a3b74f0c8a"),
         },
-        "licence": "CC BY 4.0", "country": "Kenya", "role": "test",
+        "licence": "CC BY 4.0", "country": "Kenya", "role": "train",
         "page": "https://data.mendeley.com/datasets/t2r6rszp5c/1",
     },
     "jmuben2": {
@@ -40,8 +42,16 @@ SOURCES = {
             "healthy.zip": MENDELEY.format(dataset="tgv3zb82nd", file="d126777d-c495-4b7a-846a-c0228540ea10"),
             "miner.zip": MENDELEY.format(dataset="tgv3zb82nd", file="f6d37632-6349-4be9-9af0-c3177dbfaa8a"),
         },
-        "licence": "CC BY 4.0", "country": "Kenya", "role": "test",
+        "licence": "CC BY 4.0", "country": "Kenya", "role": "train",
         "page": "https://data.mendeley.com/datasets/tgv3zb82nd/1",
+    },
+    # Cross-country calib + test for coffee. Ecuador robusta, smartphone photos of leaves on the plant (the closest
+    # public match to a farmer's photo; Uganda grows mostly robusta). Split by plant; never trained on (split "xc").
+    # One file per image on Mendeley: leaf/rocole_files.csv lists the S3 URLs (made by leaf/resolve_rocole.py).
+    "rocole": {
+        "file_list": "rocole_files.csv",
+        "licence": "CC BY 4.0", "country": "Ecuador", "role": "test",
+        "page": "https://data.mendeley.com/datasets/c5yvn32dzg/2",
     },
     # Maize classes (P2). Ghana field photos from local farms (CCMT raw data), one file per image. Mendeley blocks
     # cloud IPs, so leaf/ccmt_files.csv lists each image's public S3 URL (made by leaf/resolve_ccmt.py).

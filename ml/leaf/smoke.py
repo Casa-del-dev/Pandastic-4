@@ -54,6 +54,13 @@ def make_synthetic(root: Path, per_class: int = 12) -> None:
             leaf(d / f"{j}.jpg", COLOURS[label], False, rng)
             if j % 3 == 0:  # a rotated copy, like JMuBEN's augmented duplicates
                 Image.open(d / f"{j}.jpg").rotate(90).save(d / f"{j}_rot.jpg")
+    import csv
+    with open(Path(data.__file__).with_name(config.SOURCES["rocole"]["file_list"]), newline="") as f:
+        listing = list(csv.DictReader(f))
+    for r in [r for r in listing if r["label"] == "coffee_healthy"][:per_class] + \
+             [r for r in listing if r["label"] == "coffee_rust"][:per_class]:  # RoCoLe: leaves on the plant
+        (root / "rocole" / r["folder"]).mkdir(parents=True, exist_ok=True)
+        leaf(root / "rocole" / r["folder"] / r["filename"], COLOURS[r["label"]], False, rng)
     for name in ("plantdoc", "ibean"):
         d = root / name / "x" / "Tomato leaf"
         d.mkdir(parents=True)
@@ -69,7 +76,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         make_synthetic(root / "work")
-        rows, stats = data.build_manifest(root / "work", config.P0_LABELS, workers=2)
+        rows, stats = data.build_manifest(root / "work", config.P0_LABELS, workers=2, coffee_split="xc")
         print("manifest:", json.dumps(stats["counts"]))
         assert all(r["split"] in {"train", "val", "calib", "test"} for r in rows)
         assert not any(r["label"] not in config.P0_LABELS for r in rows)
@@ -86,8 +93,15 @@ def main() -> None:
         assert (root / "out/leaf_classifier.onnx").stat().st_size > 1_000_000
         assert (root / "out/reports/metrics.json").exists()
         assert set(meta["eval"]["by_crop"]) == {"coffee"}, meta["eval"]["by_crop"]
+        assert {"rocole", "jmuben"} <= set(meta["eval"]["by_source"]), meta["eval"]["by_source"]
+        assert not any(r["source"] == "rocole" and r["split"] in ("train", "val") for r in rows), "xc trains on RoCoLe"
+        plants = {}
+        for r in rows:  # a plant's photos never cross splits
+            if r["source"] == "rocole":
+                assert plants.setdefault(r["group"], r["split"]) == r["split"], r
         again = train.reevaluate(rows, config.P0_LABELS, root / "out", device="cpu", workers=0)
         assert again["eval"]["by_crop"] == meta["eval"]["by_crop"], (again["eval"]["by_crop"], meta["eval"]["by_crop"])
+        assert again["eval"]["by_source"] == meta["eval"]["by_source"]
         print("SMOKE OK:", json.dumps(meta["eval"]))
 
     if args.real_local:

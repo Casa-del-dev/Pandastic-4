@@ -1,9 +1,15 @@
 """Download, extract and index the leaf datasets into one manifest (path, label, source, split, group).
 
-Splits:
-  train / val  BRACOL (Brazil) coffee + 70% / 10% of `other`. val drives early stopping and temperature scaling.
-  calib / test JMuBEN + JMuBEN2 (Kenya, another country) de-duplicated, split 50/50 by duplicate group,
-               + 10% / 10% of `other`. Thresholds are chosen on calib; numbers are reported on test only.
+Splits (coffee_split "mix", the default; RoCoLe = Ecuador smartphone photos of leaves on the plant):
+  train / val  BRACOL (Brazil, whole leaves on white paper) 85/15 + JMuBEN (Kenya, lesion close-ups,
+               de-duplicated) 70/10 by duplicate group + RoCoLe 50/10 by plant + `other` 70/10.
+               val drives early stopping and temperature scaling.
+  calib / test RoCoLe 15/25 by plant (other plants than training: same source) + JMuBEN test 20% + `other`
+               10/10. Thresholds are chosen on calib; numbers are reported on test only.
+  coffee_split "xc" never trains on RoCoLe (calib 40 / test 60): a cross-country coffee test.
+  eval.by_source says which slices were trained on and which were not.
+JMuBEN was the calib/test set until 2026-10-04: its 128 px lesion crops look like no whole-leaf photo, and a
+model trained on BRACOL alone called every one of them `other`.
 """
 import csv
 import hashlib
@@ -180,6 +186,18 @@ def _ccmt_rows(work_dir: Path, labels, workers):
     return [{"path": p, "label": FOLDERS[Path(p).parent.name], "source": "ccmt", "group": "ccmt:" + groups[p]} for p in paths]
 
 
+def _rocole_rows(work_dir: Path, labels):
+    """RoCoLe photos listed in leaf/rocole_files.csv (label + plant group per file), as downloaded into the work dir."""
+    listing = Path(__file__).resolve().parent / config.SOURCES["rocole"]["file_list"]
+    rows = []
+    with open(listing, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            path = work_dir / "rocole" / r["folder"] / r["filename"]
+            if r["label"] in labels and path.exists():
+                rows.append({"path": str(path), "label": r["label"], "source": "rocole", "group": r["group"]})
+    return rows
+
+
 def _other_rows(work_dir: Path, labels):
     rows = []
     for name, p1_map in (("plantdoc", config.PLANTDOC_P1), ("ibean", config.IBEAN_P1)):
@@ -195,11 +213,12 @@ def _other_rows(work_dir: Path, labels):
     return rows
 
 
-def _split_by_group(rows, fractions, seed):
-    """Assign splits per (label, group) so duplicates never cross splits. fractions: [(split, share), ...]."""
+def _split_by_group(rows, fractions, seed, per_label: bool = True):
+    """Assign splits per (label, group) so duplicates never cross splits. fractions: [(split, share), ...].
+    per_label=False splits whole groups (e.g. a plant's healthy and rusty leaves stay together)."""
     by_label = defaultdict(lambda: defaultdict(list))
     for r in rows:
-        by_label[r["label"]][r["group"]].append(r)
+        by_label[r["label"] if per_label else ""][r["group"]].append(r)
     rng = random.Random(seed)
     for label, groups in by_label.items():
         keys = sorted(groups)
@@ -213,8 +232,15 @@ def _split_by_group(rows, fractions, seed):
             start = end
 
 
+# How RoCoLe (the coffee calib/test source) is split, by plant.
+COFFEE_SPLITS = {
+    "xc": [("calib", 0.4), ("test", 0.6)],  # never trained on: a cross-country test
+    "mix": [("train", 0.5), ("val", 0.1), ("calib", 0.15), ("test", 0.25)],  # held-out plants, same source
+}
+
+
 def build_manifest(work_dir: Path, labels, seed: int = 13, max_test_per_class: int = 1000,
-                   workers: int = os.cpu_count() or 2, log=print):
+                   workers: int = os.cpu_count() or 2, log=print, coffee_split: str = "mix"):
     labels = set(labels)
     bracol = _bracol_rows(work_dir, labels)
     _split_by_group(bracol, [("train", 0.85), ("val", 0.15)], seed)
@@ -232,7 +258,11 @@ def build_manifest(work_dir: Path, labels, seed: int = 13, max_test_per_class: i
         items = [r for r in jmuben_unique if r["label"] == label]
         rng.shuffle(items)
         capped += items[: 2 * max_test_per_class]
-    _split_by_group(capped, [("calib", 0.5), ("test", 0.5)], seed)
+    _split_by_group(capped, [("train", 0.7), ("val", 0.1), ("test", 0.2)], seed)
+
+    rocole = _rocole_rows(work_dir, labels)
+    log(f"rocole: {len(rocole)} photos from {len({r['group'] for r in rocole})} plants, split {coffee_split}")
+    _split_by_group(rocole, COFFEE_SPLITS[coffee_split], seed, per_label=False)
 
     other = _other_rows(work_dir, labels)
     _split_by_group(other, [("train", 0.7), ("val", 0.1), ("calib", 0.1), ("test", 0.1)], seed)
@@ -241,11 +271,11 @@ def build_manifest(work_dir: Path, labels, seed: int = 13, max_test_per_class: i
     ccmt = _ccmt_rows(work_dir, labels, workers)
     _split_by_group(ccmt, [("train", 0.7), ("val", 0.1), ("calib", 0.1), ("test", 0.1)], seed)
 
-    rows = bracol + capped + other + ccmt
+    rows = bracol + capped + rocole + other + ccmt
     stats = {
         "counts": {f"{s}/{l}": c for (s, l), c in sorted(Counter((r["split"], r["label"]) for r in rows).items())},
         "by_source": {f"{s}/{src}": c for (s, src), c in sorted(Counter((r["split"], r["source"]) for r in rows).items())},
-        "jmuben_raw": len(jmuben), "jmuben_unique": len(jmuben_unique),
+        "jmuben_raw": len(jmuben), "jmuben_unique": len(jmuben_unique), "coffee_split": coffee_split,
         "labels_without_training_data": sorted(labels - {r["label"] for r in rows if r["split"] == "train"}),
     }
     return rows, stats

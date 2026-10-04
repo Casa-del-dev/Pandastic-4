@@ -263,9 +263,8 @@ def selective_metrics(probs: np.ndarray, y: np.ndarray, labels, min_prob: float,
 
 
 def by_crop(probs: np.ndarray, y: np.ndarray, labels, min_prob: float, min_margin: float) -> dict:
-    """Selective metrics per crop, each slice with the held-out `other` photos. Only coffee is tested on another
-    country (Kenya vs Brazil), so its slice is the one to compare with a coffee-only (p0) model; maize and bean are
-    tested on held-out photos from their training sources."""
+    """Selective metrics per crop, each slice with the held-out `other` photos. The coffee slice is the one to
+    compare with a coffee-only (p0) model; by_source separates its cross-country part (RoCoLe) from the rest."""
     out = {}
     for crop in dict.fromkeys(label.split("_")[0] for label in labels if label != "other"):
         keep = np.array([labels[t] == "other" or labels[t].startswith(crop + "_") for t in y], dtype=bool)
@@ -276,13 +275,42 @@ def by_crop(probs: np.ndarray, y: np.ndarray, labels, min_prob: float, min_margi
     return out
 
 
+def by_source(probs: np.ndarray, y: np.ndarray, sources, labels, min_prob: float, min_margin: float) -> dict:
+    """Selective metrics per photo source, each slice with the held-out `other` photos. Says which numbers are
+    cross-country (a source never trained on, e.g. RoCoLe) and which are same-source (held-out images)."""
+    sources = np.asarray(sources)
+    other = labels.index("other") if "other" in labels else -1
+    out = {}
+    for src in sorted(set(sources[y != other].tolist())):
+        keep = (y == other) | (sources == src)
+        m = selective_metrics(probs[keep], y[keep], labels, min_prob, min_margin)
+        out[src] = {"n_plant": m["n_plant"], "accuracy": round(float((probs[keep].argmax(1) == y[keep]).mean()), 4),
+                    "coverage_at_threshold": round(m["coverage"], 4),
+                    "selective_accuracy": round(m["selective_accuracy"], 4)}
+    return out
+
+
+SOURCE_NAMES = {"bracol": "BRACOL (Brazil)", "jmuben": "JMuBEN (Kenya, lesion close-ups)",
+                "rocole": "RoCoLe (Ecuador, smartphone photos on the plant)", "ccmt": "CCMT (Ghana)",
+                "plantdoc": "PlantDoc", "ibean": "iBean (Uganda)"}
+
+
 def describe_sets(rows) -> tuple[str, str]:
-    crops = sorted({r["source"] for r in rows if r["split"] == "test" and r["label"] != "other"} - {"jmuben"})
-    test_set = "coffee: JMuBEN + JMuBEN2 (Kenya), rotation/flip-invariant pHash de-duplicated"
-    if crops:
-        test_set += f"; maize/bean: held-out photos from their training sources ({', '.join(crops)}), not another country"
-    train_set = "BRACOL (Brazil) coffee" + (f" + {', '.join(crops)} maize/bean" if crops else "")
-    return test_set + "; + held-out `other`", train_set + "; PlantDoc/iBean other classes as `other`"
+    """Plain-language test/train descriptions from what the manifest holds: which test sources were trained on."""
+    def plant_sources(split):
+        return {r["source"] for r in rows if r["split"] == split and r["label"] != "other"}
+    trained, tested = plant_sources("train"), plant_sources("test")
+    name = lambda src: SOURCE_NAMES.get(src, src)
+    cross = [name(s) for s in sorted(tested - trained)]
+    same = [name(s) for s in sorted(tested & trained)]
+    parts = []
+    if cross:
+        parts.append(f"never trained on: {', '.join(cross)}")
+    if same:
+        parts.append(f"held-out images from training sources: {', '.join(same)}")
+    test_set = "; ".join(parts) + "; + held-out `other`"
+    train_set = " + ".join(name(s) for s in sorted(trained)) + "; PlantDoc/iBean other classes as `other`"
+    return test_set, train_set
 
 
 def reevaluate(rows, labels, out_dir: Path, device=None, workers=4, log=print) -> dict:
@@ -296,11 +324,13 @@ def reevaluate(rows, labels, out_dir: Path, device=None, workers=4, log=print) -
     model = create_model(len(labels), pretrained=False)
     model.load_state_dict(torch.load(out_dir / "model_best.pt", map_location="cpu"))
     model.to(device)
-    logits, y = predict_logits(model, [r for r in rows if r["split"] == "test"], labels, device, workers=workers)
+    test_rows = [r for r in rows if r["split"] == "test"]
+    logits, y = predict_logits(model, test_rows, labels, device, workers=workers)
     probs, y = F.softmax(logits / meta["temperature"], dim=1).numpy(), y.numpy()
     th = meta["thresholds"]
     meta["eval"]["test_set"] = describe_sets(rows)[0]
     meta["eval"]["by_crop"] = by_crop(probs, y, labels, th["min_prob"], th["min_margin"])
+    meta["eval"]["by_source"] = by_source(probs, y, [r["source"] for r in test_rows], labels, th["min_prob"], th["min_margin"])
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     if metrics_path.exists():
         metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
@@ -429,6 +459,8 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
             "other_false_accept": round(test_m.get("other_false_accept", 0.0), 4),
             "thresholds_met_target": bool(th.get("met_target")), "target_selective_accuracy": target_accuracy,
             "by_crop": by_crop(test_p, test_y, labels, th["min_prob"], th["min_margin"]) if len(test_y) else {},
+            "by_source": by_source(test_p, test_y, [r["source"] for r in split("test")], labels, th["min_prob"],
+                                   th["min_margin"]) if len(test_y) else {},
         },
         "training": {"train_set": train_set, "epochs_run": len(history),
                      "pretrained": pretrained, "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
