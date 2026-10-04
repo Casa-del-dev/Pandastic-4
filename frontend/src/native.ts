@@ -51,6 +51,10 @@ export type Decision = {
   price?: Price
   escalate?: boolean
   stub?: boolean
+  /** Who read the words: 'model', 'model_agreed', 'keywords_model_disagreed', ... (BrainHost). */
+  nlu?: string
+  /** One fixed line, e.g. "AI ya simu imeelewa: bei, kahawa, 12,000." Present only when the on-phone language model read the words. */
+  understood?: string
   quality?: string
   error?: string
 }

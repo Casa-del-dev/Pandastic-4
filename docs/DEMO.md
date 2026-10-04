@@ -27,8 +27,9 @@ adb shell run-as org.pandastic.relay mkdir -p files/models
 adb shell run-as org.pandastic.relay cp /data/local/tmp/Qwen3.5-0.8B-pandastic-Q4_K_M.gguf files/models/
 ```
 
-`adb logcat -s PandasticLlm` shows the model reading a message (about 5 s on the emulator). Each answer's `nlu` field
-says who understood it: `keywords`, `model`, or `keywords_no_model`.
+The model reads every SMS and chat question (about 5 s on the emulator), and each reply ends with "AI ya simu
+imeelewa: ..." (what it understood). `adb logcat -s PandasticLlm` shows its reading; each answer's `nlu` field says
+whether it was used (`model`), agreed (`model_agreed`), was overruled by the keywords, or is missing (`keywords_no_model`).
 
 ## 3. Set up the SMS helper (once, on the daughter's phone)
 

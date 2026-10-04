@@ -40,7 +40,7 @@ These are browser previews; carrier SMS is available in the Android app.
                                               │
  Daughter's phone UI (React in WebView) ──────┤  NativeBridge
    photo ─► QualityGate ─► LeafClassifier (ONNX) ─┐
-   text / SMS ─► KeywordNlu ─► Qwen3.5-0.8B (llama.cpp, GBNF; only if keywords miss) ─┐
+   text / SMS ─► KeywordNlu + Qwen3.5-0.8B (llama.cpp, GBNF; fills what keywords miss)┐
                                                    ▼                                  ▼
                                Resolver (thresholds and statuses in code) ◄── knowledge.sqlite
                                                    │                      (cited advice, prices, lexicon)
@@ -51,7 +51,7 @@ These are browser previews; carrier SMS is available in the Android app.
 | Part | What | Size |
 | :-- | :-- | :-- |
 | Leaf classifier | 3 × MobileNetV4-Conv-Small averaged in one ONNX file (int8 weights), 14 labels: coffee, maize and bean leaf problems, healthy leaves, and "not a leaf". Trained on photos from Brazil, Kenya, Ecuador, Ghana and Uganda; temperature-calibrated, with stricter floors for "healthy". A plant-share and blur gate runs first. | 7.7 MB |
-| Language model | Qwen3.5-0.8B Q4_K_M (Apache-2.0, multilingual), fine-tuned with LoRA on farmer SMS, via llama.cpp under a GBNF grammar. It **only** reads what the keywords missed (the intent, and a symptom under strict conditions). It never writes advice. | 542 MB, optional: downloaded once in the app (opt-in) or imported from a file |
+| Language model | Qwen3.5-0.8B Q4_K_M (Apache-2.0, multilingual), fine-tuned with LoRA on farmer SMS, via llama.cpp under a GBNF grammar. It reads every message; its reading is used only where the keywords found nothing (the intent, and a symptom under strict conditions), and each reply ends with one fixed line saying what it understood ("AI ya simu imeelewa: bei, kahawa, 12,000."). It never writes advice. | 542 MB, optional: downloaded once in the app (opt-in) or imported from a file |
 | Knowledge base | SQLite: cited advice (EN + SW), UCDA/MAAIF coffee farm-gate prices, WFP maize and bean prices, SW/EN lexicon | 360 KB |
 | App | Java + React (bundled, offline). The INTERNET permission is used for one thing, the opt-in model download; questions, photos and answers never go online, and the WebView blocks every network load. | ~40 MB (arm64 release) |
 

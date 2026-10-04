@@ -27,6 +27,13 @@ public final class SmsFormatter {
         return cut(text);
     }
 
+    /** Adds a short line after the reply only if it still fits MAX_SEGMENTS; the reply itself is never cut for it. */
+    public static String withTail(String sms, String tail) {
+        if (tail == null || tail.isEmpty()) return sms;
+        String longer = sms + "\n" + gsmSafe(tail);
+        return segments(longer) <= MAX_SEGMENTS ? longer : sms;
+    }
+
     /** Replaces common non-GSM characters so the SMS stays at 160 characters per segment. */
     static String gsmSafe(String s) {
         StringBuilder out = new StringBuilder(s.length());

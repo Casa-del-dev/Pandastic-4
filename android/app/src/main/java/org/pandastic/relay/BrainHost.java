@@ -146,8 +146,9 @@ public final class BrainHost {
         // Without a classifier the Brain sees no result and answers "not sure — ask a person".
         JSONObject decision = new JSONObject(brain.answerPhoto(issue, result, text, lang).toJson());
         if (text != null && !text.trim().isEmpty()) {  // the words with the photo went through the same NLU
-            LlmNlu language = llm;
-            decision.put("nlu", language != null ? language.lastSource : llmLoads.get() > 0 ? "keywords_model_loading" : "keywords_no_model");
+            decision.put("nlu", nluSource());
+            String line = understood(decision.optString("lang", lang));
+            if (line != null) decision.put("understood", line);
         }
         return decision.put("stub", model != null && model.stub)
             .put("plant_share", Math.round(plantShare * 100) / 100.0).put("not_a_plant", notAPlant).toString();
@@ -164,15 +165,27 @@ public final class BrainHost {
         Brain brain = brain();
         if (brain == null) return new Responder.Fallback().answer(text, lang);
         Decision decision = brain.answerText(text, lang);
-        // Which part understood the message, so the UI, the hub log and the tests can see the language model work.
-        LlmNlu model = llm;
-        String nlu = model != null ? model.lastSource : llmLoads.get() > 0 ? "keywords_model_loading" : "keywords_no_model";
-        String json = new JSONObject(decision.toJson()).put("nlu", nlu).toString();
+        // Which part understood the message, so the UI, the hub log and the tests can see the language model work;
+        // the farmer sees it as one fixed line, "AI ya simu imeelewa: ..." (chat: field "understood"; SMS: at the end
+        // when it still fits in 2 parts, so the safety sentence stays first).
+        String line = understood(decision.lang);
+        JSONObject json = new JSONObject(decision.toJson()).put("nlu", nluSource());
+        if (line != null) json.put("understood", line);
         // Personal messages from the same allowed numbers get no automatic reply: decide on the keywords'
         // own reading (cheap) plus the final intent (HubPolicy).
         KeywordNlu words = keywords;
         boolean farming = HubPolicy.isFarmingQuestion(text, words == null ? null : words.parse(text, lang), decision.intent);
-        return new Responder.Reply(SmsFormatter.format(decision), json, farming);
+        return new Responder.Reply(SmsFormatter.withTail(SmsFormatter.format(decision), line), json.toString(), farming);
+    }
+
+    private String nluSource() {
+        LlmNlu model = llm;
+        return model != null ? model.lastSource : llmLoads.get() > 0 ? "keywords_model_loading" : "keywords_no_model";
+    }
+
+    private String understood(String lang) {
+        LlmNlu model = llm;
+        return model == null ? null : model.understood(lang);
     }
 
     /**

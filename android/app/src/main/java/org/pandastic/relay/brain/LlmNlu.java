@@ -6,14 +6,17 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.json.JSONObject;
 
 /**
- * Qwen3.5-0.8B (llama.cpp) reads messy SMS text (contracts §5). It only names the intent when the
- * keyword NLU found none; its output is forced into JSON by a GBNF grammar and then checked against a
+ * Qwen3.5-0.8B (llama.cpp) reads every SMS and chat question (contracts §5). Its reading is used only where
+ * the keyword NLU found nothing (intent; a crop-consistent symptom); its output is forced into JSON by a GBNF grammar and then checked against a
  * fixed list here, and it never writes advice or prices. Any failure falls back to keywords.
  */
 public final class LlmNlu implements Nlu, AutoCloseable {
@@ -94,26 +97,77 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     @Override public Slots parse(String text, String lang) {
         Slots slots = keywords.parse(text, lang);
         boolean symptoms = fineTuned();
-        if (!needsModel(slots, symptoms)) { lastSource = "keywords"; return slots; }
+        lastRead = null;
+        // The model reads every message (user decision, 07:05 UTC) so the farmer sees what the phone's AI
+        // understood. Which reading wins is still the measured policy: merge() only fills what the keywords
+        // missed, so the answers are the same as when the model ran only for those messages.
         JSONObject json = complete(text);
         if (json == null) { lastSource = "keywords_model_failed"; return slots; }
+        String modelIntent = json.optString("intent", null);
+        String modelCrop = json.isNull("crop") ? null : json.optString("crop", null);
         String intentBefore = slots.intent, symptomBefore = slots.symptom;
-        merge(slots, json.optString("intent", null), symptoms ? json.optString("symptom", null) : null);
-        boolean used = !java.util.Objects.equals(intentBefore, slots.intent) || !java.util.Objects.equals(symptomBefore, slots.symptom);
-        lastSource = used ? "model" : "keywords_model_agreed";
+        merge(slots, modelIntent, symptoms ? json.optString("symptom", null) : null);
+        boolean filled = !Objects.equals(intentBefore, slots.intent) || !Objects.equals(symptomBefore, slots.symptom);
+        boolean sameIntent = Objects.equals(modelIntent, slots.intent)
+            || (isGeneral(modelIntent) && isGeneral(slots.intent));
+        boolean sameCrop = slots.crop == null || modelCrop == null || slots.crop.equals(modelCrop);
+        lastSource = filled ? "model" : sameIntent ? "model_agreed" : "keywords_model_disagreed";
+        Log.i(TAG, "LLM read intent=" + modelIntent + " crop=" + modelCrop + " symptom=" + json.optString("symptom", null)
+            + " -> " + lastSource + " (final: " + slots.intent + ", " + slots.crop + ", " + slots.symptom + ")");
+        if (filled || sameIntent) {
+            lastRead = copy(slots);
+            // Say only what the model read too: a crop it named differently came from the keywords alone.
+            if (!sameCrop) { lastRead.crop = null; lastRead.symptom = null; }
+        }
         return slots;
     }
 
     /**
-     * How the last message was understood, for the UI and the hub log: "keywords" (the model was not needed),
-     * "model" (its intent or symptom was used), "keywords_model_agreed" (asked, added nothing usable),
-     * "keywords_model_failed" (no answer within the time budget). Read on the same thread as parse().
+     * How the last message was understood, for the UI, the hub log and the tests: "model" (its intent or
+     * symptom was used), "model_agreed" (it read the same as the keywords), "keywords_model_disagreed" (the
+     * keywords' reading was kept), "keywords_model_failed" (no answer within the time budget). Read on the
+     * same thread as parse().
      */
     public volatile String lastSource = "keywords";
+    /** The final reading of the last message if the model agreed with it or filled it; null otherwise. */
+    private volatile Slots lastRead;
+
+    /**
+     * One fixed-template line for the reply: "AI ya simu imeelewa: bei, kahawa, 12,000." It names only slots
+     * the model read too (null when it disagreed or failed), never advice.
+     */
+    public String understood(String lang) {
+        Slots s = lastRead;
+        if (s == null) return null;
+        boolean en = "en".equals(lang);
+        List<String> parts = new ArrayList<>();
+        switch (s.intent == null ? "other" : s.intent) {
+            case "price": parts.add(en ? "price" : "bei"); break;
+            case "diagnose": parts.add(en ? "plant problem" : "tatizo la mmea"); break;
+            case "planting": parts.add(en ? "planting" : "kupanda"); break;
+            default: parts.add(en ? "help" : "msaada");
+        }
+        if (s.crop != null) parts.add(Templates.name(s.crop, lang));
+        if (s.crop != null && s.symptom != null && "diagnose".equals(s.intent)) {
+            String name = Templates.name(s.crop + "_" + s.symptom, lang);
+            parts.add(Character.toLowerCase(name.charAt(0)) + name.substring(1));
+        }
+        if (s.offer != null && "price".equals(s.intent)) parts.add(Templates.money(s.offer));
+        return (en ? "Phone AI understood: " : "AI ya simu imeelewa: ") + String.join(", ", parts) + ".";
+    }
+
+    private static boolean isGeneral(String intent) { return intent == null || "help".equals(intent) || "other".equals(intent); }
+
+    private static Slots copy(Slots from) {
+        Slots to = new Slots();
+        to.lang = from.lang; to.intent = from.intent; to.crop = from.crop; to.symptom = from.symptom;
+        to.commodity = from.commodity; to.offer = from.offer; to.intentProb = from.intentProb;
+        return to;
+    }
 
     boolean fineTuned() { return FINE_TUNED.equals(modelName()); }
 
-    /** The model runs when the keywords found no intent, or (fine-tune only) a crop problem without a symptom. */
+    /** Where the model's reading can change the answer: no intent keyword, or (fine-tune only) a crop problem without a symptom. */
     static boolean needsModel(Slots keywordSlots, boolean symptoms) {
         return keywordSlots.intentProb == 0 || (symptoms && "diagnose".equals(keywordSlots.intent)
             && keywordSlots.symptom == null && keywordSlots.crop != null);

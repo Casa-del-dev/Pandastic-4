@@ -306,15 +306,18 @@ async function test() {
   // "emmwanyi" = coffee in Luganda; the keywords don't know it, so no disease of another crop may be named.
   await sms('Luganda coffee problem: safe, no other crop\'s disease', NUMBER.phone2,
     'emmwanyi zange zirwadde amakoola gafuuse kyenvu',
-    body => safe(body) ?? (/mahindi|maize|maharage|bean/i.test(body) ? 'names a maize/bean disease for coffee' : null),
+    body => safe(body) ?? (/mahindi|maize|maharage|bean/i.test(body) ? 'names a maize/bean disease for coffee' : null)
+      ?? (/AI ya simu imeelewa/.test(body) ? null : 'no "AI ya simu imeelewa" line (language model not used?)'),
     { timeoutMs: 60000 })
   await sms('symptom the keywords miss (fine-tuned LLM names it, still not sure)', NUMBER.phone2,
     'coffee leaves have grey spots with brown ring', safe, { timeoutMs: 60000 })
   await sms('pest the keywords miss (fine-tuned LLM names it, still not sure)', NUMBER.phone2,
     'Wadudu wanachimba ndani ya majani ya kahawa', safe, { timeoutMs: 60000 })
   // The helper is the daughter's phone: her mother's personal texts must get no automatic reply.
-  for (const text of ['Habari mwanangu, shule inaendaje?', 'Nimekutumia pesa ya ada', 'how is school?'])
+  for (const text of ['Habari mwanangu, shule inaendaje?', 'Nimekutumia pesa ya ada', 'how is school?', 'nisaidie pesa ya ada'])
     await sms(`personal message gets no reply: "${text}"`, NUMBER.phone, text, () => null, { expectReply: false })
+  await sms('"nisaidie" alone (help me) gets the menu', NUMBER.phone2, 'Nisaidie tafadhali',
+    has(/P ?1|bei|price/i, 'no menu'))
   await sms('greeting + a farming question still gets the answer', NUMBER.phone2,
     'Habari mwanangu, bei ya kahawa ni ngapi leo?', has(/UGX/, 'no price'))
   await sms('unknown number gets no reply (allowlist)', NUMBER.stranger, 'P 1 12000', () => null, { expectReply: false })
