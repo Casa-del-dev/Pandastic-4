@@ -81,7 +81,7 @@ In the app (capable phone, local chat):
    - Allowlist + rate limits. Data stays on the phone.
 6. **Tech stack (~20 s).**
    - React UI in an Android WebView.
-   - ONNX Runtime classifier (MobileNetV4, trained on Modal).
+   - ONNX Runtime classifier (3 × EfficientNet-B0, trained on Modal).
    - llama.cpp + GBNF grammar.
    - SQLite knowledge base (UCDA/MAAIF, WFP, PlantwisePlus).
    - Sizes: app ~40 MB arm64 + optional 542 MB model. Peak RAM < 1 GB on a 4 GB phone.
