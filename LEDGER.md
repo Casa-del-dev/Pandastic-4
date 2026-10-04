@@ -94,7 +94,7 @@ Open rows:
 | T55 | O4: LLM stops after the symptom, JSON closed in Java | B (user request, was A) | done | `brain/LlmNlu.java` (no JNI change), `ml/llm/stop_eval.py` | 08:00 | 661c39a: −35% tokens, 220/220 same reading |
 | T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | A (B claimed after A's fix) | done | `README.md`, `docs/DEMO.md` | 07:41 | A's 214928a; B updates the leaf row again with the O1 install |
 | T57 | `SUMMARY.md`: the entry against every point of the challenge brief (§05–09 + Annex B) | B (user request) | done | `SUMMARY.md`, `docs/DATA.md` | 10:42 | Video link + §12 "our take" for the team to check |
-| T58 | 60 s technical-walkthrough video (code-rendered scenes + real app screens + CC0 music) | B (user request) | done | `video/` | 11:36 | 57.0 s MP4 on B's machine (`video/out/`), user uploads |
+| T58 | 60 s technical-walkthrough video (code-rendered scenes + real app screens + CC0 music) | B (user request) | done | `video/` | 12:23 | v2: 58.0 s MP4 on B's machine (`video/out/`), user uploads |
 | T59 | Docker: browser phone pair + reproducible APK build in containers | C (user request) | done | `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `DOCKER.md`, `frontend/local/run-pair.mjs` (bind host) | 11:09 | `docker compose up` + `docker build --target apk --output out .` |
 | T50 | `CLAUDE.md`: compact project memory, kept current | B | done (maintained) | `CLAUDE.md` | 06:35 | User request; ledger compacted 06:35 (user request) |
 | T32 | STT, maize grain head, FAMEWS alerts, XGBoost + weather | — | todo | — | — | Stretch; only if everything else is done |
@@ -283,3 +283,7 @@ Done (one line each; details in git and the archived ledger):
   `python3 scripts/product-demo/voice.py && python3 scripts/product-demo/cut.py` (ElevenLabs key in the parent `.env`,
   never committed). Output + footage in `/product-demo/` (gitignored). Also ddbd89a/6579ecc: optional Qwen3.5-2B chat
   writer (files/models/Qwen3.5-2B-Q4_K_M.gguf) writes the helper's chat replies; automatic SMS stay fixed.
+- [B 12:23] **T58 v2 (my user): walkthrough re-cut, 58.0 s.** New type (Archivo, Fragment Mono), fewer words held
+  longer, smooth camera moves + motion blur. Now names both models: Qwen3.5-0.8B fine-tuned *reads*, Qwen3.5-2B
+  *rewords* (chat only), code *decides* and *checks*; sizes 0.4 MB / 13 MB / 542 MB / 1.28 GB. **A:** uses
+  `docs/screenshots/demo/` (your 2B replies) and `04-sms-thread.png`. CLAUDE.md now notes the 2B chat writer.
