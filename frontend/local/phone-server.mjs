@@ -13,6 +13,9 @@ export function localPhonePlugin() {
   if (![number, peer].every(validPort) || !token || number === peer) throw new Error('Invalid local phone configuration')
   const directory = resolve(process.env.PANDASTIC_PHONE_STATE_DIR || '.local-phones')
   // Docker: the helper phone's real Java brain (desktop/BrainServer.java). Without it, the labelled local demo answers.
+  // A deployed demo (DOCKER.md) is opened by its server's name or IP: PANDASTIC_PUBLIC_HOST adds that origin.
+  const publicHost = process.env.PANDASTIC_PUBLIC_HOST
+  const origins = [`http://localhost:${number}`, `http://127.0.0.1:${number}`, ...(publicHost ? [`http://${publicHost}:${number}`, `https://${publicHost}:${number}`] : [])]
   const brainUrl = process.env.PANDASTIC_BRAIN_URL?.replace(/\/$/, '')
   // Docker demo: answer every allowlisted SMS, personal ones with the menu. The app (HubPolicy) leaves those unanswered.
   const answerAll = process.env.PANDASTIC_HUB_ANSWER_ALL === '1'
@@ -92,7 +95,7 @@ export function localPhonePlugin() {
         // The peer delivery route is private to the pair; UI writes must come from this origin.
         if (path === '/deliver') {
           if (req.headers['x-pandastic-phone'] !== token) return respond({ error: 'forbidden' }, 403)
-        } else if (req.headers.origin && ![`http://localhost:${number}`, `http://127.0.0.1:${number}`].includes(req.headers.origin)) {
+        } else if (req.headers.origin && !origins.includes(req.headers.origin)) {
           return respond({ error: 'origin' }, 403)
         }
         if (req.method === 'GET' && path === '/state') return respond(snapshot())

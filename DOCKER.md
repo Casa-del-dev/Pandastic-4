@@ -48,6 +48,28 @@ both phones. Keep the phones' host ports the same as their container ports
 from localhost. The brain uses about 800 MB of memory; on x86_64 it needs a
 CPU with AVX2 (Intel 2013+, AMD 2015+).
 
+## Deploy the phone pair on a server
+
+Any Linux server or cloud VM works if it has Docker, 2 GB of RAM, 5 GB of disk
+and an x86_64 CPU with AVX2 (any current cloud VM). Open TCP ports **8080,
+5173 and 5174** in its firewall, then on the server run:
+
+```sh
+git clone <this repo> && cd Pandastic-4
+PANDASTIC_PUBLIC_HOST=<server IP or domain> docker compose up -d --build
+```
+
+Open `http://<server IP or domain>:8080`. `PANDASTIC_PUBLIC_HOST` must match
+the address in the browser exactly: the phones refuse requests from any other
+origin.
+
+- Everyone who opens the page shares the same two phones and chats. Reset
+  them with `docker compose down -v && PANDASTIC_PUBLIC_HOST=... docker compose up -d`.
+- It is plain HTTP. Browsers only allow the microphone (dictation) on HTTPS
+  or localhost; typing, SMS and photos from the gallery work.
+- The phones run the Vite development server. That is fine for a demo, but
+  don't put anything private on it.
+
 ## 2. Build the Android APK
 
 ```sh

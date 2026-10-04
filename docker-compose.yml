@@ -10,6 +10,8 @@ services:
     image: pandastic-phones
     environment:
       PANDASTIC_BRAIN_URL: http://brain:8090
+      # On a server: PANDASTIC_PUBLIC_HOST=<its IP or name> docker compose up -d (DOCKER.md).
+      PANDASTIC_PUBLIC_HOST: ${PANDASTIC_PUBLIC_HOST:-}
       # Every SMS from Noor gets an answer; non-farming ones get the menu. "0" = the app's rule (HubPolicy:
       # personal messages and plain greetings get no reply).
       PANDASTIC_HUB_ANSWER_ALL: "1"

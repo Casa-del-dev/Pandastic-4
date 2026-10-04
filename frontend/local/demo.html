@@ -9,11 +9,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; background: var(--mist); color: var(--soil); font: 16px/1.4 system-ui, sans-serif;
     display: flex; flex-direction: column; align-items: center; }
-  header { text-align: center; padding: 16px 16px 4px; }
-  h1 { margin: 0; font-size: 22px; color: var(--leaf); }
-  header p { margin: 4px 0 0; color: var(--soil-muted); }
-  code { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; color: var(--soil); }
-  main { flex: 1; display: flex; gap: 40px; justify-content: center; align-items: flex-start; padding: 12px; flex-wrap: wrap; }
+  main { flex: 1; display: flex; gap: 40px; justify-content: center; align-items: center; padding: 16px; flex-wrap: wrap; }
   figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   figcaption { text-align: center; font-weight: 600; }
   figcaption small { display: block; font-weight: 400; color: var(--soil-muted); }
@@ -25,10 +21,6 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>Pandastic: Noor's phone and the helper phone</h1>
-  <p>Type <code>P 1 12000</code> on Noor's basic phone and send it. The helper answers by "SMS" within seconds. On the helper phone, <strong>+</strong> checks a leaf photo.</p>
-</header>
 <main>
   <figure>
     <div class="frame"><div class="device"><iframe id="basic" title="Basic phone" allow="camera; microphone; autoplay"></iframe></div></div>
@@ -40,16 +32,16 @@
   </figure>
 </main>
 <script>
-  // The phones only accept requests from localhost / 127.0.0.1 on their own port.
+  // Same host as this page: localhost, or the server's PANDASTIC_PUBLIC_HOST when deployed.
   const ports = { basic: '__BASIC_PORT__', capable: '__CAPABLE_PORT__' }
-  const host = location.hostname === '127.0.0.1' ? '127.0.0.1' : 'localhost'
+  const host = location.hostname
   for (const [id, port] of Object.entries(ports)) {
-    document.getElementById(id).src = `http://${host}:${port}/`
+    document.getElementById(id).src = `${location.protocol}//${host}:${port}/`
     document.querySelector(`[data-port="${id}"]`).textContent = port
   }
   function fit() {
     // Side by side on a landscape screen, stacked on a narrow one.
-    const byHeight = (innerHeight - 140) / 868
+    const byHeight = (innerHeight - 90) / 868
     const byWidth = innerWidth > innerHeight * 0.9 ? (innerWidth - 100) / (2 * 414) : (innerWidth - 24) / 414
     document.documentElement.style.setProperty('--scale', Math.max(0.4, Math.min(1, byHeight, byWidth)).toFixed(3))
   }
