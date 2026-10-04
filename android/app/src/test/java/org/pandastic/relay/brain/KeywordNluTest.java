@@ -83,6 +83,25 @@ public class KeywordNluTest {
         assertNull(KeywordNlu.offer(null));
     }
 
+    @Test public void swahiliNumberWords() {
+        assertEquals(10000.0, KeywordNlu.offer("mnunuzi anasema elfu kumi"), 0.01);
+        assertEquals(12000.0, KeywordNlu.offer("elfu kumi na mbili kwa kilo"), 0.01);
+        assertEquals(12500.0, KeywordNlu.offer("elfu kumi na mbili na mia tano"), 0.01);
+        assertEquals(25000.0, KeywordNlu.offer("elfu ishirini na tano"), 0.01);
+        assertEquals(900.0, KeywordNlu.offer("mahindi mia tisa"), 0.01);
+        assertEquals(1200.0, KeywordNlu.offer("elfu moja mia mbili"), 0.01);
+        assertEquals(1500.0, KeywordNlu.offer("elfu moja na mia tano"), 0.01);
+        assertNull(KeywordNlu.offer("kilo moja ni shilingi ngapi"));   // 1 is not a price
+        assertNull(KeywordNlu.offer("siku tano zilizopita"));           // 5 days
+    }
+
+    @Test public void numberWordsMakeAPriceQuestion() {
+        Slots s = nlu.parse("mnunuzi wa kahawa anasema elfu kumi na nne", null);
+        assertEquals("price", s.intent);
+        assertEquals("coffee", s.crop);
+        assertEquals(14000.0, s.offer, 0.01);
+    }
+
     @Test public void normalizeKeepsQuestionMark() {
         assertEquals("bei ya kahawa ?", KeywordNlu.normalize("Bei ya KAHAWA ?!"));
     }

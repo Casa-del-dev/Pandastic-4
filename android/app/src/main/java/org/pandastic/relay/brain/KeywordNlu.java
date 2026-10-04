@@ -75,7 +75,7 @@ public final class KeywordNlu implements Nlu {
         return lower.replaceAll("[^a-z0-9?]+", " ").trim();
     }
 
-    /** Largest number in the text that looks like a price, with "12k" / "elfu 12" meaning thousands. */
+    /** Largest number in the text that looks like a price: digits ("12k", "elfu 12") or Swahili words ("elfu kumi na mbili"). */
     static Double offer(String text) {
         if (text == null) return null;
         Double best = null;
@@ -88,7 +88,84 @@ public final class KeywordNlu implements Nlu {
             if (m.group(1) != null || m.group(3) != null) value *= 1000;
             if (value >= MIN_OFFER && (best == null || value > best)) best = value;
         }
+        Double words = swahiliNumber(normalize(text));
+        if (words != null && words >= MIN_OFFER && (best == null || words > best)) best = words;
         return best;
+    }
+
+    private static final Map<String, Integer> SW_UNITS = new LinkedHashMap<>();
+    private static final Map<String, Integer> SW_TENS = new LinkedHashMap<>();
+    static {
+        String[] units = {"moja", "mbili", "tatu", "nne", "tano", "sita", "saba", "nane", "tisa"};
+        String[] tens = {"kumi", "ishirini", "thelathini", "arobaini", "hamsini", "sitini", "sabini", "themanini", "tisini"};
+        for (int i = 0; i < 9; i++) { SW_UNITS.put(units[i], i + 1); SW_TENS.put(tens[i], 10 * (i + 1)); }
+    }
+
+    /**
+     * Largest Swahili number written in words. Swahili puts the multiplier first:
+     * "elfu kumi na mbili" = 12,000; "elfu kumi na mbili na mia tano" = 12,500; "mia tisa" = 900; "elfu moja mia mbili" = 1,200.
+     */
+    static Double swahiliNumber(String normalized) {
+        String[] w = normalized.isEmpty() ? new String[0] : normalized.split(" ");
+        Double best = null;
+        for (int start = 0; start < w.length; start++) {
+            if (!isNumberWord(w[start]) || "na".equals(w[start])) continue;
+            int[] pos = {start};
+            long value = 0;
+            if ("elfu".equals(w[pos[0]])) {
+                pos[0]++;
+                long thousands = belowThousand(w, pos);
+                value += (thousands == 0 ? 1 : thousands) * 1000;
+                skipNa(w, pos);
+            }
+            if (pos[0] < w.length && "mia".equals(w[pos[0]])) {
+                pos[0]++;
+                long hundreds = unit(w, pos);
+                value += (hundreds == 0 ? 1 : hundreds) * 100;
+                skipNa(w, pos);
+            }
+            value += tensAndUnits(w, pos);
+            if (value > 0 && (best == null || value > best)) best = (double) value;
+        }
+        return best;
+    }
+
+    private static boolean isNumberWord(String s) {
+        return SW_UNITS.containsKey(s) || SW_TENS.containsKey(s) || "mia".equals(s) || "elfu".equals(s) || "na".equals(s);
+    }
+
+    private static long belowThousand(String[] w, int[] pos) {
+        long value = 0;
+        if (pos[0] < w.length && "mia".equals(w[pos[0]])) {
+            pos[0]++;
+            long hundreds = unit(w, pos);
+            value += (hundreds == 0 ? 1 : hundreds) * 100;
+            if (pos[0] + 1 < w.length && "na".equals(w[pos[0]]) && !"mia".equals(w[pos[0] + 1])) pos[0]++;
+        }
+        return value + tensAndUnits(w, pos);
+    }
+
+    private static long tensAndUnits(String[] w, int[] pos) {
+        long value = 0;
+        if (pos[0] < w.length && SW_TENS.containsKey(w[pos[0]])) {
+            value += SW_TENS.get(w[pos[0]++]);
+            if (pos[0] + 1 < w.length && "na".equals(w[pos[0]]) && SW_UNITS.containsKey(w[pos[0] + 1])) {
+                value += SW_UNITS.get(w[pos[0] + 1]);
+                pos[0] += 2;
+            }
+        } else {
+            value += unit(w, pos);
+        }
+        return value;
+    }
+
+    private static long unit(String[] w, int[] pos) {
+        if (pos[0] < w.length && SW_UNITS.containsKey(w[pos[0]])) return SW_UNITS.get(w[pos[0]++]);
+        return 0;
+    }
+
+    private static void skipNa(String[] w, int[] pos) {
+        if (pos[0] < w.length && "na".equals(w[pos[0]])) pos[0]++;
     }
 
     private static String intent(Map<String, java.util.Set<String>> intents, Slots slots) {
