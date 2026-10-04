@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pandastic technical walkthrough</title>
+<style>
+@font-face { font-family: Bricolage; src: url(../frontend/node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2) format("woff2"); font-weight: 200 800; }
+@font-face { font-family: Atkinson; src: url(../frontend/node_modules/@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2) format("woff2"); font-weight: 200 800; }
+@font-face { font-family: Mono; src: url(file:///C:/Windows/Fonts/JetBrainsMonoNLNerdFont-Regular.ttf); font-weight: 400; }
+@font-face { font-family: Mono; src: url(file:///C:/Windows/Fonts/JetBrainsMonoNLNerdFont-Bold.ttf); font-weight: 700; }
+:root {
+  --soil: #29382f; --night: #1c2620; --leaf: #305a4c; --leafsoft: #eaf0e9; --mist: #f5f6f1; --paper: #fdfdf9;
+  --line: #dfe4d9; --muted: #6f786f; --red: #a7443f; --redsoft: #f6e3df; --lcd: #c7d1bd; --lcdink: #1f2b22;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--mist); }
+body { font-family: Atkinson, sans-serif; color: var(--soil); -webkit-font-smoothing: antialiased; }
+#stage { position: absolute; inset: 0; overflow: hidden; }
+.scene { position: absolute; inset: 0; display: none; }
+.dark { background: var(--night); color: var(--mist); }
+.light { background: var(--mist); }
+.abs { position: absolute; }
+.h { font-family: Bricolage; font-weight: 760; letter-spacing: -0.035em; line-height: 0.95; }
+.label { font-family: Atkinson; font-weight: 700; font-size: 24px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: Mono, monospace; }
+#grain { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; opacity: 0.55; }
+
+/* phone */
+.phone { position: absolute; width: 470px; height: 1000px; border-radius: 58px; background: #18201b; padding: 15px;
+  box-shadow: 0 30px 60px -30px rgba(20, 30, 24, 0.55); }
+.phone .screen { width: 100%; height: 100%; border-radius: 44px; overflow: hidden; background: #f8f8f5; position: relative; }
+.phone .screen img { position: absolute; left: 0; top: 0; width: 100%; }
+.phone .speaker { position: absolute; top: 26px; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #0d120f; z-index: 2; }
+
+/* right panel pieces */
+.photo { position: absolute; border-radius: 18px; overflow: hidden; box-shadow: 0 2px 0 var(--line); }
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.check { font-size: 36px; font-weight: 600; display: flex; align-items: center; gap: 18px; height: 58px; }
+.tick { width: 40px; height: 40px; border-radius: 50%; background: var(--leaf); color: white; display: grid; place-items: center; font-size: 26px; font-weight: 800; }
+.chip { display: inline-block; padding: 12px 22px; border-radius: 999px; background: var(--leafsoft); color: var(--leaf); font-weight: 700; font-size: 28px; }
+.bar { position: absolute; height: 54px; }
+.bar .track { position: absolute; left: 260px; right: 120px; top: 8px; height: 38px; background: var(--line); border-radius: 6px; }
+.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--leaf); }
+.bar .name { position: absolute; left: 0; top: 6px; font-size: 30px; font-weight: 600; }
+.bar .val { position: absolute; right: 0; top: 4px; font-family: Mono; font-size: 32px; font-weight: 700; }
+.stamp { position: absolute; padding: 18px 30px; border: 6px solid currentColor; border-radius: 10px; font-family: Bricolage; font-weight: 780;
+  letter-spacing: -0.01em; text-transform: uppercase; transform-origin: 50% 50%; background: rgba(255,255,255,0.75); }
+.thresh { position: absolute; width: 5px; background: var(--red); }
+.receipt { position: absolute; background: var(--paper); border: 2px solid var(--line); border-radius: 6px; padding: 28px 40px; }
+.row { position: absolute; left: 40px; right: 40px; }
+.row .num { font-family: Mono; font-weight: 700; color: var(--leaf); font-size: 26px; }
+.row .what { font-family: Atkinson; font-weight: 700; font-size: 24px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.row .body { font-size: 34px; margin-top: 6px; }
+.json { font-family: Mono; font-size: 25px; color: var(--soil); background: #f0f3ec; padding: 10px 16px; border-radius: 6px; display: inline-block; white-space: pre; }
+.mark { background: linear-gradient(transparent 58%, #dce8d6 58%); }
+
+/* basic phone */
+.basic { position: absolute; width: 380px; height: 760px; border-radius: 60px 60px 70px 70px; background: #2a2f2c; padding: 46px 40px; }
+.basic .lcd { width: 300px; height: 330px; background: var(--lcd); border-radius: 10px; padding: 16px 18px; font-family: Mono; color: var(--lcdink);
+  font-size: 19px; line-height: 1.32; overflow: hidden; box-shadow: inset 0 0 0 3px #a9b59f; }
+.basic .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; margin-top: 34px; }
+.basic .key { height: 50px; border-radius: 22px; background: #3b423e; color: #d8ddd5; font-family: Atkinson; font-weight: 700; font-size: 24px; display: grid; place-items: center; }
+.basic .key.on { background: #66736b; }
+.pill { position: absolute; padding: 12px 22px; border-radius: 999px; border: 2px solid var(--line); background: var(--paper); font-weight: 700; font-size: 26px; }
+.sizebar { position: absolute; height: 64px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- A · cold open -->
+  <section class="scene dark" id="A">
+    <div class="abs label" id="A0" style="left:160px; top:150px; color:#9fb0a2">Noor · coffee, maize, beans · Ondera highlands</div>
+    <div class="abs h" id="A1" style="left:150px; top:300px; font-size:170px">No Wi-Fi.</div>
+    <div class="abs h" id="A2" style="left:150px; top:480px; font-size:170px">No data bundle.</div>
+    <div class="abs" id="A3" style="left:160px; top:720px; font-size:58px; font-weight:700; color:#cfe0d2">One Android phone in the house: her daughter's.</div>
+    <div class="abs" id="A4" style="left:0; top:0; width:1920px; height:1080px; background:var(--night)">
+      <svg class="abs" style="left:160px; top:330px" width="200" height="200" viewBox="0 0 80 80">
+        <circle cx="21" cy="21" r="12" fill="#2B1E16"/><circle cx="59" cy="21" r="12" fill="#2B1E16"/>
+        <ellipse cx="40" cy="43" rx="29" ry="28" fill="#ffffff"/>
+        <ellipse cx="28" cy="39" rx="9" ry="11" transform="rotate(25 28 39)" fill="#2B1E16"/>
+        <ellipse cx="52" cy="39" rx="9" ry="11" transform="rotate(-25 52 39)" fill="#2B1E16"/>
+        <circle cx="30" cy="37" r="2.7" fill="white"/><circle cx="50" cy="37" r="2.7" fill="white"/>
+        <ellipse cx="40" cy="50" rx="5" ry="3.5" fill="#2B1E16"/>
+        <path d="M40 53v4m-7-1q7 9 14 0" stroke="#2B1E16" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M58 61c6-1 11-6 11-12-6 0-11 5-11 12Z" fill="#7fc49b"/>
+      </svg>
+      <div class="abs h" style="left:400px; top:330px; font-size:200px">Pandastic</div>
+      <div class="abs" id="A5" style="left:410px; top:560px; font-size:50px; font-weight:600; color:#cfe0d2">An offline farm helper that runs entirely on that phone.</div>
+    </div>
+  </section>
+
+  <!-- B + C · the daughter's phone -->
+  <section class="scene light" id="BC">
+    <div class="phone" id="phone" style="left:150px; top:40px"><div class="speaker"></div><div class="screen">
+      <img id="shot" src="media/shot-rust.png">
+    </div></div>
+    <div class="abs label" id="Blabel" style="left:740px; top:96px">At home · on the daughter's phone · offline</div>
+
+    <!-- B · leaf -->
+    <div id="B">
+      <div class="abs h" id="Bh" style="left:735px; top:150px; font-size:96px">A photo of the leaf.</div>
+      <div class="photo" id="Bphoto" style="left:740px; top:300px; width:300px; height:533px"><img id="Bimg" src="media/leaf-rust.jpg"></div>
+      <div class="abs" id="Bchecks" style="left:1090px; top:300px">
+        <div class="check" id="Bc0"><span class="tick">✓</span>Sharp enough</div>
+        <div class="check" id="Bc1"><span class="tick">✓</span>Bright enough</div>
+        <div class="check" id="Bc2"><span class="tick">✓</span>A plant: <span class="mono" id="Bshare">0.90</span></div>
+      </div>
+      <div class="abs" id="Bmodel" style="left:1090px; top:510px"><span class="chip">3 × EfficientNet-B0 · 13 MB · on the phone</span></div>
+      <div class="bar" id="Bbar0" style="left:1090px; top:600px; width:740px"><div class="name" id="Bn0">Leaf rust</div><div class="track"><div class="fill" id="Bf0"></div></div><div class="val" id="Bv0">0.00</div></div>
+      <div class="bar" id="Bbar1" style="left:1090px; top:670px; width:740px"><div class="name" id="Bn1">Healthy</div><div class="track"><div class="fill" id="Bf1"></div></div><div class="val" id="Bv1">0.00</div></div>
+      <div class="thresh" id="Bthresh" style="left:0; top:585px; height:160px"></div>
+      <div class="abs" id="Bthreshlabel" style="top:752px; font-size:26px; font-weight:700; color:var(--red)">“Healthy” needs 0.99</div>
+      <div class="stamp" id="Bok" style="left:1090px; top:820px; font-size:52px; color:var(--leaf)">Confident · leaf rust</div>
+      <div class="abs" id="Bokadv" style="left:1094px; top:930px; font-size:30px; width:760px; color:var(--soil)">“Prune to open the bush. Copper only if the officer agrees.” <span style="color:var(--muted)">CABI PlantwisePlus</span></div>
+      <div class="stamp" id="Bno" style="left:1090px; top:820px; font-size:52px; color:var(--red)">Not sure · ask a person</div>
+      <div class="abs" id="Bnoadv" style="left:1094px; top:930px; font-size:30px; width:760px">Same 0.98. A false “healthy” is the worst answer: <b>don't spray yet.</b></div>
+      <div class="abs h" id="Bblur" style="left:735px; top:420px; font-size:110px">Blurry?<br><span style="color:var(--leaf)">Take it again.</span></div>
+      <div class="abs h" id="Bleaf" style="left:735px; top:420px; font-size:110px">Not a leaf?<br><span style="color:var(--leaf)">Turned away.</span></div>
+    </div>
+
+    <!-- C · question -->
+    <div id="C">
+      <div class="abs h" id="Ch" style="left:735px; top:150px; font-size:96px">A question, in her words.</div>
+      <div class="abs" id="Cq" style="left:740px; top:290px; font-size:40px; padding:22px 30px; background:#e7ece4; border-radius:28px; max-width:1040px">“<span id="Cqt"></span>”</div>
+      <div class="receipt" id="Creceipt" style="left:740px; top:400px; width:1060px; height:640px">
+        <div class="row" id="Cr0" style="top:26px"><span class="num">1 </span><span class="what">Keywords</span>
+          <div class="body mono" style="font-size:30px">offers → price · coffee → crop · 12000 → offer</div></div>
+        <div class="row" id="Cr1" style="top:136px"><span class="num">2 </span><span class="what">Qwen3.5-0.8B · fine-tuned · on the phone · grammar-locked</span>
+          <div class="body"><span class="json" id="Cjson"></span><div id="Ccut" style="font-family:Mono; font-size:26px; color:var(--red); margin-top:10px">✂ generation stops after the symptom · 19 tokens</div></div></div>
+        <div class="row" id="Cr2" style="top:300px"><span class="num">3 </span><span class="what">Code, not the model</span>
+          <div class="body mono" style="font-size:32px">12,000 vs 15,500 UGX/kg → <b id="Cgap">0.0%</b></div></div>
+        <div class="row" id="Cr3" style="top:405px"><span class="num">4 </span><span class="what">Fixed template + cited source</span>
+          <div class="body" style="font-size:30px">Arabica parchment, farm-gate Aug 2026: UGX 15,500/kg (MAAIF/UCDA). Offer 12,000 is 23% below. Ask the cooperative before selling.</div></div>
+        <div class="row" id="Cr4" style="top:556px"><div class="body" style="font-size:32px; font-weight:700"><span class="mark">Phone AI understood: price, coffee, 12,000.</span> <span style="font-weight:400; color:var(--muted); font-size:26px">She sees what it read.</span></div></div>
+      </div>
+      <div class="abs h" id="Cend" style="left:735px; top:330px; font-size:104px; width:1080px">Every fact she reads comes from a cited source.<div style="color:var(--leaf); font-size:58px; letter-spacing:-0.02em; line-height:1.1; margin-top:34px">The model reads the message.<br>Code decides the answer.</div></div>
+    </div>
+  </section>
+
+  <!-- D · SMS bonus -->
+  <section class="scene light" id="D">
+    <div class="abs label" style="left:160px; top:96px">Plus · if Noor has signal</div>
+    <div class="abs h" id="Dh" style="left:150px; top:150px; font-size:96px">She can ask from the slope, by SMS.</div>
+    <div class="basic" id="Dbasic" style="left:220px; top:300px">
+      <div class="lcd" id="Dlcd"></div>
+      <div class="keys" id="Dkeys">
+        <div class="key">1</div><div class="key">2</div><div class="key">3</div><div class="key">4</div><div class="key">5</div><div class="key">6</div>
+        <div class="key">7</div><div class="key">8</div><div class="key">9</div><div class="key">*</div><div class="key">0</div><div class="key">#</div>
+      </div>
+    </div>
+    <svg class="abs" id="Dline" style="left:640px; top:560px" width="560" height="60"><line x1="0" y1="30" x2="560" y2="30" stroke="#b9c3b3" stroke-width="4" stroke-dasharray="12 12"/></svg>
+    <div class="abs" id="Ddot" style="top:566px; padding:8px 16px; border-radius:8px; background:var(--leaf); color:white; font-family:Mono; font-weight:700; font-size:24px">SMS</div>
+    <div class="abs label" style="left:760px; top:640px">Carrier SMS · no internet</div>
+    <div class="phone" id="Dphone" style="left:1230px; top:330px; width:300px; height:620px; border-radius:42px; padding:11px"><div class="screen" style="border-radius:32px">
+      <img src="media/shot-price.png">
+    </div></div>
+    <div class="abs" id="Dans" style="left:1580px; top:420px; font-size:30px; font-weight:700; width:300px; color:var(--leaf)">Answered on the phone, automatically.</div>
+    <div class="abs" id="Dtr" style="left:650px; top:720px; font-size:28px; color:var(--muted); width:520px; line-height:1.3">“…farm-gate Aug 2026: UGX 15,500/kg. 12,000 is 23% below. Ask the cooperative before selling.”</div>
+    <div class="pill" id="Dp0" style="left:1240px; top:975px">Only numbers she lists</div>
+    <div class="pill" id="Dp1" style="left:1560px; top:975px">≤ 2 SMS</div>
+    <div class="pill" id="Dp2" style="left:650px; top:975px">Real reply time: 11 s (emulator)</div>
+  </section>
+
+  <!-- E · proof -->
+  <section class="scene light" id="E">
+    <div class="abs label" style="left:160px; top:150px">Measured on data it never saw · through the real app</div>
+    <div class="abs h" id="E0" style="left:150px; top:290px; font-size:330px">97.4%</div>
+    <div class="abs" id="E0c" style="left:165px; top:640px; font-size:48px; font-weight:600; width:1500px">right when it answers · 360 coffee phone photos</div>
+    <div class="abs h" id="E1" style="left:150px; top:290px; font-size:330px">0</div>
+    <div class="abs" id="E1c" style="left:165px; top:640px; font-size:48px; font-weight:600; width:1500px">rust leaves called “healthy”<br><span style="color:var(--muted); font-size:38px">136 of 137 photos that are not crop leaves: turned away</span></div>
+    <div class="abs h" id="E2" style="left:150px; top:290px; font-size:330px">93%<span style="color:var(--muted); font-size:170px"> vs 83%</span></div>
+    <div class="abs" id="E2c" style="left:165px; top:640px; font-size:48px; font-weight:600; width:1600px">SMS understood · on-phone model + keywords vs keywords alone<br><span style="color:var(--muted); font-size:38px">30 messages written after training</span></div>
+  </section>
+
+  <!-- F · small -->
+  <section class="scene light" id="F">
+    <div class="abs label" style="left:160px; top:150px">Small enough for a 4 GB phone · drawn to scale</div>
+    <div class="sizebar" id="F0" style="left:160px; top:330px; background:var(--soil)"></div>
+    <div class="abs" id="F0l" style="top:338px; font-size:40px; font-weight:700">0.4 MB  advice, prices, keywords</div>
+    <div class="sizebar" id="F1" style="left:160px; top:470px; background:var(--leaf)"></div>
+    <div class="abs" id="F1l" style="top:478px; font-size:40px; font-weight:700">13 MB  leaf model</div>
+    <div class="sizebar" id="F2" style="left:160px; top:610px; background:repeating-linear-gradient(90deg, #8ea596 0 22px, #a8bcad 22px 44px)"></div>
+    <div class="abs" id="F2l" style="left:180px; top:618px; font-size:40px; font-weight:700; color:white">542 MB  language model · optional</div>
+    <div class="abs h" id="Fh" style="left:150px; top:780px; font-size:88px">No internet. Ever.</div>
+  </section>
+
+  <!-- G · outro -->
+  <section class="scene dark" id="G">
+    <div class="abs h" id="G0" style="left:150px; top:250px; font-size:190px">Not sure?<br><span style="color:#9fd1b1">Ask a person.</span></div>
+    <div class="abs" id="G1" style="left:160px; top:690px; font-size:44px; font-weight:700">Pandastic · Team Pandastic 4</div>
+    <div class="abs" id="G2" style="left:160px; top:752px; font-size:36px; color:#cfe0d2">Luca Apolloni · Eren Homburg · Matteo Pelossi</div>
+    <div class="abs mono" id="G3" style="left:160px; top:830px; font-size:30px; color:#9fd1b1">github.com/Casa-del-dev/Pandastic-4</div>
+    <div class="abs" id="G4" style="left:160px; top:960px; font-size:20px; color:#86978a; width:1600px">Photos: RoCoLe (CC BY 4.0) · Prices: MAAIF/UCDA, WFP · Advice: CABI PlantwisePlus and others · Music: “Warm Fuzz” by HoliznaCC0 (CC0) · App screens: Android emulator</div>
+  </section>
+
+</div>
+
+<script>
+const BEAT = 60 / 126.5, B = k => 0.94 + 2 * BEAT * k;   // strong hits of the track, every 0.949 s
+const END = 57.0;
+const SCENES = { A: [0, B(4)], BC: [B(4), B(31)], D: [B(31), B(41)], E: [B(41), B(50)], F: [B(50), B(54)], G: [B(54), END + 1] };
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const out = x => 1 - Math.pow(1 - clamp(x), 3);            // ease-out cubic
+const expo = x => (x = clamp(x)) >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const p = (t, a, d) => clamp((t - a) / d);
+function vis(el, on) { el.style.visibility = on ? 'visible' : 'hidden'; }
+function rise(el, t, a, d = 0.32, dy = 46) {             // slides up into place, snaps
+  const k = expo(p(t, a, d)); vis(el, t >= a);
+  el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * dy}px)`;
+}
+function stamp(el, t, a, rot = -2) {                       // lands hard, settles
+  const k = expo(p(t, a, 0.22)); vis(el, t >= a);
+  el.style.opacity = clamp(k * 1.6); el.style.transform = `scale(${1.28 - 0.28 * k}) rotate(${rot * k}deg)`;
+}
+function window_(el, t, a, b) { vis(el, t >= a && t < b); }
+function type(el, text, t, a, cps) { const n = Math.floor(clamp((t - a) * cps, 0, text.length)); el.textContent = t < a ? '' : text.slice(0, n); return n; }
+
+// Sound cues for sfx.py, from the same timeline.
+const CUES = [];
+const cue = (time, kind) => CUES.push([+time.toFixed(3), kind]);
+
+function render(t) {
+  for (const [id, [a, b]] of Object.entries(SCENES)) $(id).style.display = t >= a && t < b ? 'block' : 'none';
+  if (t < B(4)) renderA(t); else if (t < B(31)) renderBC(t); else if (t < B(41)) renderD(t);
+  else if (t < B(50)) renderE(t); else if (t < B(54)) renderF(t); else renderG(t);
+}
+
+function renderA(t) {
+  push($('A'), t, 0, 4.7);
+  rise($('A0'), t, 0.15, 0.4, 20);
+  stamp($('A1'), t, B(0), 0); stamp($('A2'), t, B(1), 0); rise($('A3'), t, B(2), 0.3);
+  vis($('A4'), t >= B(3)); rise($('A5'), t, B(3) + 0.25, 0.35);
+}
+
+function renderBC(t) {
+  // phone: slides in once, then the screen changes with the story
+  const ph = $('phone'); const k = expo(p(t, B(4), 0.4)); ph.style.transform = `translateY(${(1 - k) * 1100}px)`;
+  const shot = t < B(10) ? 'rust' : t < B(14) ? 'notsure' : t < B(15.5) ? 'blurry' : t < B(17) ? 'notleaf' : 'price';
+  const img = $('shot'); if (!img.src.endsWith(`shot-${shot}.png`)) img.src = `media/shot-${shot}.png`;
+  // scroll the screenshot a little while it is on screen, like a person reading it
+  const since = { rust: B(4), notsure: B(10), blurry: B(14), notleaf: B(15.5), price: B(17) }[shot];
+  const span = { rust: 0, notsure: 0, blurry: 0, notleaf: 0, price: 120 }[shot];
+  img.style.transform = `translateY(${-span * out(p(t, since + 0.6, 4))}px)`;
+  rise($('Blabel'), t, B(4) + 0.1);
+  const inB = t < B(17); $('B').style.display = inB ? 'block' : 'none'; $('C').style.display = inB ? 'none' : 'block';
+  if (inB) renderB(t); else renderC(t);
+}
+
+function renderB(t) {
+  const second = t >= B(10), montage = t >= B(14);
+  rise($('Bh'), t, B(4) + 0.15); window_($('Bh'), t, -1, B(14));
+  for (const id of ['Bphoto', 'Bchecks', 'Bmodel', 'Bbar0', 'Bbar1']) $(id).style.display = montage ? 'none' : 'block';
+  $('Bimg').src = second ? 'media/leaf-healthy.jpg' : 'media/leaf-rust.jpg';
+  stamp($('Bphoto'), t, second ? B(10) : B(5), second ? 1.5 : -1.5);
+  const c0 = second ? B(10) + 0.25 : B(6);
+  for (let i = 0; i < 3; i++) rise($('Bc' + i), t, c0 + i * BEAT * 0.5, 0.2, 20);
+  $('Bshare').textContent = second ? '0.50' : '0.90';
+  rise($('Bmodel'), t, second ? -1 : B(7), 0.3);
+  // bars: rust photo → rust 0.98; healthy photo → healthy 0.98 under the 0.99 line
+  const fa = second ? B(11) : B(8), f = out(p(t, fa, 0.7));
+  const v0 = second ? 0.01 : 0.98, v1 = second ? 0.98 : 0.01;
+  $('Bf0').style.width = (f * v0 * 100) + '%'; $('Bf1').style.width = (f * v1 * 100) + '%';
+  $('Bf1').style.background = second ? 'var(--red)' : 'var(--leaf)';
+  $('Bv0').textContent = (f * v0).toFixed(2); $('Bv1').textContent = (f * v1).toFixed(2);
+  rise($('Bbar0'), t, second ? B(10) + 0.9 : B(8) - 0.15, 0.2, 14); rise($('Bbar1'), t, second ? B(10) + 0.9 : B(8) - 0.05, 0.2, 14);
+  // the 0.99 line sits on the healthy bar's track
+  const trackLeft = 1090 + 260, trackW = 740 - 260 - 120;
+  $('Bthresh').style.left = (trackLeft + trackW * 0.99 - 2) + 'px'; $('Bthreshlabel').style.left = (trackLeft + trackW * 0.99 - 300) + 'px';
+  const th = second && !montage; stamp($('Bthresh'), t, th ? B(10) + 1.1 : 999, 0); stamp($('Bthreshlabel'), t, th ? B(10) + 1.2 : 999, 0);
+  window_($('Bthresh'), t, B(10) + 1.1, montage ? -1 : B(14)); window_($('Bthreshlabel'), t, B(10) + 1.2, montage ? -1 : B(14));
+  stamp($('Bok'), t, B(9)); window_($('Bok'), t, B(9), B(10)); rise($('Bokadv'), t, B(9) + 0.3); window_($('Bokadv'), t, B(9) + 0.3, B(10));
+  stamp($('Bno'), t, B(12), 2); window_($('Bno'), t, B(12), B(14)); rise($('Bnoadv'), t, B(12) + 0.3); window_($('Bnoadv'), t, B(12) + 0.3, B(14));
+  stamp($('Bblur'), t, B(14), 0); window_($('Bblur'), t, B(14), B(15.5));
+  stamp($('Bleaf'), t, B(15.5), 0); window_($('Bleaf'), t, B(15.5), B(17));
+}
+
+const QUESTION = 'A buyer offers 12000 for my coffee, is it fair?';
+const JSON_OUT = '{"lang":"en","intent":"price","crop":"coffee","symptom":null,"';
+function renderC(t) {
+  const end = t >= B(29);
+  rise($('Ch'), t, B(17)); window_($('Ch'), t, B(17), B(29));
+  rise($('Cq'), t, B(17) + 0.2, 0.25, 20); type($('Cqt'), QUESTION, t, B(17) + 0.3, 40); window_($('Cq'), t, B(17) + 0.2, B(29));
+  rise($('Creceipt'), t, B(18.5), 0.3, 30); $('Creceipt').style.display = t >= B(18.5) && t < B(29) ? 'block' : 'none';
+  rise($('Cr0'), t, B(19), 0.25, 18); rise($('Cr1'), t, B(20.5), 0.25, 18);
+  type($('Cjson'), JSON_OUT, t, B(20.5) + 0.2, 34); vis($('Cjson'), t >= B(20.5) + 0.2 && t < B(29));
+  stamp($('Ccut'), t, B(23), 0); window_($('Ccut'), t, B(23), B(29));
+  rise($('Cr2'), t, B(24), 0.25, 18);
+  const g = out(p(t, B(24) + 0.2, 0.7)); $('Cgap').textContent = '−' + (22.6 * g).toFixed(1) + '%';
+  rise($('Cr3'), t, B(25.5), 0.25, 18); rise($('Cr4'), t, B(27), 0.25, 18);
+  stamp($('Cend'), t, B(29), 0); window_($('Cend'), t, B(29), 99);
+}
+
+const SMS_IN = 'P 1 12000';
+const SMS_OUT = 'Pandastic: Kahawa Arabica (parchment), bei ya shambani Ago 2026: UGX 15,500/kg (MAAIF/UCDA). Bei ya 12,000 iko chini kwa 23%. Uliza chama kabla ya kuuza.\nAI ya simu imeelewa: bei, kahawa, 12,000.';
+function renderD(t) {
+  rise($('Dh'), t, B(31) + 0.05);
+  const bk = expo(p(t, B(31), 0.4)); $('Dbasic').style.transform = `translateX(${(1 - bk) * -700}px)`;
+  const pk = expo(p(t, B(31) + 0.15, 0.4)); $('Dphone').style.transform = `translateX(${(1 - pk) * 900}px)`;
+  const lcd = $('Dlcd'); const typed = type({ set textContent(v) { lcd.dataset.typed = v } }, SMS_IN, t, B(32), 9);
+  const keys = [...$('Dkeys').children];
+  keys.forEach(k => k.classList.remove('on'));
+  if (t >= B(32) && typed < SMS_IN.length) { const ch = SMS_IN[typed] ?? ''; const kk = keys.find(k => k.textContent === ch); if (kk) kk.classList.add('on'); }
+  const sendAt = B(33.4), backAt = B(36), replyAt = B(36.8);
+  if (t < replyAt) lcd.innerHTML = `<b>To: Home</b><br><br>${(lcd.dataset.typed || '')}<span style="opacity:${Math.floor(t * 2.2) % 2 ? 1 : 0}">▌</span>` + (t >= sendAt ? '<br><br>Sent ✓' : '');
+  else lcd.innerHTML = '<b>From: Home</b><br>' + SMS_OUT.slice(0, Math.floor((t - replyAt) * 140)).replace('\n', '<br>');
+  const dot = $('Ddot'); const going = p(t, sendAt, 0.55), coming = p(t, backAt, 0.55);
+  vis(dot, (t >= sendAt && going < 1) || (t >= backAt && coming < 1));
+  const x = t < backAt ? 640 + out(going) * 500 : 1140 - out(coming) * 500; dot.style.left = x + 'px';
+  rise($('Dans'), t, B(34.6), 0.3); window_($('Dans'), t, B(34.6), 99);
+  rise($('Dtr'), t, B(37.6), 0.3, 14); rise($('Dp2'), t, B(38.1), 0.25, 14); rise($('Dp0'), t, B(38.6), 0.25, 14); rise($('Dp1'), t, B(39.1), 0.25, 14);
+}
+
+function push(el, t, a, d) { el.style.scale = String(1 + 0.025 * clamp((t - a) / d)); }
+function renderE(t) {
+  push($('E'), t, B(41), 9);
+  const slides = [['E0', 'E0c', B(41)], ['E1', 'E1c', B(44)], ['E2', 'E2c', B(47)]];
+  slides.forEach(([n, c, a], i) => { const b = i < 2 ? slides[i + 1][2] : 999; stamp($(n), t, a, 0); rise($(c), t, a + 0.25, 0.3, 20); window_($(n), t, a, b); window_($(c), t, a + 0.25, b); });
+  if (t >= B(41) && t < B(44)) $('E0').textContent = (97.4 * out(p(t, B(41), 0.55))).toFixed(1) + '%';
+}
+
+function renderF(t) {
+  const full = 1600, mb = [0.4, 13, 542];
+  ['F0', 'F1', 'F2'].forEach((id, i) => {
+    const a = B(50) + i * BEAT; const w = Math.max(6, full * mb[i] / 542) * out(p(t, a, 0.5));
+    $(id).style.width = w + 'px'; vis($(id), t >= a);
+    const l = $(id + 'l'); if (i < 2) l.style.left = (160 + Math.max(6, full * mb[i] / 542) + 24) + 'px'; rise(l, t, a + 0.15, 0.25, 12);
+  });
+  stamp($('Fh'), t, B(52), 0);
+}
+
+function renderG(t) {
+  push($('G'), t, B(54), 5);
+  stamp($('G0'), t, B(54), 0); rise($('G1'), t, B(55), 0.3); rise($('G2'), t, B(55) + 0.2, 0.3); rise($('G3'), t, B(55) + 0.4, 0.3); rise($('G4'), t, B(56), 0.4, 10);
+}
+
+// cues (time, kind) for the sound pass
+cue(B(0), 'stamp'); cue(B(1), 'stamp'); cue(B(2), 'tick'); cue(B(3), 'stamp');
+cue(B(4), 'whoosh'); cue(B(5), 'shutter'); for (let i = 0; i < 3; i++) cue(B(6) + i * BEAT * 0.5, 'tick');
+cue(B(7), 'tick'); cue(B(8), 'rise'); cue(B(9), 'stamp');
+cue(B(10), 'shutter'); for (let i = 0; i < 3; i++) cue(B(10) + 0.25 + i * BEAT * 0.5, 'tick'); cue(B(11), 'rise'); cue(B(10) + 1.1, 'tick'); cue(B(12), 'thud');
+cue(B(14), 'stamp'); cue(B(15.5), 'stamp');
+cue(B(17), 'whoosh'); for (let i = 0; i < QUESTION.length; i += 3) cue(B(17) + 0.3 + i / 40, 'key');
+cue(B(19), 'tick'); cue(B(20.5), 'tick'); for (let i = 0; i < JSON_OUT.length; i += 2) cue(B(20.5) + 0.2 + i / 34, 'type'); cue(B(23), 'snip');
+cue(B(24), 'tick'); cue(B(25.5), 'tick'); cue(B(27), 'tick'); cue(B(29), 'stamp');
+cue(B(31), 'whoosh'); for (let i = 0; i < SMS_IN.length; i++) cue(B(32) + i / 9, 'key'); cue(B(33.4), 'send'); cue(B(36.8), 'chime');
+cue(B(38.1), 'tick'); cue(B(38.6), 'tick'); cue(B(39.1), 'tick');
+cue(B(41), 'stamp'); cue(B(44), 'stamp'); cue(B(47), 'stamp');
+cue(B(50), 'tick'); cue(B(50) + BEAT, 'tick'); cue(B(50) + 2 * BEAT, 'tick'); cue(B(52), 'stamp');
+cue(B(54), 'stamp');
+
+// Film grain is added by ffmpeg in build.sh (cheaper than a blended canvas, and it moves like real grain).
+window.ready = (async () => {
+  await document.fonts.ready;
+  const srcs = ['shot-rust', 'shot-notsure', 'shot-blurry', 'shot-notleaf', 'shot-price'].map(n => `media/${n}.png`).concat(['media/leaf-rust.jpg', 'media/leaf-healthy.jpg']);
+  await Promise.all(srcs.map(s => { const i = new Image(); i.src = s; return i.decode().catch(() => null); }));
+  return { duration: END, cues: CUES };
+})();
+const q = new URLSearchParams(location.search); render(q.has('t') ? +q.get('t') : 0);
+</script>
+</body>
+</html>
