@@ -10,7 +10,7 @@ trained, in phrasings unlike its templates; the honest test for a fine-tuned mod
 Usage (from the repo root; first run NluEvalTest, which writes android/app/build/nlu-eval/kw_{dev,heldout,fresh}.csv):
   python ml/llm/eval_llm.py --server path/to/llama-server --model path/to/model.gguf
   python ml/llm/eval_llm.py --rescore --predictions-dir DIR     # score saved qwen_predictions_*.csv, no model
-Writes ml/reports/nlu_eval.md and ml/reports/nlu_eval.json.
+Writes ml/reports/<report-name>.md and .json (default nlu_eval; use e.g. --report-name nlu_eval_lora for a fine-tune).
 """
 import argparse
 import csv
@@ -117,10 +117,10 @@ def ask(base: str, system: str, grammar: str, text: str) -> tuple[dict, float, d
     return json.loads(content), elapsed, data.get("timings", {})
 
 
-def write_report(results: dict, threads: int) -> None:
+def write_report(results: dict, threads: int, report: str = "nlu_eval") -> None:
     reports = ROOT / "ml/reports"
     reports.mkdir(parents=True, exist_ok=True)
-    (reports / "nlu_eval.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+    (reports / f"{report}.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     lines = ["# SMS understanding: KeywordNlu vs Qwen3.5-0.8B (GBNF)", "",
              "Synthetic SMS written by the team (labelled synthetic). `dev` was used to tune the keyword lexicon;",
              "`heldout` was written before any results and never used for tuning; `fresh` was written after the LoRA was",
@@ -154,8 +154,8 @@ def write_report(results: dict, threads: int) -> None:
         for model in ("keyword", "qwen"):
             if model in r and r[model]["misses"]:
                 lines += ["", f"## Misses: {name} / {model}", ""] + [f"- {m}" for m in r[model]["misses"]]
-    (reports / "nlu_eval.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print("wrote ml/reports/nlu_eval.md")
+    (reports / f"{report}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"wrote ml/reports/{report}.md")
 
 
 def evaluate_model(server_path: str, model_path: str, threads: int = 4, port: int = 8089, save_predictions: bool = True,
@@ -214,7 +214,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--server")
     parser.add_argument("--model")
-    parser.add_argument("--report-only", action="store_true", help="rewrite the .md from ml/reports/nlu_eval.json")
+    parser.add_argument("--report-only", action="store_true", help="rewrite the .md from ml/reports/<report-name>.json")
+    parser.add_argument("--report-name", default="nlu_eval", help="report file name in ml/reports (no extension)")
     parser.add_argument("--threads", type=int, default=4, help="4 threads ~ a mid-range phone's big cores")
     parser.add_argument("--port", type=int, default=8089)
     parser.add_argument("--keyword-dir", type=Path, default=KW_DIR,
@@ -225,7 +226,7 @@ def main():
                         help="score saved predictions from --predictions-dir without running a model (no llama-server)")
     args = parser.parse_args()
     if args.report_only:
-        write_report(json.loads((ROOT / "ml/reports/nlu_eval.json").read_text(encoding="utf-8")), args.threads)
+        write_report(json.loads((ROOT / f"ml/reports/{args.report_name}.json").read_text(encoding="utf-8")), args.threads, args.report_name)
         return
 
     sets = {name: read(HERE / file) for name, file in SETS.items()}
@@ -255,7 +256,7 @@ def main():
         results[name]["llm_first"] = score(rows, {i: llm_first(kw[i], llm[i]) for i in kw})
         print(name, {m: results[name][m]["all_slots"] for m in POLICIES})
 
-    write_report(results, args.threads)
+    write_report(results, args.threads, args.report_name)
 
 
 if __name__ == "__main__":
