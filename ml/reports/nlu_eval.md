@@ -1,28 +1,45 @@
 # SMS understanding: KeywordNlu vs Qwen3.5-0.8B (GBNF)
 
 Synthetic SMS written by the team (labelled synthetic). `dev` was used to tune the keyword lexicon;
-`heldout` was written before any results and never used for tuning. Qwen: Q4_K_M via llama.cpp,
+`heldout` was written before any results and never used for tuning; `fresh` was written after the LoRA was
+trained, in phrasings unlike its templates, and is not used to tune anything. Qwen: Q4_K_M via llama.cpp,
 temperature 0, thinking off, 4 CPU threads on a laptop (a phone is slower).
 
 | Set | Model | n | lang | intent | crop | symptom | commodity | offer | all slots |
 | :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: |
 | dev | keyword | 100 | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
 | dev | qwen | 100 | 66% | 79% | 91% | 72% | 84% | 97% | 31% |
+| dev | hybrid_intent | 100 | 100% | 99% | 100% | 100% | 100% | 100% | 99% |
 | dev | hybrid_intent_crop | 100 | 100% | 99% | 94% | 100% | 98% | 100% | 93% |
+| dev | llm_first | 100 | 100% | 79% | 91% | 100% | 85% | 100% | 71% |
 | dev | hybrid_fill | 100 | 100% | 99% | 94% | 86% | 98% | 100% | 81% |
 | heldout | keyword | 50 | 100% | 80% | 96% | 86% | 96% | 100% | 68% |
 | heldout | qwen | 50 | 68% | 78% | 94% | 64% | 86% | 100% | 34% |
+| heldout | hybrid_intent | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% |
 | heldout | hybrid_intent_crop | 50 | 100% | 96% | 96% | 86% | 96% | 100% | 78% |
+| heldout | llm_first | 50 | 100% | 78% | 94% | 86% | 86% | 100% | 60% |
 | heldout | hybrid_fill | 50 | 100% | 96% | 96% | 74% | 96% | 100% | 66% |
+| fresh | keyword | 40 | 95% | 85% | 100% | 82% | 100% | 100% | 68% |
+| fresh | qwen | 40 | 92% | 60% | 90% | 68% | 78% | 90% | 32% |
+| fresh | hybrid_intent | 40 | 95% | 90% | 100% | 82% | 100% | 100% | 68% |
+| fresh | hybrid_intent_crop | 40 | 95% | 90% | 92% | 82% | 100% | 100% | 62% |
+| fresh | llm_first | 40 | 95% | 60% | 90% | 82% | 80% | 100% | 35% |
+| fresh | hybrid_fill | 40 | 95% | 90% | 92% | 65% | 100% | 100% | 55% |
 
-`hybrid_intent_crop` = keyword slots always win; the LLM only supplies the intent when no intent keyword
-matched (KeywordNlu intentProb 0) and the crop when none was found. `hybrid_fill` also lets it fill symptom
-and offer, which is worse: the base model invents symptoms. This is the policy recommended for LlmNlu.
+Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent
+keyword matched (KeywordNlu intentProb 0). `hybrid_intent_crop`: also the crop when none was found (LlmNlu
+as of 01:00 UTC); it names coffee/maize for crops we don't support (cassava, tomato, tea), which keywords
+correctly leave empty. `hybrid_fill` also lets it fill symptom and offer: the base model invents symptoms.
+`llm_first` = the LLM's intent and crop win whenever it gives them; lang, symptom and offer stay with the keywords.
+
+Model: `Qwen3.5-0.8B-Q4_K_M.gguf`.
+Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 synthetic SMS): dev 51/100, heldout 24/50, fresh 3/40. A fine-tuned model's dev/heldout scores are optimistic by that much; `fresh` is the honest one.
 
 | Set | median latency (s) | max (s) | prompt ms (median) | generation ms (median) |
 | :-- | --: | --: | --: | --: |
-| dev | 0.86 | 3.1 | 146 | 704 |
-| heldout | 1.15 | 2.02 | 170 | 955 |
+| dev | 0.92 | 4.3 | 170 | 722 |
+| heldout | 0.94 | 1.1 | 184 | 726 |
+| fresh | 0.95 | 1.19 | 199 | 725 |
 
 ## Misses: dev / qwen
 
@@ -219,3 +236,73 @@ and offer, which is worse: the base model invents symptoms. This is the policy r
 - h48 `mvua ni nyingi leo` intent: want `other` got `help`
 - h49 `bei ya ndizi` intent: want `price` got `help`
 - h50 `miti ya kahawa inakufa` symptom: want `` got `leaf_blight`
+
+## Misses: fresh / keyword
+
+- f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `streak_virus`
+- f4 `coffee leaf got brown circles with grey middle like an eye` symptom: want `cercospora` got ``
+- f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` intent: want `diagnose` got `other`
+- f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got ``
+- f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` symptom: want `streak_virus` got `miner`
+- f8 `corn leaves have long cigar shaped grey brown lesions` symptom: want `leaf_blight` got ``
+- f9 `maharagwe yangu majani yana vidoa vya kahawia vyenye kona kona` symptom: want `angular_leaf_spot` got ``
+- f11 `Shamba la mahindi limeharibika sana mwaka huu sijui ni nini` intent: want `diagnose` got `other`
+- f12 `my coffee is not doing well this season` intent: want `diagnose` got `planting`
+- f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got ``
+- f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` lang: want `sw` got `en`
+- f32 `should i plant my maize before the rains start` intent: want `planting` got `help`
+- f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `other`
+- f36 `how does this work` lang: want `en` got `sw`
+- f36 `how does this work` intent: want `help` got `other`
+
+## Misses: fresh / qwen
+
+- f1 `Habari, naomba ushauri. Kahawa yangu majani yamejaa unga wa rangi ya machungwa upande wa chini` intent: want `diagnose` got `help`
+- f3 `kuna mistari myeupe inayopinda ndani ya majani ya kahawa kama mtu ameandika` symptom: want `miner` got `rust`
+- f4 `coffee leaf got brown circles with grey middle like an eye` lang: want `en` got `sw`
+- f5 `Mahindi yangu yameliwa usiku, kuna kinyesi kama machujo ndani ya kitovu` symptom: want `fall_armyworm` got `streak_virus`
+- f7 `mahindi machanga yana michirizi myembamba ya njano kwa urefu wa jani` lang: want `sw` got `en`
+- f11 `Shamba la mahindi limeharibika sana mwaka huu sijui ni nini` symptom: want `` got `lethal_necrosis`
+- f12 `my coffee is not doing well this season` symptom: want `` got `leaf_blight`
+- f13 `mihogo yangu ina majani yaliyojikunja` crop: want `` got `coffee`
+- f13 `mihogo yangu ina majani yaliyojikunja` symptom: want `` got `leaf_blight`
+- f14 `tomato leaves have black spots` crop: want `` got `maize`
+- f14 `tomato leaves have black spots` symptom: want `` got `leaf_spot`
+- f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` crop: want `coffee` got `maize`
+- f15 `buni zinakauka kuanzia juu ya matawi baada ya baridi kali` symptom: want `phoma` got `lethal_necrosis`
+- f16 `msee kahawa yangu iko na shida ya majani` symptom: want `` got `leaf_blight`
+- f17 `Bei ya kahawa parchment pale Kapchorwa ni kiasi gani leo?` intent: want `price` got `diagnose`
+- f17 `Bei ya kahawa parchment pale Kapchorwa ni kiasi gani leo?` symptom: want `` got `phoma`
+- f17 `Bei ya kahawa parchment pale Kapchorwa ni kiasi gani leo?` commodity: want `coffee_arabica_parchment` got ``
+- f18 `broker amekuja anataka kilo ya kahawa kwa 12,500/=` commodity: want `coffee_arabica_parchment` got `coffee_robusta_kiboko`
+- f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` intent: want `price` got `diagnose`
+- f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` commodity: want `coffee_robusta_kiboko` got ``
+- f20 `kiboko wanalipa shs 5800 hapa kijijini, ni sawa?` offer: want `5800` got ``
+- f21 `mahindi wananunua 850 kwa kilo` lang: want `sw` got `en`
+- f21 `mahindi wananunua 850 kwa kilo` intent: want `price` got `diagnose`
+- f21 `mahindi wananunua 850 kwa kilo` commodity: want `maize_grain` got ``
+- f21 `mahindi wananunua 850 kwa kilo` offer: want `850` got ``
+- f22 `maize going for 1,050 per kg at the market is that low` intent: want `price` got `diagnose`
+- f22 `maize going for 1,050 per kg at the market is that low` commodity: want `maize_grain` got ``
+- f23 `maharage elfu tatu na mia tano kwa kilo ni bei nzuri?` intent: want `price` got `diagnose`
+- f23 `maharage elfu tatu na mia tano kwa kilo ni bei nzuri?` symptom: want `` got `leaf_spot`
+- f23 `maharage elfu tatu na mia tano kwa kilo ni bei nzuri?` commodity: want `beans_dry` got ``
+- f23 `maharage elfu tatu na mia tano kwa kilo ni bei nzuri?` offer: want `3500` got ``
+- f25 `nimepewa elfu kumi na nne kwa kilo ya kahawa` intent: want `price` got `diagnose`
+- f25 `nimepewa elfu kumi na nne kwa kilo ya kahawa` commodity: want `coffee_arabica_parchment` got ``
+- f25 `nimepewa elfu kumi na nne kwa kilo ya kahawa` offer: want `14000` got ``
+- f28 `Sokoni bei ya mahindi imeshuka?` intent: want `price` got `diagnose`
+- f28 `Sokoni bei ya mahindi imeshuka?` symptom: want `` got `leaf_blight`
+- f28 `Sokoni bei ya mahindi imeshuka?` commodity: want `maize_grain` got ``
+- f29 `mtu ananiambia 2500 kwa maharagwe` intent: want `price` got `diagnose`
+- f29 `mtu ananiambia 2500 kwa maharagwe` commodity: want `beans_dry` got ``
+- f30 `bei ya chai leo` intent: want `price` got `help`
+- f31 `Ni wakati gani mzuri wa kupanda maharage msimu huu wa mvua?` intent: want `planting` got `diagnose`
+- f31 `Ni wakati gani mzuri wa kupanda maharage msimu huu wa mvua?` symptom: want `` got `leaf_blight`
+- f32 `should i plant my maize before the rains start` intent: want `planting` got `diagnose`
+- f33 `nataka kuotesha miche ya kahawa mwezi ujao` intent: want `planting` got `diagnose`
+- f38 `asante kwa ushauri wako` intent: want `other` got `help`
+- f39 `ok got it` intent: want `other` got `help`
+- f40 `jua ni kali sana leo shambani` intent: want `other` got `diagnose`
+- f40 `jua ni kali sana leo shambani` crop: want `` got `coffee`
+- f40 `jua ni kali sana leo shambani` symptom: want `` got `leaf_blight`

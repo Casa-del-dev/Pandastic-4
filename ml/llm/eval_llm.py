@@ -4,9 +4,12 @@ Starts llama-server with the GGUF, sends every SMS with ml/llm/system_prompt.txt
 temperature 0, thinking disabled, and scores the slots exactly like NluEvalTest (commodity = the crop's
 default when a price question names none). Latency is measured on this computer's CPU; a phone is slower.
 
-Usage (from the repo root):
-  python ml/llm/eval_llm.py --server path/to/llama-server \
-      --model ml/artifacts/llm/Qwen3.5-0.8B-Q4_K_M.gguf [--keyword-predictions dev.csv heldout.csv]
+Sets: dev (used to tune the lexicon), heldout (written before any results), fresh (written after the LoRA was
+trained, in phrasings unlike its templates; the honest test for a fine-tuned model).
+
+Usage (from the repo root; first run NluEvalTest, which writes android/app/build/nlu-eval/kw_{dev,heldout,fresh}.csv):
+  python ml/llm/eval_llm.py --server path/to/llama-server --model path/to/model.gguf
+  python ml/llm/eval_llm.py --rescore --predictions-dir DIR     # score saved qwen_predictions_*.csv, no model
 Writes ml/reports/nlu_eval.md and ml/reports/nlu_eval.json.
 """
 import argparse
@@ -21,6 +24,9 @@ import requests
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+SETS = {"dev": "eval_sms.csv", "heldout": "eval_sms_heldout.csv", "fresh": "eval_sms_fresh.csv"}
+KW_DIR = ROOT / "android/app/build/nlu-eval"
+POLICIES = ("keyword", "qwen", "hybrid_intent", "hybrid_intent_crop", "llm_first", "hybrid_fill")
 SLOTS = ["lang", "intent", "crop", "symptom", "commodity", "offer"]
 DEFAULT_COMMODITY = {"coffee": "coffee_arabica_parchment", "maize": "maize_grain", "bean": "beans_dry"}
 
@@ -58,20 +64,42 @@ def score(gold_rows, predictions) -> dict:
     return {"n": n, **{k: round(correct[k] / n, 3) for k in SLOTS}, "all_slots": round(exact / n, 3), "misses": misses}
 
 
-def hybrid(kw: dict, qwen: dict, fill_all: bool) -> dict:
-    """Keyword values always win. The LLM only fills what the keywords left empty:
-    fill_all=False -> only intent (when no intent keyword matched, intent_prob 0) and crop; fill_all=True -> every empty slot."""
+def hybrid(kw: dict, qwen: dict, fill: str) -> dict:
+    """Keyword values always win. The LLM only fills what the keywords left empty: fill="intent" -> only the intent,
+    when no intent keyword matched (intent_prob 0); "intent_crop" -> also a missing crop; "all" -> every empty slot."""
     out = dict(kw)
     no_intent_evidence = kw.get("intent_prob", "0") in ("0", "0.0") and kw["intent"] == "other"
     if no_intent_evidence and qwen["intent"]:
         out["intent"] = qwen["intent"]
-    if not kw["crop"]:
+    if not kw["crop"] and fill != "intent":
         out["crop"] = qwen["crop"]
-    if fill_all:
+    if fill == "all":
         for k in ("symptom", "offer"):
             if not kw[k]:
                 out[k] = qwen[k]
     return effective({k: (out[k] or None) for k in SLOTS} | {"commodity": kw["commodity"] or None})
+
+
+def llm_first(kw: dict, llm: dict) -> dict:
+    """The LLM's intent and crop win whenever it gives them; lang, symptom and offer stay with the keywords.
+    A commodity the SMS names (kiboko, drugar, ...) is kept if the crop did not change."""
+    out = dict(kw)
+    out["intent"] = llm["intent"] or kw["intent"]
+    out["crop"] = llm["crop"] or kw["crop"]
+    named = kw["commodity"] if kw["crop"] == out["crop"] and kw["commodity"] != DEFAULT_COMMODITY.get(kw["crop"]) else ""
+    return effective({k: (out[k] or None) for k in SLOTS} | {"commodity": named or None})
+
+
+def train_overlap(sets: dict, threshold: float = 0.6) -> dict:
+    """How many eval SMS have a near-copy (token Jaccard >= threshold) among the LoRA's synthetic training SMS."""
+    import re
+    import sys
+    sys.path.insert(0, str(HERE.parent))
+    from llm import gen_train
+    tokens = lambda text: set(re.findall(r"\w+", text.lower()))
+    train = [tokens(r["sms"]) for r in gen_train.generate(3000)]
+    near = lambda a: any(len(a & b) >= threshold * max(1, len(a | b)) for b in train)
+    return {name: sum(near(tokens(r["text"])) for r in rows) for name, rows in sets.items()}
 
 
 def ask(base: str, system: str, grammar: str, text: str) -> tuple[dict, float, dict]:
@@ -95,22 +123,34 @@ def write_report(results: dict, threads: int) -> None:
     (reports / "nlu_eval.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     lines = ["# SMS understanding: KeywordNlu vs Qwen3.5-0.8B (GBNF)", "",
              "Synthetic SMS written by the team (labelled synthetic). `dev` was used to tune the keyword lexicon;",
-             "`heldout` was written before any results and never used for tuning. Qwen: Q4_K_M via llama.cpp,",
+             "`heldout` was written before any results and never used for tuning; `fresh` was written after the LoRA was",
+             "trained, in phrasings unlike its templates, and is not used to tune anything. Qwen: Q4_K_M via llama.cpp,",
              f"temperature 0, thinking off, {threads} CPU threads on a laptop (a phone is slower).", "",
              "| Set | Model | n | lang | intent | crop | symptom | commodity | offer | all slots |",
              "| :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: |"]
-    for name, r in results.items():
-        for model in ("keyword", "qwen", "hybrid_intent_crop", "hybrid_fill"):
+    sets = {name: r for name, r in results.items() if name != "meta"}
+    for name, r in sets.items():
+        for model in POLICIES:
             if model in r:
                 s = r[model]
                 lines.append(f"| {name} | {model} | {s['n']} | " + " | ".join(f"{s[k]:.0%}" for k in SLOTS + ["all_slots"]) + " |")
-    lines += ["", "`hybrid_intent_crop` = keyword slots always win; the LLM only supplies the intent when no intent keyword",
-              "matched (KeywordNlu intentProb 0) and the crop when none was found. `hybrid_fill` also lets it fill symptom",
-              "and offer, which is worse: the base model invents symptoms. This is the policy recommended for LlmNlu.", "",
+    lines += ["", "Keyword slots always win in the hybrids. `hybrid_intent`: the LLM only supplies the intent when no intent",
+              "keyword matched (KeywordNlu intentProb 0). `hybrid_intent_crop`: also the crop when none was found (LlmNlu",
+              "as of 01:00 UTC); it names coffee/maize for crops we don't support (cassava, tomato, tea), which keywords",
+              "correctly leave empty. `hybrid_fill` also lets it fill symptom and offer: the base model invents symptoms.",
+              "`llm_first` = the LLM's intent and crop win whenever it gives them; lang, symptom and offer stay with the keywords.", ""]
+    meta = results.get("meta", {})
+    if meta.get("model"):
+        lines += [f"Model: `{meta['model']}`."]
+    if meta.get("train_overlap"):
+        lines += ["Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 synthetic SMS): " + ", ".join(
+            f"{name} {k}/{sets[name]['qwen']['n']}" for name, k in meta["train_overlap"].items() if name in sets)
+            + ". A fine-tuned model's dev/heldout scores are optimistic by that much; `fresh` is the honest one."]
+    lines += ["",
               "| Set | median latency (s) | max (s) | prompt ms (median) | generation ms (median) |", "| :-- | --: | --: | --: | --: |"]
-    for name, r in results.items():
+    for name, r in sets.items():
         lines.append(f"| {name} | {r['latency_s']['median']} | {r['latency_s']['max']} | {r['prompt_ms_median']} | {r['gen_ms_median']} |")
-    for name, r in results.items():
+    for name, r in sets.items():
         for model in ("keyword", "qwen"):
             if model in r and r[model]["misses"]:
                 lines += ["", f"## Misses: {name} / {model}", ""] + [f"- {m}" for m in r[model]["misses"]]
@@ -123,7 +163,7 @@ def evaluate_model(server_path: str, model_path: str, threads: int = 4, port: in
     """Start llama-server with the GGUF, run both SMS sets through it, return per-set scores and latency."""
     system = (HERE / "system_prompt.txt").read_text(encoding="utf-8").strip()
     grammar = (HERE / "slots.gbnf").read_text(encoding="utf-8")
-    sets = {"dev": read(HERE / "eval_sms.csv"), "heldout": read(HERE / "eval_sms_heldout.csv")}
+    sets = {name: read(HERE / file) for name, file in SETS.items()}
     server = subprocess.Popen([str(Path(server_path).resolve()), "-m", str(Path(model_path).resolve()), "--port", str(port), "-c", "2048",
                                "-t", str(threads), "--jinja", "-np", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     base = f"http://127.0.0.1:{port}"
@@ -177,23 +217,43 @@ def main():
     parser.add_argument("--report-only", action="store_true", help="rewrite the .md from ml/reports/nlu_eval.json")
     parser.add_argument("--threads", type=int, default=4, help="4 threads ~ a mid-range phone's big cores")
     parser.add_argument("--port", type=int, default=8089)
-    parser.add_argument("--keyword-predictions", nargs=2, metavar=("DEV", "HELDOUT"),
-                        help="CSV files written by NluEvalTest with -Dpandastic.evalOut")
+    parser.add_argument("--keyword-dir", type=Path, default=KW_DIR,
+                        help="where NluEvalTest wrote kw_{dev,heldout,fresh}.csv")
+    parser.add_argument("--predictions-dir", type=Path, default=ROOT / "ml/reports",
+                        help="where the model's qwen_predictions_*.csv go (or are read from, with --rescore)")
+    parser.add_argument("--rescore", action="store_true",
+                        help="score saved predictions from --predictions-dir without running a model (no llama-server)")
     args = parser.parse_args()
     if args.report_only:
         write_report(json.loads((ROOT / "ml/reports/nlu_eval.json").read_text(encoding="utf-8")), args.threads)
         return
 
-    results = evaluate_model(args.server, args.model, args.threads, args.port)
-    sets = {"dev": read(HERE / "eval_sms.csv"), "heldout": read(HERE / "eval_sms_heldout.csv")}
-    if args.keyword_predictions:
-        for name, path in zip(("dev", "heldout"), args.keyword_predictions):
-            kw = {r["id"]: r for r in read(path)}
-            results[name]["keyword"] = score(sets[name], kw)
-            qwen = {r["id"]: r for r in read(ROOT / f"ml/reports/qwen_predictions_{name}.csv")}
-            results[name]["hybrid_fill"] = score(sets[name], {i: hybrid(kw[i], qwen[i], fill_all=True) for i in kw})
-            results[name]["hybrid_intent_crop"] = score(sets[name], {i: hybrid(kw[i], qwen[i], fill_all=False) for i in kw})
-            print(name, "keyword", json.dumps({k: v for k, v in results[name]["keyword"].items() if k != "misses"}))
+    sets = {name: read(HERE / file) for name, file in SETS.items()}
+    if args.rescore:
+        results = {}
+        for name, rows in sets.items():
+            path = args.predictions_dir / f"qwen_predictions_{name}.csv"
+            if path.exists():
+                llm = {r["id"]: effective(r) for r in read(path)}
+                results[name] = {"qwen": score(rows, llm), "latency_s": {"median": None, "max": None},
+                                 "prompt_ms_median": None, "gen_ms_median": None}
+    else:
+        results = evaluate_model(args.server, args.model, args.threads, args.port, predictions_dir=args.predictions_dir)
+    results["meta"] = {"model": Path(args.model).name if args.model else str(args.predictions_dir),
+                       "train_overlap": train_overlap(sets)}
+    for name, rows in sets.items():
+        kw_path = args.keyword_dir / f"kw_{name}.csv"
+        if name not in results or not kw_path.exists():
+            print(f"skip {name}: needs {kw_path} (run NluEvalTest) and the model's predictions")
+            continue
+        kw = {r["id"]: r for r in read(kw_path)}
+        llm = {r["id"]: r for r in read(args.predictions_dir / f"qwen_predictions_{name}.csv")}
+        results[name]["keyword"] = score(rows, kw)
+        for fill in ("intent", "intent_crop", "all"):
+            results[name]["hybrid_fill" if fill == "all" else f"hybrid_{fill}"] = score(
+                rows, {i: hybrid(kw[i], llm[i], fill) for i in kw})
+        results[name]["llm_first"] = score(rows, {i: llm_first(kw[i], llm[i]) for i in kw})
+        print(name, {m: results[name][m]["all_slots"] for m in POLICIES})
 
     write_report(results, args.threads)
 

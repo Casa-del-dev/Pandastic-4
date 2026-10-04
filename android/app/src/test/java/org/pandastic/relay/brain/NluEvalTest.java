@@ -13,7 +13,7 @@ import org.junit.Test;
 /**
  * Scores KeywordNlu on ml/llm/eval_sms.csv (synthetic SW/EN SMS written by the team, labelled synthetic).
  * Commodity is scored as the Resolver uses it: the crop's default when the message names none.
- * Predictions for ml/llm/eval_llm.py are written to build/nlu-eval/kw_{dev,heldout}.csv (under android/app with Gradle).
+ * Predictions for ml/llm/eval_llm.py are written to build/nlu-eval/kw_{dev,heldout,fresh}.csv (under android/app with Gradle).
  */
 public class NluEvalTest {
     @Test public void keywordNluOnDevSet() throws Exception {
@@ -28,6 +28,11 @@ public class NluEvalTest {
     /** Held-out set: written before any results and never used to tune the lexicon. Reported, not asserted. */
     @Test public void keywordNluOnHeldOutSet() throws Exception {
         evaluate("ml/llm/eval_sms_heldout.csv", "pandastic.evalOutHeldout", "kw_heldout.csv");
+    }
+
+    /** Fresh set: written after the Qwen LoRA was trained, in phrasings unlike its templates. Reported, not asserted. */
+    @Test public void keywordNluOnFreshSet() throws Exception {
+        evaluate("ml/llm/eval_sms_fresh.csv", "pandastic.evalOutFresh", "kw_fresh.csv");
     }
 
     /** @return correct counts per slot, then the number of rows as the last element. */
