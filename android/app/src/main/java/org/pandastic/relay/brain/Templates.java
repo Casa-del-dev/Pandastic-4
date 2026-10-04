@@ -151,8 +151,12 @@ public final class Templates {
         if (row.high > row.low) s.append('-').append(money(row.high));
         s.append('/').append(row.unit.toLowerCase(Locale.ROOT)).append(" (").append(sourceShort).append(").");
         if (offer != null) {
+            // Against a retail reference, say so: a farm-gate offer is normally below retail, and "29% below" alone
+            // would make a fair offer look like a cheat.
+            boolean retail = !"Farm-gate".equals(row.pricetype);
             s.append(t(lang, " Bei ya ", " Offer ")).append(money(offer));
-            if (offer < row.low) s.append(t(lang, " iko chini kwa ", " is ")).append(Math.round(Math.abs(gapPct))).append(t(lang, "%.", "% below."));
+            if (offer < row.low) s.append(t(lang, retail ? " iko chini ya bei ya rejareja kwa " : " iko chini kwa ", " is "))
+                .append(Math.round(Math.abs(gapPct))).append(t(lang, "%.", retail ? "% below retail." : "% below."));
             else if (offer > row.high) s.append(t(lang, " iko juu ya bei hii.", " is above this price."));
             else s.append(t(lang, " iko ndani ya bei hii.", " is within this price."));
         }
