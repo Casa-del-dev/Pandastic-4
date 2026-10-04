@@ -41,6 +41,8 @@ public class ReplyWriterTest {
         assertNull("judgment", ReplyWriter.check("Hii ni sawa: Kahawa Arabica (parchment), UGX 15,500/kg (MAAIF/UCDA). Uliza chama "
             + "kabla ya kuuza.", "Kahawa Arabica (parchment), bei ya shambani Ago 2026: UGX 15,500/kg (MAAIF/UCDA). Bei ya 12,000 "
             + "iko chini kwa 23%. Uliza chama kabla ya kuuza.", "", "sw", "PRICE"));
+        assertNotNull("extra caution is not a flip", ReplyWriter.check("Your coffee has leaf rust. Copper oxychloride prevents "
+            + "rust, but spray only if the extension officer agrees; otherwise, do not spray yet.", rust, "", "en", "CONFIDENT"));
         assertNull("empty politeness", ReplyWriter.check("Thank you for asking.", PRICE_EN, "", "en", "PRICE"));
         assertNull("copy", ReplyWriter.check(NOT_SURE_SW, NOT_SURE_SW, "", "sw", "TEXT_ONLY"));
         assertNull("no source", ReplyWriter.check("The buyer's 12,000 is 23% below UGX 15,500/kg. Ask the cooperative before "

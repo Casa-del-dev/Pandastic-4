@@ -171,6 +171,8 @@ public final class ReplyWriter {
 
     private static int negations(String lowerText) {
         int count = 0;
+        // "do not spray yet" only adds caution: it never counts as a flip.
+        lowerText = NO_SPRAY.matcher(lowerText).replaceAll(" ");
         for (String w : lowerText.split("[^\\p{L}']+"))
             if (NEGATIONS.contains(w) || (w.startsWith("usi") && w.length() > 5) || w.endsWith("n't")) count++;
         return count;
