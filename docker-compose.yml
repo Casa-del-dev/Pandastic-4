@@ -1,9 +1,17 @@
 # Both phones side by side: http://localhost:8080 (Basic 5173 left, Capable 5174 right).
 # Keep host port = container port for 5173/5174: each phone's number is its port.
+# The helper's answers come from `brain`: the phone's Java brain with Qwen and the leaf model (desktop/).
 services:
+  brain:
+    build: { context: ., target: brain }
+    image: pandastic-brain
   phones:
     build: { context: ., target: web }
     image: pandastic-phones
+    environment:
+      PANDASTIC_BRAIN_URL: http://brain:8090
+    depends_on:
+      brain: { condition: service_healthy }
     ports: ["8080:8080", "5173:5173", "5174:5174"]
     volumes: [phone-state:/state]
 volumes:

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import type { ChatStatus, HubStatus, PhoneMode, SmsResult } from './native'
 
-type LocalPhone = { number: string; mode: PhoneMode; chat: ChatStatus; hub: HubStatus }
+type LocalPhone = { number: string; mode: PhoneMode; chat: ChatStatus; hub: HubStatus; brain?: boolean }
 declare global {
   interface Window { __pandasticLocalPhone?: LocalPhone }
 }
@@ -11,6 +11,11 @@ export const isLocalPhone = !window.PandasticNative && Boolean(window.__pandasti
 let state = isLocalPhone ? window.__pandasticLocalPhone : undefined
 export const localPhoneNumber = state?.number
 export const localPhoneState = () => state
+/** Docker demo: this local phone's questions and photos go to the real Java brain (desktop/BrainServer.java). */
+export const hasLocalBrain = Boolean(state?.brain)
+export type LocalBrainInfo = { classifier?: string; classifierStub?: boolean; llm?: string | null; runtimeAvailable?: boolean }
+let brainInfo: LocalBrainInfo | undefined
+export const localBrainInfo = () => brainInfo
 
 function receive(next: LocalPhone) {
   state = next
@@ -23,6 +28,21 @@ if (isLocalPhone) {
   events.onmessage = event => receive(JSON.parse(event.data) as LocalPhone)
   // EventSource reconnects and receives the complete snapshot, including messages missed while away.
   if (import.meta.hot) import.meta.hot.dispose(() => events.close())
+}
+
+if (hasLocalBrain) {
+  void fetch('/__phone/brain', { signal: AbortSignal.timeout(10000) }).then(response => response.ok ? response.json() : undefined)
+    .then(info => { brainInfo = info; window.dispatchEvent(new CustomEvent('pandastic:local-brain')) }).catch(() => undefined)
+}
+
+export async function askLocalBrain<T>(path: '/ask' | '/photo', body: { text: string; lang: string; image?: string }): Promise<T | { status: string; error: string; escalate: boolean }> {
+  try {
+    const response = await fetch(`/__phone${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(90000),
+    })
+    return await response.json() as T
+  } catch { return { status: 'ERROR', error: 'timeout', escalate: true } }
 }
 
 export async function updateLocalPhone(operation: string, value?: unknown) {

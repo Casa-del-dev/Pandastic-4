@@ -1,8 +1,8 @@
 # Running Pandastic with Docker
 
-You only need Docker (with Compose v2). The `Dockerfile` has two targets.
+You only need Docker (with Compose v2).
 
-## 1. Browser phone pair (quickest demo)
+## 1. Two phones in the browser, with the real models
 
 ```sh
 docker compose up --build
@@ -13,14 +13,37 @@ phone (Noor, number 5173) on the left and the Capable helper phone (5174) on
 the right. Each phone also works on its own at <http://localhost:5173> and
 <http://localhost:5174>.
 
-Send `P 1 12000` from the Basic phone. The helper answers in the same thread
-from the bundled `knowledge.sqlite`. Chats are kept in the `phone-state` volume.
-`docker compose down -v` resets both phones.
+On the Basic phone, send `P 1 12000` or a problem in your own words ("majani
+ya kahawa yana unga wa njano chini"). The helper phone answers in the same
+thread, the way its SMS hub does. On the helper phone, attach a leaf photo
+with **+** to check it, or switch the target from SMS to the phone itself to
+ask a question.
 
-Keep the phones' host ports the same as their container ports (`5173:5173`),
-because a phone's number is its port. Open the page as `localhost`, not by
-the machine's IP address: the phones only accept requests from localhost. No models run in this mode: the leaf classifier,
-Qwen and Whisper only run in the Android app.
+The answers come from the `brain` container. It runs the helper phone's own
+Java code (`Brain`, `KeywordNlu`, `LlmNlu`, `ReplyWriter`, `HubPolicy`,
+`LeafClassifier`, `QualityGate`), compiled unchanged from `android/` with
+small stand-ins for the Android APIs (`desktop/`). It also loads:
+
+- the fine-tuned Qwen3.5-0.8B (542 MB), through the same llama.cpp JNI code
+  as the app, built for Linux. The build downloads it from the `models-v1`
+  release and checks its size and SHA-256 against `ml/llm/model.json`.
+- the EfficientNet-B0 leaf model and `knowledge.sqlite` from the APK's assets.
+
+Like the app, personal messages ("Habari mwanangu, shule inaendaje?") get no
+automatic reply. Dictation (Whisper) only runs in the Android app; in the
+browser the microphone uses the browser's own speech service.
+
+The leaf photo path follows the app (640 px JPEG, bilinear resize to 224 px
+without antialiasing), but it is not bit-identical to Android. On the
+human-test photos it gives the same answers as the emulator. Judge new leaf
+models on an emulator (`scripts/photo-eval.mjs`).
+
+Chats are kept in the `phone-state` volume; `docker compose down -v` resets
+both phones. Keep the phones' host ports the same as their container ports
+(`5173:5173`), because a phone's number is its port. Open the page as
+`localhost`, not by the machine's IP address: the phones only accept requests
+from localhost. The brain uses about 800 MB of memory; on x86_64 it needs a
+CPU with AVX2 (Intel 2013+, AMD 2015+).
 
 ## 2. Build the Android APK
 

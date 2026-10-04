@@ -12,6 +12,16 @@ export function localPhonePlugin() {
   const initialMode = process.env.PANDASTIC_PHONE_MODE === 'lite' ? 'lite' : 'capable'
   if (![number, peer].every(validPort) || !token || number === peer) throw new Error('Invalid local phone configuration')
   const directory = resolve(process.env.PANDASTIC_PHONE_STATE_DIR || '.local-phones')
+  // Docker: the helper phone's real Java brain (desktop/BrainServer.java). Without it, the labelled local demo answers.
+  const brainUrl = process.env.PANDASTIC_BRAIN_URL?.replace(/\/$/, '')
+  async function brain(path, body) {
+    const response = await fetch(`${brainUrl}${path}`, {
+      method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' },
+      body: body && JSON.stringify(body), signal: AbortSignal.timeout(90000),
+    })
+    if (!response.ok) throw new Error(`brain ${response.status}`)
+    return response.json()
+  }
   mkdirSync(directory, { recursive: true })
   const file = resolve(directory, `${number}.json`)
   const db = new DatabaseSync(resolve('../android/app/src/main/assets/models/knowledge.sqlite'), { readOnly: true })
@@ -28,7 +38,7 @@ export function localPhonePlugin() {
   state.hub.recent.forEach(entry => { if (entry.status === 'pending') entry.status = 'cancelled' })
   const clients = new Set()
   const timers = new Set()
-  const snapshot = () => ({ mode: state.mode, number, chat: state.chat, hub: state.hub })
+  const snapshot = () => ({ mode: state.mode, number, chat: state.chat, hub: state.hub, brain: Boolean(brainUrl) })
   function publish() {
     state.chat.messages = state.chat.messages.slice(-300)
     state.hub.recent = state.hub.recent.slice(-100)
@@ -83,6 +93,10 @@ export function localPhonePlugin() {
           return respond({ error: 'origin' }, 403)
         }
         if (req.method === 'GET' && path === '/state') return respond(snapshot())
+        if (req.method === 'GET' && path === '/brain') {
+          if (!brainUrl) return respond({ error: 'no_brain' }, 404)
+          try { return respond(await brain('/info')) } catch { return respond({ error: 'brain_unavailable' }, 502) }
+        }
         if (req.method === 'GET' && path === '/events') {
           res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
           res.write(`data: ${JSON.stringify(snapshot())}\n\n`)
@@ -96,12 +110,17 @@ export function localPhonePlugin() {
           let raw = ''
           for await (const chunk of req) {
             raw += chunk
-            if (raw.length > 8192) return respond({ error: 'too_large' }, 413)
+            if (raw.length > (path === '/photo' ? 4000000 : 8192)) return respond({ error: 'too_large' }, 413)
           }
           const data = JSON.parse(raw)
           if (path === '/send') {
             if (typeof data.id !== 'string' || !data.id || typeof data.body !== 'string' || !data.body.trim() || data.body.length > 480) return respond({ error: 'invalid' }, 400)
             return respond(await send(data.id, data.number, data.body.trim()))
+          }
+          if ((path === '/ask' || path === '/photo') && brainUrl) {
+            if (typeof data.text !== 'string' || data.text.length > 480 || !['sw', 'en'].includes(data.lang) || (path === '/photo' && typeof data.image !== 'string')) return respond({ error: 'invalid' }, 400)
+            try { return respond(await brain(path, { text: data.text, lang: data.lang, image: data.image })) }
+            catch { return respond({ status: 'ERROR', error: 'brain_unavailable', escalate: true }, 502) }
           }
           if (path === '/deliver') {
             if (data.from !== peer || typeof data.id !== 'string' || !data.id || typeof data.body !== 'string' || !data.body.trim() || data.body.length > 1000 || typeof data.automatic !== 'boolean') return respond({ error: 'invalid' }, 400)
@@ -119,7 +138,14 @@ export function localPhonePlugin() {
                 const timer = setTimeout(async () => {
                   timers.delete(timer)
                   if (!state.hub.enabled || state.mode !== 'capable' || !state.hub.contacts.some(contact => contact.number === data.from)) { entry.status = 'cancelled'; publish(); return }
-                  entry.reply = localAnswer(db, data.body, state.hub.lang)
+                  if (brainUrl) {
+                    // Same rule as HubService: personal messages get no reply, and the log keeps no copy.
+                    let answer
+                    try { answer = await brain('/sms', { text: data.body }) }
+                    catch (error) { console.error(`Brain unavailable (${error.message}); local demo answer sent.`) }
+                    if (answer && !answer.farming) { entry.status = 'personal'; entry.question = ''; publish(); return }
+                    entry.reply = answer ? answer.reply : localAnswer(db, data.body, state.hub.lang)
+                  } else entry.reply = localAnswer(db, data.body, state.hub.lang)
                   const result = await send(`reply-${data.id}`, data.from, entry.reply, true)
                   entry.status = result.ok ? 'sent' : 'failed'
                   if (result.ok) state.hub.answeredToday++

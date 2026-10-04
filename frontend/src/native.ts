@@ -1,7 +1,7 @@
 // Bridge to the Android app (window.PandasticNative, see NativeBridge.java).
 // In a desktop browser there is no bridge, so a clearly labelled demo mode answers instead.
-import { isLocalPhone, localPhoneState, sendLocalSms, updateLocalPhone } from './local-phone'
-export { isLocalPhone, localPhoneNumber } from './local-phone'
+import { askLocalBrain, hasLocalBrain, isLocalPhone, localBrainInfo, localPhoneState, sendLocalSms, updateLocalPhone } from './local-phone'
+export { hasLocalBrain, isLocalPhone, localPhoneNumber } from './local-phone'
 
 export type Lang = 'sw' | 'en'
 export type PhoneMode = 'lite' | 'capable'
@@ -256,22 +256,31 @@ export async function photoPreview(file: File): Promise<string> {
 }
 
 export async function checkPhoto(file: File, lang: Lang, text = ''): Promise<Decision> {
+  if (!native && hasLocalBrain) return askLocalBrain<Decision>('/photo', { image: await toJpegBase64(file), text, lang })
   if (!native) return demoPhoto(file)
   const base64 = await toJpegBase64(file)
   return call(id => native.checkPhoto(id, base64, text, lang))
 }
 
 export function ask(text: string, lang: Lang): Promise<Decision> {
+  if (!native && hasLocalBrain) return askLocalBrain<Decision>('/ask', { text, lang })
   if (!native) return demoAsk(text)
   return call(id => native.ask(id, text, lang))
 }
 
 export function modelInfo(): { classifier?: string; classifierStub?: boolean } {
+  if (!native && hasLocalBrain) return localBrainInfo() ?? {}
   if (!native) return { classifier: 'demo', classifierStub: true }
   try { return JSON.parse(native.info()) } catch { return {} }
 }
 
 export function modelStatus(): ModelStatus {
+  const brain = localBrainInfo()
+  if (!native && brain) return {
+    classifier: { installed: true, loaded: true, version: brain.classifier ?? '', stub: Boolean(brain.classifierStub), bytes: 0 },
+    language: { installed: Boolean(brain.llm), loaded: Boolean(brain.llm), name: brain.llm ?? 'Qwen3.5-0.8B-pandastic-Q4_K_M.gguf', runtimeAvailable: Boolean(brain.runtimeAvailable), bytes: 0 },
+    knowledge: { installed: true, loaded: true, bytes: 0 },
+  }
   if (!native) return {
     classifier: { installed: true, loaded: false, version: 'Preview', stub: true, bytes: 0 },
     language: { installed: false, loaded: false, name: 'Qwen3.5-0.8B-Q4_K_M.gguf', runtimeAvailable: false, bytes: 0 },
@@ -282,6 +291,10 @@ export function modelStatus(): ModelStatus {
 const modelListeners = new Set<(status: ModelStatus) => void>()
 window.addEventListener('pandastic:models', event => {
   modelListeners.forEach(listener => listener((event as CustomEvent<ModelStatus>).detail))
+})
+window.addEventListener('pandastic:local-brain', () => {
+  const status = modelStatus()
+  modelListeners.forEach(listener => listener(status))
 })
 export function onModelsChange(listener: (status: ModelStatus) => void): () => void {
   modelListeners.add(listener)

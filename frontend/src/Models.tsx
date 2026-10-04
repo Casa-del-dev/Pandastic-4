@@ -25,7 +25,7 @@ export default function Models({ lang }: { lang: Lang }) {
     finally { setStatus(native.modelStatus()); setAction(undefined) }
   }
   function state(file?: ModelFile) {
-    return native.isDemo ? t.preview : file?.loaded ? t.loaded : file?.installed ? t.installed : t.notInstalled
+    return native.isDemo && !native.hasLocalBrain ? t.preview : file?.loaded ? t.loaded : file?.installed ? t.installed : t.notInstalled
   }
   function size(file?: ModelFile) {
     if (!file?.bytes) return ''
@@ -46,7 +46,7 @@ export default function Models({ lang }: { lang: Lang }) {
       </section>
       <section className="model-card">
         <div className="model-title"><Icon name="image" size={21} /><h2>{t.imageModel}</h2><span className={`model-state ${status.classifier?.loaded ? 'model-loaded' : ''}`}>{state(status.classifier)}</span></div>
-        <p className="model-name">{status.classifier?.stub ? t.previewModel : 'MobileNetV4'}{size(status.classifier) && ` · ${size(status.classifier)}`}</p>
+        <p className="model-name">{status.classifier?.stub ? t.previewModel : status.classifier?.version.includes('efficientnet') ? 'EfficientNet-B0' : 'MobileNetV4'}{size(status.classifier) && ` · ${size(status.classifier)}`}</p>
         <p className="field-hint">{t.imageHint}</p>
         {status.classifier?.error && <p className="field-error">{t.modelFailed}</p>}
       </section>
@@ -65,6 +65,6 @@ export default function Models({ lang }: { lang: Lang }) {
     {busy && <p className="model-feedback" role="status">{t.modelWorking}</p>}
     {message && <p className="model-feedback" role="status">{message}</p>}
     {(error || status.error) && <p className="field-error model-feedback" role="alert">{error || t.modelStatusFailed}</p>}
-    {native.isDemo && <p className="footnote">{t.preview}</p>}
+    {native.isDemo && !native.hasLocalBrain && <p className="footnote">{t.preview}</p>}
   </section>
 }
