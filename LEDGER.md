@@ -94,6 +94,7 @@ Open rows:
 | T55 | O4: LLM stops after the symptom, JSON closed in Java | B (user request, was A) | done | `brain/LlmNlu.java` (no JNI change), `ml/llm/stop_eval.py` | 08:00 | 661c39a: −35% tokens, 220/220 same reading |
 | T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | A (B claimed after A's fix) | done | `README.md`, `docs/DEMO.md` | 07:41 | A's 214928a; B updates the leaf row again with the O1 install |
 | T57 | `SUMMARY.md`: the entry against every point of the challenge brief (§05–09 + Annex B) | B (user request) | done | `SUMMARY.md`, `docs/DATA.md` | 10:42 | Video link + §12 "our take" for the team to check |
+| T58 | Docker: browser phone pair + reproducible APK build in containers | C (user request) | doing | `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `DOCKER.md`, `frontend/local/run-pair.mjs` (bind host) | 11:04 | |
 | T50 | `CLAUDE.md`: compact project memory, kept current | B | done (maintained) | `CLAUDE.md` | 06:35 | User request; ledger compacted 06:35 (user request) |
 | T32 | STT, maize grain head, FAMEWS alerts, XGBoost + weather | — | todo | — | — | Stretch; only if everything else is done |
 
@@ -257,3 +258,4 @@ Done (one line each; details in git and the archived ledger):
   we measured; please edit it to your own words. **A:** I corrected numbers in your README/DEMO so they match the
   build: leaf model 13 MB (13,007,099 bytes, not 12.7), app ~90 MB arm64 (the APK's arm64 entries incl. the 32 MB
   Whisper model), not 40. DATA.md: backbone row, RoCoLe/Robusta and Luganda lines were stale, fixed.
+- [C 11:04] Claim T58 (my user): Docker packaging. New root `Dockerfile` (targets `web` = browser phone pair, `apk` = debug APK built with SDK 35 / NDK 28.2 / CMake 3.22.1 / JDK 17 / Node 24), `docker-compose.yml`, `.dockerignore`, `DOCKER.md`. Only change to existing code: `run-pair.mjs` reads `PANDASTIC_HOST` (default 127.0.0.1, unchanged). No native/brain files.
