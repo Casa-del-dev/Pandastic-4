@@ -16,6 +16,7 @@ import androidx.core.app.ServiceCompat;
 import androidx.core.content.ContextCompat;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.pandastic.relay.BrainHost;
 import org.pandastic.relay.FrontendActivity;
 
 /**
@@ -29,7 +30,7 @@ public final class HubService extends Service {
     private static final int NOTIFICATION_ID = 7;
     private static final long HOUR = 60 * 60 * 1000L;
     /** Rate limits keep a stuck sender or a reply loop from draining the household's airtime. */
-    private static final int MAX_PER_SENDER_PER_HOUR = 6, MAX_TOTAL_PER_HOUR = 20;
+    private static final int MAX_PER_SENDER_PER_HOUR = 10, MAX_TOTAL_PER_HOUR = 30;
 
     private static volatile HubService running;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -64,6 +65,7 @@ public final class HubService extends Service {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(),
             Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0);
         responder = Responder.create(this);
+        BrainHost.get(this).warmUp();
         running = this;
     }
 

@@ -45,6 +45,9 @@ public final class BrainHost {
 
     public <T> Future<T> submit(Callable<T> task) { return worker.submit(task); }
 
+    /** Loads the knowledge base and the LLM (and caches its prompt) before the first question arrives. */
+    public void warmUp() { worker.execute(this::brain); }
+
     /** Photo + optional question → decision JSON (contracts §2). Call from the worker thread. */
     public String photo(Bitmap bitmap, String text, String lang) throws Exception {
         String issue = QualityGate.check(bitmap);

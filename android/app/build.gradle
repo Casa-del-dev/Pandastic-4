@@ -21,6 +21,13 @@ def buildFrontend = tasks.register('buildFrontend', Exec) {
     outputs.dir(new File(frontendDirectory, 'dist'))
 }
 
+// Qwen grammar + prompt are owned by ml/llm (T31); copy them so the APK never drifts from the source.
+def generatedLlmAssets = layout.buildDirectory.dir('generated/llmAssets')
+def syncLlmAssets = tasks.register('syncLlmAssets', Sync) {
+    from(rootProject.file('../ml/llm')) { include 'slots.gbnf', 'system_prompt.txt' }
+    into(generatedLlmAssets.map { it.dir('llm') })
+}
+
 def syncFrontendAssets = tasks.register('syncFrontendAssets', Sync) {
     dependsOn buildFrontend
     from(new File(frontendDirectory, 'dist'))
@@ -45,6 +52,7 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     sourceSets.main.assets.srcDir(generatedFrontendAssets)
+    sourceSets.main.assets.srcDir(generatedLlmAssets)
     // llama.cpp for the optional on-device LLM (contracts §5). Build without it: ./gradlew -Pnollm assembleDebug
     if (!project.hasProperty('nollm')) {
         externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
@@ -55,7 +63,7 @@ android {
     testOptions { unitTests.returnDefaultValues = true }
 }
 
-tasks.named('preBuild').configure { dependsOn syncFrontendAssets }
+tasks.named('preBuild').configure { dependsOn syncFrontendAssets, syncLlmAssets }
 
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'

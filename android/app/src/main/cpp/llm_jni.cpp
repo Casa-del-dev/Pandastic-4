@@ -18,7 +18,21 @@ struct Llm {
     llama_context *ctx = nullptr;
     const llama_vocab *vocab = nullptr;
     Clock::time_point deadline;
+    std::vector<uint8_t> prefixState;  // memory after the fixed system prompt, restored for every SMS
 };
+
+bool decodeAll(Llm *llm, std::vector<llama_token> &tokens) {
+    llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
+    return llama_decode(llm->ctx, batch) == 0;
+}
+
+std::vector<llama_token> tokenize(Llm *llm, const std::string &text, bool addSpecial) {
+    int count = -llama_tokenize(llm->vocab, text.c_str(), static_cast<int32_t>(text.size()), nullptr, 0, addSpecial, true);
+    std::vector<llama_token> tokens(count > 0 ? count : 0);
+    if (count > 0 && llama_tokenize(llm->vocab, text.c_str(), static_cast<int32_t>(text.size()), tokens.data(), count, addSpecial, true) < 0)
+        tokens.clear();
+    return tokens;
+}
 
 /** Called by llama.cpp between compute steps; true stops the current decode. */
 bool pastDeadline(void *data) {
@@ -79,9 +93,12 @@ Java_org_pandastic_relay_brain_LlmNlu_nativeComplete(JNIEnv *env, jclass, jlong 
     // A slow phone must never hold up an SMS reply: past the deadline the caller falls back to keywords.
     llm->deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
     llama_memory_clear(llama_get_memory(llm->ctx), true);
-    int count = -llama_tokenize(llm->vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()), nullptr, 0, true, true);
-    std::vector<llama_token> tokens(count);
-    if (llama_tokenize(llm->vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()), tokens.data(), count, true, true) < 0) return nullptr;
+    bool restored = !llm->prefixState.empty()
+        && llama_state_seq_set_data(llm->ctx, llm->prefixState.data(), llm->prefixState.size(), 0) > 0;
+    // With a cached prefix only the SMS part is evaluated; otherwise the whole prompt.
+    std::vector<llama_token> tokens = tokenize(llm, prompt, !restored);
+    int count = static_cast<int>(tokens.size());
+    if (count == 0) return nullptr;
     if (count + maxTokens > static_cast<int>(llama_n_ctx(llm->ctx))) { LOGE("Prompt too long: %d tokens", count); return nullptr; }
 
     llama_sampler *sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -93,8 +110,8 @@ Java_org_pandastic_relay_brain_LlmNlu_nativeComplete(JNIEnv *env, jclass, jlong 
     llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
 
     std::string output;
-    llama_batch batch = llama_batch_get_one(tokens.data(), count);
-    bool ok = llama_decode(llm->ctx, batch) == 0;
+    bool ok = decodeAll(llm, tokens);
+    llama_batch batch;
     for (int i = 0; ok && i < maxTokens && Clock::now() < llm->deadline; ++i) {
         llama_token token = llama_sampler_sample(sampler, llm->ctx, -1);
         if (llama_vocab_is_eog(llm->vocab, token)) break;
@@ -107,6 +124,23 @@ Java_org_pandastic_relay_brain_LlmNlu_nativeComplete(JNIEnv *env, jclass, jlong 
     llama_sampler_free(sampler);
     if (!ok || Clock::now() >= llm->deadline) { LOGE("LLM stopped: %s", ok ? "time budget" : "decode failed"); return nullptr; }
     return env->NewStringUTF(trimUtf8(output).c_str());
+}
+
+/** Evaluates the fixed prompt prefix once and keeps the resulting memory for later completions. */
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_pandastic_relay_brain_LlmNlu_nativeSetPrefix(JNIEnv *env, jclass, jlong handle, jstring jprefix) {
+    auto *llm = reinterpret_cast<Llm *>(handle);
+    if (llm == nullptr) return JNI_FALSE;
+    llm->prefixState.clear();
+    llm->deadline = Clock::time_point::max();
+    llama_memory_clear(llama_get_memory(llm->ctx), true);
+    std::vector<llama_token> tokens = tokenize(llm, toString(env, jprefix), true);
+    if (tokens.empty() || !decodeAll(llm, tokens)) { LOGE("Prefix evaluation failed"); return JNI_FALSE; }
+    llm->prefixState.resize(llama_state_seq_get_size(llm->ctx, 0));
+    size_t written = llama_state_seq_get_data(llm->ctx, llm->prefixState.data(), llm->prefixState.size(), 0);
+    if (written == 0) { llm->prefixState.clear(); return JNI_FALSE; }
+    llm->prefixState.resize(written);
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT void JNICALL

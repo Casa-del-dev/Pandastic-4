@@ -20,13 +20,17 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     private static final String TAG = "PandasticLlm";
     public static final String MODEL_NAME = "Qwen3.5-0.8B-Q4_K_M.gguf";
     /** Prompt + answer; set explicitly so llama.cpp does not size the cache for the model's 262k context. */
-    private static final int CONTEXT = 1024, MAX_TOKENS = 64;
+    private static final int CONTEXT = 1536, MAX_TOKENS = 64;
     /** The SMS hub waits up to 60 s per question; the model gets a third of that, then keywords answer. */
     private static final int TIME_BUDGET_MS = 20_000;
     private static final Set<String> INTENTS = new HashSet<>(Arrays.asList("diagnose", "price", "planting", "help", "other"));
     private static final Set<String> CROPS = new HashSet<>(Arrays.asList("coffee", "maize", "bean"));
-    private static final Set<String> SYMPTOMS = new HashSet<>(Arrays.asList("rust", "miner", "cercospora", "phoma",
-        "fall_armyworm", "leaf_blight", "streak_virus", "lethal_necrosis", "leaf_spot", "angular_leaf_spot"));
+    /** crop_symptom pairs the classifier and the advice table know; any other pair drops the symptom. */
+    private static final Set<String> LABELS = new HashSet<>(Arrays.asList("coffee_rust", "coffee_miner",
+        "coffee_cercospora", "coffee_phoma", "maize_fall_armyworm", "maize_leaf_blight", "maize_streak_virus",
+        "maize_lethal_necrosis", "maize_leaf_spot", "bean_rust", "bean_angular_leaf_spot"));
+    private static final Set<String> COMMODITIES = new HashSet<>(Arrays.asList("coffee_arabica_parchment",
+        "coffee_arabica_drugar", "coffee_robusta_kiboko", "coffee_robusta_faq", "maize_grain", "beans_dry"));
 
     private static final String DEFAULT_SYSTEM = "You read one short SMS from a smallholder farmer in Uganda. "
         + "It may be Swahili, English or Luganda, and may be misspelled. Reply with JSON only. "
@@ -48,9 +52,11 @@ public final class LlmNlu implements Nlu, AutoCloseable {
 
     private static native long nativeLoad(String path, int nCtx, int nThreads);
     private static native String nativeComplete(long handle, String prompt, String grammar, int maxTokens, int timeoutMs);
+    private static native boolean nativeSetPrefix(long handle, String prefix);
     private static native void nativeFree(long handle);
 
     private long handle;
+    private boolean prefixCached;
     private final Nlu keywords;
     private final String system, grammar;
     public final String modelPath;
@@ -66,8 +72,13 @@ public final class LlmNlu implements Nlu, AutoCloseable {
         int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors() - 2));
         long handle = nativeLoad(model.getAbsolutePath(), CONTEXT, threads);
         if (handle == 0) return null;
-        return new LlmNlu(handle, keywords, asset(context, "llm/system_prompt.txt", DEFAULT_SYSTEM),
+        // Grammar and prompt come from ml/llm (T31), copied into assets at build time.
+        LlmNlu llm = new LlmNlu(handle, keywords, asset(context, "llm/system_prompt.txt", DEFAULT_SYSTEM),
             asset(context, "llm/slots.gbnf", DEFAULT_GRAMMAR), model.getAbsolutePath());
+        long started = System.currentTimeMillis();
+        boolean cached = llm.prefixCached = nativeSetPrefix(handle, llm.prefix());
+        Log.i(TAG, "System prompt " + (cached ? "cached" : "NOT cached") + " in " + (System.currentTimeMillis() - started) + " ms");
+        return llm;
     }
 
     private LlmNlu(long handle, Nlu keywords, String system, String grammar, String modelPath) {
@@ -82,20 +93,33 @@ public final class LlmNlu implements Nlu, AutoCloseable {
         Slots slots = keywords.parse(text, lang);
         // Keywords are exact; ask the model only when they leave something open.
         boolean intentOpen = slots.intent == null || "other".equals(slots.intent);
-        if (!intentOpen && slots.crop != null && (slots.symptom != null || !"diagnose".equals(slots.intent))) return slots;
+        if (!intentOpen && slots.crop != null) return slots;
         JSONObject json = complete(text);
         if (json == null) return slots;
-        String intent = json.optString("intent", null), crop = json.optString("crop", null), symptom = json.optString("symptom", null);
+        String intent = json.optString("intent", null), crop = json.optString("crop", null);
+        String symptom = json.optString("symptom", null), commodity = json.optString("commodity", null);
         if (intentOpen && INTENTS.contains(intent)) { slots.intent = intent; slots.intentProb = 0.8f; }
+        if (slots.lang == null && ("sw".equals(json.optString("lang")) || "en".equals(json.optString("lang")))) slots.lang = json.optString("lang");
         if (slots.crop == null && CROPS.contains(crop)) slots.crop = crop;
-        if (slots.symptom == null && SYMPTOMS.contains(symptom)) slots.symptom = symptom;
+        // Symptoms are not taken from the model: on vague text ("my coffee is sick") it named one anyway.
+        // Only the keyword lexicon (exact words) may suggest a condition. LABELS stays for logging.
+        if (symptom != null && !"null".equals(symptom) && slots.symptom == null)
+            Log.i(TAG, "Ignored model symptom " + (LABELS.contains(slots.crop + "_" + symptom) ? slots.crop + "_" + symptom : symptom));
+        if (slots.commodity == null && COMMODITIES.contains(commodity)) slots.commodity = commodity;
+        // Prices stay deterministic: a model-read offer is used only if the text contains digits at all.
+        if (slots.offer == null && json.optLong("offer", 0) > 0 && text.matches(".*\\d.*")) slots.offer = (double) json.optLong("offer");
         return slots;
     }
 
+    /** Fixed part of the chat prompt; evaluated once and cached (B's T31 note). */
+    private String prefix() {
+        return "<|im_start|>system\n" + system + "<|im_end|>\n<|im_start|>user\nSMS: ";
+    }
+
     private JSONObject complete(String text) {
-        // Qwen chat format with an empty thinking block: answer directly, no reasoning tokens.
-        String prompt = "<|im_start|>system\n" + system + "<|im_end|>\n<|im_start|>user\n" + text.replace("<|", "< |")
-            + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
+        // Qwen chat format with an empty thinking block: the grammar forces JSON from the first token.
+        String prompt = (prefixCached ? "" : prefix())
+            + text.replace("<|", "< |") + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
         long started = System.currentTimeMillis();
         String output = nativeComplete(handle, prompt, grammar, MAX_TOKENS, TIME_BUDGET_MS);
         Log.i(TAG, "LLM slots in " + (System.currentTimeMillis() - started) + " ms");
