@@ -58,15 +58,18 @@ All sources, licences and sizes, the evidence for the problem, and **what the da
 
 ## Run it
 
-Requirements: JDK 17, Android SDK 35, NDK `28.2.13676358` with CMake 3.22.1 (for llama.cpp), Node 20+ and **pnpm**.
+Requirements: JDK 17, Android SDK 35, NDK `28.2.13676358` with CMake 3.22.1 (for llama.cpp), Node 20+ and **Corepack**. Gradle uses Corepack to run the pnpm version pinned in `frontend/package.json`; a global `pnpm` executable is not required.
 
 ```sh
-make run            # build + install + launch on the emulator (AVD medium_phone; EMULATOR_NAME=… to change)
+make run            # start/select emulator, build + install + launch; plain make does the same
 make run-device     # same on a USB-connected phone
 make release        # 40 MB arm64 APK for side-loading
 make web            # UI only, in a desktop browser (labelled demo answers)
+make stop           # shut down the running emulator
 cd android && ./gradlew testDebugUnitTest   # resolver, NLU, SMS formatting, number matching
 ```
+
+With one available AVD, `make run` selects it automatically; with one running emulator, it reuses it. With multiple AVDs or emulators, select `EMULATOR_NAME=Your_AVD` or `DEVICE=emulator-5554` (also accepted by `make stop`). An invalid AVD name or an emulator crash reports an error immediately. Startup logs are in `/tmp/pandastic-emulator.log`; `BOOT_TIMEOUT=180` controls the maximum wait. The first build may download pnpm and dependencies; the installed app runs offline.
 
 Building without the NDK: `./gradlew -Pnollm assembleDebug`. The app then works with keyword understanding only.
 

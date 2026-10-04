@@ -12,21 +12,21 @@ make run-device
 
 Use `make run-device DEVICE=YOUR_SERIAL` if multiple phones are attached. For an emulator, use `make run`. Both commands build React, package it inside the APK, install the APK, and launch the React screen. `make build` only builds the APK.
 
-React source stays in `frontend/`; Gradle automatically builds it and copies `dist/` into generated Android assets. Do not copy or move source files into `android/` manually. Node and pnpm must be available to Gradle, including when building from Android Studio. The first build may need internet to install locked pnpm and Android dependencies.
+React source stays in `frontend/`; Gradle automatically builds it and copies `dist/` into generated Android assets. Do not copy or move source files into `android/` manually. Node and Corepack must be available to Gradle, including when building from Android Studio. Corepack uses the pnpm version pinned in `package.json`; a global pnpm executable is not required. The first build may need internet to download the package manager and dependencies.
 
 The native wrapper is `android/app/src/main/java/org/pandastic/relay/FrontendActivity.java`. It serves bundled files through Android's `WebViewAssetLoader`, handles image picking/camera capture and microphone permission, and blocks external web requests. Keep Android System WebView up to date before deployment; the React UI requires a modern WebView even though the APK's minimum Android version is 6.0.
 
 ## Run locally
 
-Requires Node.js 20.19+ or 22.12+ and pnpm.
+Requires Node.js 20.19+ or 22.12+ with Corepack.
 
 ```sh
 cd frontend
-pnpm install
-pnpm dev
+corepack pnpm install
+corepack pnpm run dev
 ```
 
-Open the address printed by Vite, normally `http://localhost:5173`. For a production build, run `pnpm build`; static output is written to `dist/`. Use `pnpm preview` to view that build.
+Open the address printed by Vite, normally `http://localhost:5173`. For a production build, run `corepack pnpm run build`; static output is written to `dist/`. Use `corepack pnpm run preview` to view that build.
 
 Dependencies must be installed before working without internet. The UI bundles its code, uses system fonts and inline SVG artwork, and makes no cloud/API requests. The Vite dev server is a development tool; it is not the planned phone-line connection between phones.
 

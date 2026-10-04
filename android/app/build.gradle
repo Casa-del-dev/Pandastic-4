@@ -3,11 +3,11 @@ plugins { id 'com.android.application' }
 // Keep React source separate; package its production build inside the APK.
 def frontendDirectory = rootProject.file('../frontend')
 def generatedFrontendAssets = layout.buildDirectory.dir('generated/frontendAssets')
-def pnpmCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'pnpm.cmd' : 'pnpm'
+def corepackCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'corepack.cmd' : 'corepack'
 
 def installFrontend = tasks.register('installFrontend', Exec) {
     workingDir frontendDirectory
-    commandLine pnpmCommand, 'install', '--frozen-lockfile'
+    commandLine corepackCommand, 'pnpm', 'install', '--frozen-lockfile'
     inputs.files(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'].collect { new File(frontendDirectory, it) })
     outputs.dir(new File(frontendDirectory, 'node_modules'))
 }
@@ -15,7 +15,7 @@ def installFrontend = tasks.register('installFrontend', Exec) {
 def buildFrontend = tasks.register('buildFrontend', Exec) {
     dependsOn installFrontend
     workingDir frontendDirectory
-    commandLine pnpmCommand, 'run', 'build'
+    commandLine corepackCommand, 'pnpm', 'run', 'build'
     inputs.dir(new File(frontendDirectory, 'src'))
     inputs.files(['package.json', 'pnpm-lock.yaml', 'index.html', 'tsconfig.json', 'vite.config.ts'].collect { new File(frontendDirectory, it) })
     outputs.dir(new File(frontendDirectory, 'dist'))
