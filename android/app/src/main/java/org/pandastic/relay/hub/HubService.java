@@ -64,9 +64,12 @@ public final class HubService extends Service {
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "SMS helper", NotificationManager.IMPORTANCE_LOW));
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(),
             Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0);
-        responder = Responder.create(this);
-        BrainHost.get(this).warmUp();
+        if (new HubPrefs(this).enabled()) {
+            responder = Responder.create(this);
+            BrainHost.get(this).warmUp();
+        }
         running = this;
+        ChatStore.get(this).announce();
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -81,6 +84,7 @@ public final class HubService extends Service {
         HubLog log = HubLog.get(this);
         HubPrefs prefs = new HubPrefs(this);
         for (HubLog.Entry entry : log.pending()) {
+            if (!prefs.enabled()) break;
             long hourAgo = System.currentTimeMillis() - HOUR;
             if (log.answeredSince(entry.sender, hourAgo) >= MAX_PER_SENDER_PER_HOUR
                 || log.answeredSince(null, hourAgo) >= MAX_TOTAL_PER_HOUR) {
@@ -98,7 +102,9 @@ public final class HubService extends Service {
                     Log.e(TAG, "Answering failed, sending the safe reply: " + e.getClass().getSimpleName());
                     reply = new Responder.Fallback().answer(entry.body, prefs.lang());
                 }
+                if (!prefs.enabled()) break;
                 SmsSender.send(this, entry.sender, reply.sms);
+                ChatStore.get(this).recordReply(entry.sender, reply.sms);
                 log.finish(entry.id, HubLog.ANSWERED, reply.sms, reply.decisionJson);
             } catch (Exception e) {
                 // No message content or number in the system log: it is personal data.
@@ -108,7 +114,9 @@ public final class HubService extends Service {
                 if (wakeLock.isHeld()) wakeLock.release();
             }
         }
-        getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification());
+        if (prefs.enabled() && running == this)
+            getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification());
+        ChatStore.get(this).announce();
     }
 
     private Notification notification() {
@@ -137,6 +145,7 @@ public final class HubService extends Service {
     @Override public void onDestroy() {
         running = null;
         worker.shutdown();
+        ChatStore.get(this).announce();
         super.onDestroy();
     }
 

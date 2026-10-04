@@ -2,6 +2,18 @@
 // In a desktop browser there is no bridge, so a clearly labelled demo mode answers instead.
 
 export type Lang = 'sw' | 'en'
+export type PhoneMode = 'lite' | 'capable'
+export type ChatMessage = { id: number; number: string; body: string; direction: 'in' | 'out'; time: number; status: string }
+export type ChatStatus = { peer: string; messages: ChatMessage[]; smsPermission: boolean }
+export type SmsResult = { ok: boolean; error?: string }
+export type ModelFile = { installed: boolean; loaded: boolean; bytes: number; error?: string | null }
+export type ModelStatus = {
+  classifier?: ModelFile & { version: string; stub: boolean }
+  language?: ModelFile & { name: string; runtimeAvailable: boolean }
+  knowledge?: ModelFile
+  busy?: boolean
+  error?: string
+}
 
 export type Price = {
   commodity: string
@@ -55,9 +67,18 @@ export type HubStatus = {
 }
 
 type Native = {
+  phoneInfo(): string
+  setPhoneMode(mode: PhoneMode): void
+  chatStatus(): string
+  setSmsPeer(number: string): void
+  enableSms(): void
+  sendSms(id: string, number: string, body: string): void
+  clearChatHistory(): void
   checkPhoto(id: string, base64Jpeg: string, text: string, lang: string): void
   ask(id: string, text: string, lang: string): void
   info(): string
+  modelStatus(): string
+  manageModels(id: string, action: 'load' | 'unload' | 'import'): void
   hubStatus(): string
   setHubEnabled(enabled: boolean): void
   setHubContacts(json: string): void
@@ -74,11 +95,91 @@ declare global {
   interface Window {
     PandasticNative?: Native
     __pandasticReply?: (id: string, decision: Decision) => void
+    __pandasticSmsReply?: (id: string, result: SmsResult) => void
+    __pandasticModelReply?: (id: string, result: SmsResult) => void
   }
 }
 
 const native = window.PandasticNative
 export const isDemo = !native
+
+export function phoneInfo(): { mode?: PhoneMode; totalRamMb?: number } {
+  try {
+    if (native) return JSON.parse(native.phoneInfo())
+    const mode = localStorage.getItem('pandastic.phone-mode')
+    return { mode: mode === 'lite' || mode === 'capable' ? mode : undefined }
+  } catch { return {} }
+}
+
+export function setPhoneMode(mode: PhoneMode) {
+  if (native) native.setPhoneMode(mode)
+  else {
+    try { localStorage.setItem('pandastic.phone-mode', mode) } catch { /* session only */ }
+    if (mode === 'lite') setHubEnabled(false)
+  }
+}
+
+export function validNumber(number: string): boolean {
+  const digits = number.replace(/[^0-9]/g, '')
+  return /^\+?[0-9 ()-]+$/.test(number.trim()) && digits.length >= 7 && digits.length <= 15
+}
+
+export function sameNumber(a: string, b: string): boolean {
+  if (!validNumber(a) || !validNumber(b)) return false
+  const digits = (value: string) => value.replace(/[^0-9]/g, '')
+  const international = (value: string) => value.trim().startsWith('+') ? digits(value) : value.trim().startsWith('00') ? digits(value).slice(2) : null
+  const fullA = international(a), fullB = international(b)
+  return digits(a).slice(-9) === digits(b).slice(-9) && (!fullA || !fullB || fullA === fullB)
+}
+
+let demoChat: ChatStatus = { peer: '', messages: [], smsPermission: false }
+try { demoChat.peer = localStorage.getItem('pandastic.sms-peer') ?? '' } catch { /* session only */ }
+const chatListeners = new Set<(status: ChatStatus) => void>()
+window.addEventListener('pandastic:chat', event => {
+  chatListeners.forEach(listener => listener((event as CustomEvent<ChatStatus>).detail))
+})
+export function chatStatus(): ChatStatus {
+  if (!native) return demoChat
+  try { return JSON.parse(native.chatStatus()) } catch { return { peer: '', messages: [], smsPermission: false } }
+}
+export function onChatChange(listener: (status: ChatStatus) => void): () => void {
+  chatListeners.add(listener)
+  return () => { chatListeners.delete(listener) }
+}
+export function setSmsPeer(number: string) {
+  if (native) native.setSmsPeer(number)
+  else {
+    demoChat = { ...demoChat, peer: number.trim() }
+    try { localStorage.setItem('pandastic.sms-peer', demoChat.peer) } catch { /* session only */ }
+    chatListeners.forEach(listener => listener(demoChat))
+  }
+}
+export function enableSms() { native?.enableSms() }
+export function clearChatHistory() {
+  if (native) native.clearChatHistory()
+  else {
+    demoChat = { ...demoChat, messages: [] }
+    chatListeners.forEach(listener => listener(demoChat))
+  }
+}
+const smsWaiting = new Map<string, (result: SmsResult) => void>()
+window.__pandasticSmsReply = (id, result) => {
+  smsWaiting.get(id)?.(result)
+  smsWaiting.delete(id)
+}
+export function sendSms(number: string, body: string): Promise<SmsResult> {
+  if (!native) return Promise.resolve({ ok: false, error: 'browser' })
+  const id = crypto.randomUUID()
+  return new Promise(resolve => {
+    // A permission dialog can stay open; do not treat a timeout as permission to retry a send.
+    const timer = setTimeout(() => {
+      smsWaiting.delete(id)
+      resolve({ ok: false, error: 'unknown' })
+    }, 180000)
+    smsWaiting.set(id, result => { clearTimeout(timer); resolve(result) })
+    native.sendSms(id, number, body)
+  })
+}
 const waiting = new Map<string, (decision: Decision) => void>()
 window.__pandasticReply = (id, decision) => {
   waiting.get(id)?.(decision)
@@ -109,10 +210,14 @@ async function toJpegBase64(file: File, maxSide = 640): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.88).split(',')[1]
 }
 
-export async function checkPhoto(file: File, lang: Lang): Promise<Decision> {
+export async function photoPreview(file: File): Promise<string> {
+  return `data:image/jpeg;base64,${await toJpegBase64(file, 320)}`
+}
+
+export async function checkPhoto(file: File, lang: Lang, text = ''): Promise<Decision> {
   if (!native) return demoPhoto(file)
   const base64 = await toJpegBase64(file)
-  return call(id => native.checkPhoto(id, base64, '', lang))
+  return call(id => native.checkPhoto(id, base64, text, lang))
 }
 
 export function ask(text: string, lang: Lang): Promise<Decision> {
@@ -125,15 +230,45 @@ export function modelInfo(): { classifier?: string; classifierStub?: boolean } {
   try { return JSON.parse(native.info()) } catch { return {} }
 }
 
+export function modelStatus(): ModelStatus {
+  if (!native) return {
+    classifier: { installed: true, loaded: false, version: 'Preview', stub: true, bytes: 0 },
+    language: { installed: false, loaded: false, name: 'Qwen3.5-0.8B-Q4_K_M.gguf', runtimeAvailable: false, bytes: 0 },
+    knowledge: { installed: true, loaded: false, bytes: 0 },
+  }
+  try { return JSON.parse(native.modelStatus()) } catch { return { error: 'model_status' } }
+}
+const modelListeners = new Set<(status: ModelStatus) => void>()
+window.addEventListener('pandastic:models', event => {
+  modelListeners.forEach(listener => listener((event as CustomEvent<ModelStatus>).detail))
+})
+export function onModelsChange(listener: (status: ModelStatus) => void): () => void {
+  modelListeners.add(listener)
+  return () => { modelListeners.delete(listener) }
+}
+const modelWaiting = new Map<string, (result: SmsResult) => void>()
+window.__pandasticModelReply = (id, result) => {
+  modelWaiting.get(id)?.(result)
+  modelWaiting.delete(id)
+}
+export function manageModels(action: 'load' | 'unload' | 'import'): Promise<SmsResult> {
+  if (!native) return Promise.resolve({ ok: false, error: 'browser' })
+  const id = crypto.randomUUID()
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      modelWaiting.delete(id)
+      resolve({ ok: false, error: 'unknown' })
+    }, 600000)
+    modelWaiting.set(id, result => { clearTimeout(timer); resolve(result) })
+    native.manageModels(id, action)
+  })
+}
+
 // ---- SMS helper ---------------------------------------------------------------------------
 
 let demoHub: HubStatus = {
-  enabled: false, running: false, lang: 'sw', smsPermission: true, notificationPermission: true, answeredToday: 2,
-  contacts: [{ name: 'Mama', number: '+256 700 000 001' }],
-  recent: [
-    { id: 2, contact: 'Mama', question: 'p kahawa 12000', reply: 'Kahawa parchment Ago 2026: UGX 15,500/kg (UCDA). Bei 12,000 ni 23% chini. Uliza chama kabla ya kuuza.', status: 'answered', receivedAt: Date.now() - 3600_000 },
-    { id: 1, contact: 'Mama', question: 'Majani ya kahawa yana unga wa njano', reply: 'Sina uhakika - huenda ni kutu ya majani. Onyesha jani kwenye simu nyumbani au uliza afisa. Usinyunyizie dawa bado.', status: 'answered', receivedAt: Date.now() - 7200_000 },
-  ],
+  enabled: false, running: false, lang: 'sw', smsPermission: false, notificationPermission: false,
+  answeredToday: 0, contacts: [], recent: [],
 }
 const hubListeners = new Set<(status: HubStatus) => void>()
 window.addEventListener('pandastic:hub', event => {

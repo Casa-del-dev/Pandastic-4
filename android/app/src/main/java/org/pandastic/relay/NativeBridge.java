@@ -1,26 +1,39 @@
 package org.pandastic.relay;
 
 import android.Manifest;
+import android.app.ActivityManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.provider.OpenableColumns;
 import android.speech.tts.TextToSpeech;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import androidx.core.content.ContextCompat;
 import java.util.Locale;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.pandastic.relay.hub.HubLog;
 import org.pandastic.relay.hub.HubPrefs;
 import org.pandastic.relay.hub.HubService;
+import org.pandastic.relay.hub.ChatStore;
+import org.pandastic.relay.brain.LlmNlu;
 
 /**
  * The React UI's only way into native code, exposed as window.PandasticNative. Slow work runs on
@@ -33,45 +46,233 @@ final class NativeBridge {
     private final WebView webView;
     private TextToSpeech tts;
     private volatile boolean ttsReady;
+    private static final AtomicBoolean modelBusy = new AtomicBoolean();
+    private final BroadcastReceiver chatChanges = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) { announceChat(); announceHub(); }
+    };
 
     NativeBridge(FrontendActivity activity, WebView webView) {
         this.activity = activity;
         this.webView = webView;
+        ContextCompat.registerReceiver(activity, chatChanges, new IntentFilter(ChatStore.CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     // ---- Photo and questions -------------------------------------------------------------
 
     /** base64Jpeg: a downscaled photo from the UI (no data: prefix). */
     @JavascriptInterface public void checkPhoto(String id, String base64Jpeg, String text, String lang) {
+        if (!new HubPrefs(activity).capable()) { reply(id, error("phone_mode")); return; }
         BrainHost.get(activity).submit(() -> {
+            if (!new HubPrefs(activity).capable()) { reply(id, error("phone_mode")); return null; }
             try {
                 byte[] bytes = Base64.decode(base64Jpeg, Base64.DEFAULT);
                 Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                 if (bitmap == null) { reply(id, error("unreadable_photo")); return null; }
-                reply(id, BrainHost.get(activity).photo(bitmap, text, lang));
-                bitmap.recycle();
+                try { reply(id, BrainHost.get(activity).photo(bitmap, text, lang)); }
+                finally { bitmap.recycle(); }
             } catch (Exception e) {
                 Log.e(TAG, "Photo check failed", e);
                 reply(id, error("photo_failed"));
-            }
+            } finally { announceModels(); }
             return null;
         });
     }
 
     @JavascriptInterface public void ask(String id, String text, String lang) {
+        if (!new HubPrefs(activity).capable()) { reply(id, error("phone_mode")); return; }
         BrainHost.get(activity).submit(() -> {
+            if (!new HubPrefs(activity).capable()) { reply(id, error("phone_mode")); return null; }
             try { reply(id, BrainHost.get(activity).text(text, lang)); }
             catch (Exception e) { Log.e(TAG, "Question failed", e); reply(id, error("question_failed")); }
+            finally { announceModels(); }
             return null;
         });
     }
 
     @JavascriptInterface public String info() {
+        if (!new HubPrefs(activity).capable()) return "{}";
         try { return BrainHost.get(activity).info().toString(); }
         catch (JSONException e) { return "{}"; }
     }
 
+    @JavascriptInterface public String modelStatus() {
+        if (!new HubPrefs(activity).capable()) return "{}";
+        try { return BrainHost.status(activity).put("busy", modelBusy.get()).toString(); }
+        catch (Exception e) { return "{\"error\":\"model_status\"}"; }
+    }
+
+    /** All model operations are explicit owner actions, serialized with inference. */
+    @JavascriptInterface public void manageModels(String id, String action) {
+        if (!new HubPrefs(activity).capable() || !modelBusy.compareAndSet(false, true)) {
+            modelReply(id, false, "unavailable"); return;
+        }
+        if (!"load".equals(action) && !"unload".equals(action) && !"import".equals(action)) {
+            modelBusy.set(false); modelReply(id, false, "action"); return;
+        }
+        activity.runOnUiThread(() -> {
+            if (!new HubPrefs(activity).capable()) {
+                modelBusy.set(false); modelReply(id, false, "phone_mode"); return;
+            }
+            if ("unload".equals(action)) {
+                new HubPrefs(activity).setEnabled(false);
+                HubService.stop(activity);
+                announceHub();
+            }
+            announceModels();
+            if ("import".equals(action)) { activity.pickModel(id); return; }
+            BrainHost host = BrainHost.get(activity);
+            host.submit(() -> {
+                boolean ok = true;
+                try {
+                    if ("unload".equals(action)) host.unload();
+                    else {
+                        host.loadModels();
+                        JSONObject status = BrainHost.status(activity);
+                        ok = status.getJSONObject("classifier").optBoolean("loaded")
+                            && status.getJSONObject("knowledge").optBoolean("loaded")
+                            && (!status.getJSONObject("language").optBoolean("installed")
+                                || status.getJSONObject("language").optBoolean("loaded"));
+                    }
+                } catch (Exception e) { ok = false; }
+                modelBusy.set(false); announceModels(); modelReply(id, ok, ok ? "" : "load_failed");
+                return null;
+            });
+        });
+    }
+
+    void finishModelImport(String id, Uri uri) {
+        if (uri == null) {
+            modelBusy.set(false); announceModels(); modelReply(id, false, "cancelled"); return;
+        }
+        BrainHost host = BrainHost.get(activity);
+        host.submit(() -> {
+            File temporary = new File(activity.getFilesDir(), "models/import.gguf.tmp");
+            try {
+                if (!new HubPrefs(activity).capable()) throw new IllegalStateException("phone_mode");
+                String name = "";
+                try (Cursor cursor = activity.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) name = cursor.getString(0);
+                }
+                if (!LlmNlu.MODEL_NAME.equals(name)) throw new IllegalArgumentException("model_name");
+                File directory = temporary.getParentFile();
+                if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("storage");
+                long total = 0;
+                try (InputStream input = activity.getContentResolver().openInputStream(uri);
+                     FileOutputStream output = new FileOutputStream(temporary)) {
+                    if (input == null) throw new IllegalArgumentException("model_file");
+                    byte[] header = new byte[4];
+                    for (int i = 0; i < 4; i++) {
+                        int value = input.read(); if (value < 0) throw new IllegalArgumentException("model_file");
+                        header[i] = (byte) value;
+                    }
+                    if (header[0] != 'G' || header[1] != 'G' || header[2] != 'U' || header[3] != 'F')
+                        throw new IllegalArgumentException("model_file");
+                    new HubPrefs(activity).setEnabled(false);
+                    HubService.stop(activity);
+                    announceHub();
+                    output.write(header); total = 4;
+                    byte[] buffer = new byte[64 * 1024];
+                    for (int n; (n = input.read(buffer)) != -1; ) {
+                        if (!new HubPrefs(activity).capable()) throw new IllegalStateException("phone_mode");
+                        total += n;
+                        if (total > 1_073_741_824L) throw new IllegalArgumentException("model_size");
+                        output.write(buffer, 0, n);
+                    }
+                    output.getFD().sync();
+                }
+                if (total < 100_000_000L) throw new IllegalArgumentException("model_size");
+                if (!new HubPrefs(activity).capable()) throw new IllegalStateException("phone_mode");
+                host.unload();
+                // Atomic replacement on the same filesystem: a failed import preserves the old file.
+                android.system.Os.rename(temporary.getAbsolutePath(), new File(directory, LlmNlu.MODEL_NAME).getAbsolutePath());
+                modelReply(id, true, "");
+            } catch (Exception e) {
+                Log.w(TAG, "Model import failed: " + e.getClass().getSimpleName());
+                modelReply(id, false, "import_failed");
+            } finally {
+                if (temporary.exists()) temporary.delete();
+                modelBusy.set(false); announceModels();
+            }
+            return null;
+        });
+    }
+
+    private void modelReply(String id, boolean ok, String error) {
+        String json = "{\"ok\":" + ok + ",\"error\":" + JSONObject.quote(error) + "}";
+        webView.post(() -> webView.evaluateJavascript("window.__pandasticModelReply && window.__pandasticModelReply("
+            + JSONObject.quote(id) + "," + json + ")", null));
+    }
+
+    void announceModels() {
+        String status = modelStatus();
+        webView.post(() -> webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('pandastic:models', {detail: " + status + "}))", null));
+    }
+
     // ---- SMS helper ----------------------------------------------------------------------
+
+    @JavascriptInterface public String phoneInfo() {
+        try {
+            ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
+            activity.getSystemService(ActivityManager.class).getMemoryInfo(memory);
+            return new JSONObject().put("mode", new HubPrefs(activity).phoneMode())
+                .put("totalRamMb", memory.totalMem / (1024 * 1024)).toString();
+        } catch (Exception e) { return "{}"; }
+    }
+
+    @JavascriptInterface public void setPhoneMode(String mode) {
+        HubPrefs prefs = new HubPrefs(activity);
+        prefs.setPhoneMode(mode);
+        if (!prefs.enabled()) HubService.stop(activity);
+        if (!prefs.capable()) {
+            BrainHost.unloadIfLoaded();
+        }
+        announceHub();
+    }
+
+    @JavascriptInterface public String chatStatus() {
+        try {
+            return new JSONObject().put("peer", new HubPrefs(activity).smsPeer())
+                .put("messages", ChatStore.get(activity).recent()).put("smsPermission", smsPermission()).toString();
+        } catch (JSONException e) { return "{\"peer\":\"\",\"messages\":[],\"smsPermission\":false}"; }
+    }
+
+    @JavascriptInterface public void setSmsPeer(String number) {
+        if (number == null || (!number.trim().isEmpty() && !ChatStore.validNumber(number))) return;
+        new HubPrefs(activity).setSmsPeer(number);
+        announceChat();
+    }
+
+    @JavascriptInterface public void enableSms() {
+        activity.runOnUiThread(() -> activity.requestSmsPermissions(this::announceChat));
+    }
+
+    @JavascriptInterface public void sendSms(String id, String number, String body) {
+        activity.runOnUiThread(() -> activity.requestSmsPermissions(() -> {
+            if (!smsPermission()) { smsReply(id, false, "permission"); return; }
+            try {
+                ChatStore.get(activity).send(number, body);
+                smsReply(id, true, "");
+            } catch (Exception e) {
+                Log.w(TAG, "SMS send failed: " + e.getClass().getSimpleName());
+                smsReply(id, false, "send_failed");
+            }
+            announceChat();
+        }));
+    }
+
+    @JavascriptInterface public void clearChatHistory() { ChatStore.get(activity).clear(); }
+
+    private boolean smsPermission() {
+        return activity.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+            && activity.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void smsReply(String id, boolean ok, String error) {
+        String json = "{\"ok\":" + ok + ",\"error\":" + JSONObject.quote(error) + "}";
+        webView.post(() -> webView.evaluateJavascript("window.__pandasticSmsReply && window.__pandasticSmsReply("
+            + JSONObject.quote(id) + "," + json + ")", null));
+    }
 
     @JavascriptInterface public String hubStatus() {
         try { return hubJson().toString(); }
@@ -81,6 +282,7 @@ final class NativeBridge {
     @JavascriptInterface public void setHubEnabled(boolean enabled) {
         activity.runOnUiThread(() -> {
             HubPrefs prefs = new HubPrefs(activity);
+            if (enabled && !prefs.capable()) { announceHub(); return; }
             if (!enabled) {
                 prefs.setEnabled(false);
                 HubService.stop(activity);
@@ -88,7 +290,7 @@ final class NativeBridge {
                 return;
             }
             activity.requestHubPermissions(() -> {
-                if (activity.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+                if (prefs.capable() && activity.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
                     && activity.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
                     prefs.setEnabled(true);
                     HubService.start(activity);
@@ -164,7 +366,16 @@ final class NativeBridge {
         });
     }
 
-    void close() { if (tts != null) tts.shutdown(); }
+    void close() {
+        activity.unregisterReceiver(chatChanges);
+        if (tts != null) tts.shutdown();
+    }
+
+    void announceChat() {
+        String status = chatStatus();
+        webView.post(() -> webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('pandastic:chat', {detail: " + status + "}))", null));
+    }
 
     void announceHub() {
         String status = hubStatus();

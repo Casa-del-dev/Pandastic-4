@@ -5,6 +5,7 @@ import java.util.List;
 
 /** Read-only access to knowledge.sqlite (contracts §3). SqliteKnowledge on the phone, fakes in JVM tests. */
 public interface Knowledge {
+    default void close() {}
     /** Every lexicon row, loaded once. */
     List<LexiconEntry> lexicon();
 

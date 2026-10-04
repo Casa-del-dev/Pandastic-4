@@ -7,14 +7,33 @@ Noor grows coffee, maize and beans in the highlands. Her own phone is a basic ph
 Pandastic runs entirely on the daughter's Android phone:
 
 - **From the slope, by SMS.** Noor texts the house phone from her basic phone, e.g. `P 1 12000` ("is 12,000 a fair coffee price?") or a symptom in her own words. The phone answers by SMS in Swahili within seconds. It uses carrier SMS only: no data bundle, no Wi-Fi, no cloud.
-- **At home, by photo.** A photo of a leaf is checked by an on-device image classifier. The result is a card with the finding, numbered steps from a cited source, and a clear "ask the extension officer" button.
+- **At home, by photo.** A photo of a leaf is checked by an on-device image classifier. The picture and reply appear in chat, with the finding, cited advice and instructions to ask an extension officer when needed.
 - **Before selling.** The buyer's offer is compared with the latest official farm-gate price (MAAIF/UCDA) or market price (WFP).
 
-| Home | Leaf check | Price check | SMS helper |
+The following screenshots show the earlier farm-tool interface; the current app uses the two phone modes described below.
+
+| Previous home | Leaf check | Price check | SMS helper |
 | :-: | :-: | :-: | :-: |
 | ![Home](docs/screenshots/01-home.png) | ![Leaf result](docs/screenshots/02-leaf-result.png) | ![Price result](docs/screenshots/03-price-result.png) | ![SMS thread](docs/screenshots/04-sms-thread.png) |
 
 ## How it works
+
+### Choose this phone’s role
+
+On first launch, select **Basic phone** or **Capable phone**. Android displays total RAM; the owner chooses the mode and can change it in Settings.
+
+- **Basic phone:** a clean SMS conversation and Settings. It sends and receives SMS through the SIM without loading local models.
+- **Capable phone:** the same chat interface, plus **This phone** for local questions, camera/gallery attachments in the composer, and a **Models** page for inventory, load/release and file import. Automatic SMS replies remain optional and use the existing allowlist. Switching to Basic mode disables the responder and unloads models after active work finishes.
+
+The chat has no header or welcome text; an empty conversation shows only the panda. Price requests are handled through chat. Pictures are checked locally and are not sent by SMS. See [frontend/README.md](frontend/README.md) for two-phone setup. A phone without the app can still use ordinary SMS; React/WebView performance on a 0.5 GB phone has not been measured.
+
+| Setup | Basic phone | Capable phone · attachments | Models |
+| :-: | :-: | :-: | :-: |
+| ![Phone-mode choice](docs/screenshots/phone-modes/setup.png) | ![Basic phone messages](docs/screenshots/phone-modes/basic.png) | ![Chat attachments](docs/screenshots/phone-modes/capable.png) | ![Models](docs/screenshots/phone-modes/models.png) |
+
+These are browser previews; carrier SMS is available in the Android app.
+
+### Local processing and SMS
 
 ```text
  Noor's basic phone ──SMS──► SmsReceiver ─► HubService (allowlist, rate limit, store-and-forward log)
@@ -26,7 +45,7 @@ Pandastic runs entirely on the daughter's Android phone:
                                Resolver (thresholds and statuses in code) ◄── knowledge.sqlite
                                                    │                      (cited advice, prices, lexicon)
                                                    ▼
-                               Decision ─► kanga card in the app  /  ≤ 2-part SMS (safety line first)
+                               Decision ─► reply in chat  /  ≤ 2-part SMS (safety line first)
 ```
 
 | Part | What | Size |
@@ -45,7 +64,7 @@ Peak memory with the language model loaded is under 1 GB (the model file is memo
   - A blurry photo, a low-confidence result or an unknown object leads to "ask a person, don't spray yet".
   - Text alone is never treated as a diagnosis.
   - Old prices are flagged as old.
-- **The person decides.** "Muulize afisa" (ask the officer) opens a pre-filled SMS that the person chooses to send. The app never acts for them.
+- **The person decides.** Chat preserves instructions to ask an officer and never treats text alone as a confirmed diagnosis. The owner explicitly opts in to automatic SMS replies.
 - **The language model is never trusted for the diagnosis.** It invented a symptom for vague text during testing, so symptoms come only from exact keywords or the photo classifier. Measured in `ml/reports/nlu_eval.md`: keywords 68%, Qwen alone 34%, hybrid 78% on held-out SMS.
 - **Airtime and privacy.**
   - Only numbers the owner lists get answers, and short codes are ignored.

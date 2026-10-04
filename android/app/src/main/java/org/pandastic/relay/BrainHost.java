@@ -3,6 +3,10 @@ package org.pandastic.relay;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.util.Log;
+import java.io.File;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,6 +23,7 @@ import org.pandastic.relay.brain.LlmNlu;
 import org.pandastic.relay.brain.QualityGate;
 import org.pandastic.relay.brain.SmsFormatter;
 import org.pandastic.relay.hub.Responder;
+import org.pandastic.relay.hub.HubPrefs;
 
 /**
  * One place that owns the on-device models. The UI bridge and the SMS hub both submit work here,
@@ -30,11 +35,12 @@ public final class BrainHost {
 
     private final Context context;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    private LeafClassifier classifier;
-    private String classifierError;
-    private Brain brain;
-    private LlmNlu llm;
-    private String brainError;
+    private volatile LeafClassifier classifier;
+    private volatile String classifierError;
+    private volatile Brain brain;
+    private Knowledge knowledge;
+    private volatile LlmNlu llm;
+    private volatile String brainError;
 
     public static synchronized BrainHost get(Context context) {
         if (instance == null) instance = new BrainHost(context.getApplicationContext());
@@ -43,10 +49,61 @@ public final class BrainHost {
 
     private BrainHost(Context context) { this.context = context; }
 
+    /** Finish any active inference, then release model memory when the owner chooses Basic phone. */
+    public static synchronized void unloadIfLoaded() {
+        if (instance == null) return;
+        BrainHost host = instance;
+        host.worker.execute(host::unload);
+    }
+
+    public synchronized void unload() {
+        if (classifier != null) {
+            try { classifier.close(); } catch (Exception e) { Log.w(TAG, "Classifier close failed"); }
+        }
+        if (llm != null) llm.close();
+        if (knowledge != null) knowledge.close();
+        classifier = null; llm = null; knowledge = null; brain = null;
+        classifierError = null; brainError = null;
+    }
+
+    /** Called on the model worker only, following an explicit action on the Models page. */
+    public void loadModels() { if (new HubPrefs(context).capable()) { classifier(); brain(); } }
+
+    /** Reads files and current state without opening any model or knowledge database. */
+    public static synchronized JSONObject status(Context context) throws Exception {
+        JSONObject meta;
+        try (InputStream in = context.getAssets().open("models/leaf_classifier.json")) {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            for (int n; (n = in.read(buffer)) > 0; ) bytes.write(buffer, 0, n);
+            meta = new JSONObject(bytes.toString(StandardCharsets.UTF_8.name()));
+        }
+        BrainHost host = instance;
+        File model = LlmNlu.find(context);
+        return new JSONObject()
+            .put("classifier", new JSONObject().put("installed", true)
+                .put("loaded", host != null && host.classifier != null)
+                .put("version", meta.optString("version"))
+                .put("stub", meta.optBoolean("stub", false))
+                .put("bytes", assetSize(context, "models/leaf_classifier.onnx"))
+                .put("error", host == null || host.classifierError == null ? JSONObject.NULL : host.classifierError))
+            .put("language", new JSONObject().put("name", LlmNlu.MODEL_NAME)
+                .put("installed", model != null).put("loaded", host != null && host.llm != null)
+                .put("runtimeAvailable", LlmNlu.runtimeAvailable()).put("bytes", model == null ? 0 : model.length()))
+            .put("knowledge", new JSONObject().put("installed", true).put("loaded", host != null && host.brain != null)
+                .put("bytes", assetSize(context, "models/knowledge.sqlite"))
+                .put("error", host == null || host.brainError == null ? JSONObject.NULL : host.brainError));
+    }
+
+    private static long assetSize(Context context, String path) {
+        try (android.content.res.AssetFileDescriptor file = context.getAssets().openFd(path)) { return file.getLength(); }
+        catch (Exception e) { return 0; }
+    }
+
     public <T> Future<T> submit(Callable<T> task) { return worker.submit(task); }
 
     /** Loads the knowledge base and the LLM (and caches its prompt) before the first question arrives. */
-    public void warmUp() { worker.execute(this::brain); }
+    public void warmUp() { worker.execute(() -> { if (new HubPrefs(context).capable()) brain(); }); }
 
     /** Photo + optional question → decision JSON (contracts §2). Call from the worker thread. */
     public String photo(Bitmap bitmap, String text, String lang) throws Exception {
@@ -67,6 +124,7 @@ public final class BrainHost {
 
     /** SMS question → reply text. Call from the worker thread. */
     public Responder.Reply smsReply(String text, String lang) throws Exception {
+        if (!new HubPrefs(context).capable()) return new Responder.Fallback().answer(text, lang);
         Brain brain = brain();
         if (brain == null) return new Responder.Fallback().answer(text, lang);
         Decision decision = brain.answerText(text, lang);
@@ -88,7 +146,7 @@ public final class BrainHost {
     private synchronized Brain brain() {
         if (brain == null && brainError == null) {
             try {
-                Knowledge knowledge = Knowledge.open(context);
+                knowledge = Knowledge.open(context);
                 llm = LlmNlu.open(context, new KeywordNlu(knowledge.lexicon()));
                 brain = new Brain(knowledge, llm);
             }

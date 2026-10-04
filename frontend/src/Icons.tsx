@@ -2,6 +2,12 @@ import type { CSSProperties } from 'react'
 
 // Pictograms are drawn thick and simple so they read at arm's length and without words.
 const paths = {
+  models: <><rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></>,
+  message: <><path d="M20 11.5a8 8 0 0 1-8 8H4l-2 2v-10a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z"/><path d="M7 9h8M7 13h5"/></>,
+  settings: <><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3" fill="var(--paper, white)"/><circle cx="16" cy="17" r="3" fill="var(--paper, white)"/></>,
+  send: <><path d="m4 12 16-8-5 16-4-6-7-2Z"/><path d="m11 14 9-10"/></>,
+  phone: <><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 18h4M10 5h4"/></>,
+  arrow: <><path d="M5 12h14m-5-5 5 5-5 5"/></>,
   leafScan: <><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M17 7s-7-.6-8.2 4.1c-1.1 4.4 3.8 6 5.9 3.3S17 7 17 7ZM7.5 16.5l5.5-5.5"/></>,
   scale: <><path d="M12 3.5v17M7.5 20.5h9M4.5 7h15"/><circle cx="12" cy="4" r="1.2"/><path d="m4.5 7-3 6.5a3 3 0 0 0 6 0L4.5 7ZM19.5 7l-3 6.5a3 3 0 0 0 6 0l-3-6.5Z"/></>,
   basicPhone: <><rect x="3.5" y="5" width="10" height="17" rx="2.2"/><rect x="5.8" y="7.5" width="5.4" height="4.2" rx=".6"/><path d="M6.6 15h.01M8.5 15h.01M10.4 15h.01M6.6 18h.01M8.5 18h.01M10.4 18h.01"/><path d="M15.5 2.5h5a1.2 1.2 0 0 1 1.2 1.2v3.6a1.2 1.2 0 0 1-1.2 1.2h-2.3l-2.2 2v-2h-.5a1.2 1.2 0 0 1-1.2-1.2V3.7a1.2 1.2 0 0 1 1.2-1.2Z"/></>,

@@ -26,7 +26,22 @@ public final class HubPrefs {
         prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE);
     }
 
-    public boolean enabled() { return prefs.getBoolean(ENABLED, false); }
+    public String phoneMode() { return prefs.getString("phone_mode", ""); }
+
+    public boolean capable() { return "capable".equals(phoneMode()); }
+
+    public void setPhoneMode(String mode) {
+        if (!"lite".equals(mode) && !"capable".equals(mode)) return;
+        SharedPreferences.Editor editor = prefs.edit().putString("phone_mode", mode);
+        if ("lite".equals(mode) || !mode.equals(phoneMode())) editor.putBoolean(ENABLED, false);
+        editor.apply();
+    }
+
+    public String smsPeer() { return prefs.getString("sms_peer", ""); }
+
+    public void setSmsPeer(String number) { prefs.edit().putString("sms_peer", number.trim()).apply(); }
+
+    public boolean enabled() { return capable() && prefs.getBoolean(ENABLED, false); }
 
     public void setEnabled(boolean enabled) { prefs.edit().putBoolean(ENABLED, enabled).apply(); }
 
@@ -69,7 +84,7 @@ public final class HubPrefs {
      * Two international numbers (+… or 00…) must match in full, so +254 7… never matches +256 7….
      * Otherwise the last 9 digits decide, so +256 700… and a locally written 0700… match.
      */
-    static boolean sameNumber(String a, String b) {
+    public static boolean sameNumber(String a, String b) {
         String keyA = matchKey(a), keyB = matchKey(b);
         if (keyA == null || !keyA.equals(keyB)) return false;
         String fullA = international(a), fullB = international(b);

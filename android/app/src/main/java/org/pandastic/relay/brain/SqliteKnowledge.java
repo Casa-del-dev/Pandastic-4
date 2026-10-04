@@ -14,6 +14,7 @@ import java.util.List;
 
 /** knowledge.sqlite on the phone: copied out of the APK (SQLite can't open an asset in place), then read-only. */
 final class SqliteKnowledge implements Knowledge {
+    @Override public void close() { db.close(); }
     private static final String ASSET = "models/knowledge.sqlite";
     private static final String FILE = "knowledge.sqlite";
     private static final String PREFS = "pandastic_knowledge";

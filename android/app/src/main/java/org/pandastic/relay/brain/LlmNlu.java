@@ -126,7 +126,9 @@ public final class LlmNlu implements Nlu, AutoCloseable {
         catch (Exception e) { return null; }
     }
 
-    private static File find(Context context) {
+    public static boolean runtimeAvailable() { return libraryLoaded; }
+
+    public static File find(Context context) {
         File[] places = {new File(context.getFilesDir(), "models/" + MODEL_NAME),
             context.getExternalFilesDir(null) == null ? null : new File(context.getExternalFilesDir(null), "models/" + MODEL_NAME)};
         for (File place : places) {

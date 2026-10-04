@@ -13,7 +13,6 @@ public final class SmsReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
         if (!Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) return;
         HubPrefs prefs = new HubPrefs(context);
-        if (!prefs.enabled()) return;
         SmsMessage[] parts = Telephony.Sms.Intents.getMessagesFromIntent(intent);
         if (parts == null || parts.length == 0) return;
 
@@ -32,8 +31,9 @@ public final class SmsReceiver extends BroadcastReceiver {
                 for (Map.Entry<String, StringBuilder> entry : bodies.entrySet()) {
                     String contact = prefs.contactName(entry.getKey());
                     String body = entry.getValue().toString().trim();
+                    ChatStore.get(context).receive(entry.getKey(), body);
                     // Unknown numbers, short codes and our own echoed replies are ignored and not stored.
-                    if (contact == null || body.isEmpty() || body.startsWith("Pandastic:")) continue;
+                    if (!prefs.enabled() || contact == null || body.isEmpty() || body.startsWith("Pandastic:")) continue;
                     HubLog.get(context).addPending(entry.getKey(), contact, body, System.currentTimeMillis());
                     queued = true;
                 }

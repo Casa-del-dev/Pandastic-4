@@ -5,7 +5,7 @@ How to run Pandastic for the submission video, with or without SIM cards, and wh
 ## 1. Install
 
 ```sh
-make build                      # APK with the React UI, ONNX Runtime and llama.cpp (needs JDK 17, pnpm, NDK r28c)
+make build                      # APK with the React UI, ONNX Runtime and llama.cpp (needs JDK 17, Corepack, NDK r28c)
 make run-device                 # or: make run (emulator)
 ```
 
@@ -13,7 +13,7 @@ Without the NDK, `cd android && ./gradlew -Pnollm assembleDebug` builds the app 
 
 ## 2. Side-load the language model (optional, 533 MB)
 
-The LLM file is never inside the APK. Copy it once while internet is available (the brief's "side-load" rule):
+The LLM file is never inside the APK. Obtain it once while internet is available, put it on the phone, then select **Capable phone → Models → Import model file** and choose `Qwen3.5-0.8B-Q4_K_M.gguf`. The import is local and does not download anything. The native runtime checks compatibility when loaded. You can also copy it with ADB:
 
 ```sh
 # Qwen3.5-0.8B Q4_K_M from unsloth/Qwen3.5-0.8B-GGUF, sha256 bd258782…c517 (see ml/llm/)
@@ -26,9 +26,9 @@ adb shell rm /data/local/tmp/Qwen3.5-0.8B-Q4_K_M.gguf
 
 ## 3. Set up the SMS helper (once, on the daughter's phone)
 
-1. Open the app → **Msaidizi wa SMS** (SMS helper).
+1. Select **Capable phone**, then open **Settings → Automatic SMS replies**.
 2. Add Mama's number, e.g. `+256 7…`. Only numbers on this list get answers.
-3. Optional: add the extension officer's number. The "Muulize afisa" (ask the officer) button pre-fills an SMS to it.
+3. Choose the reply language. On a smaller Android phone, use **Basic phone** mode and save this phone’s number as the SMS destination.
 4. Turn the switch on and allow SMS and notifications. Allow "ignore battery optimisation" so Android does not stop the helper.
 5. Keep **mobile data off and SMS on**. Airplane mode would also block SMS.
 
@@ -44,15 +44,15 @@ On the emulator, an incoming SMS is simulated with `adb emu sms send <number> "<
 | 4 | `Emmwanyi zange zirina obulwadde ku bikoola` (Luganda) | Same safe reply as #2 | The LLM reads a less-supported language; it does not invent a disease |
 | 5 | (from an unknown number or a promo short code) | No reply, nothing stored | Allowlist, airtime protection |
 
-In the app (photo mode, at the house):
+In the app (capable phone, local chat):
 
 | # | Action | Expected |
 | :- | :-- | :-- |
-| 6 | Angalia jani → photo of a rusty coffee leaf | Red kanga card "Kutu ya majani ya kahawa", confidence, numbered steps, PlantwisePlus source, saying "Ask the extension officer before you spray" |
+| 6 | Chat → + → Camera/Gallery → picture of a rusty coffee leaf → Send | Picture and reply in chat, confidence, advice, cited source and instruction to ask an officer before spraying |
 | 7 | Blurry or dark photo | "Piga picha tena" (take the photo again), with the reason |
-| 8 | A photo that is not a coffee leaf | "Sijui kitu hiki" (I don't know this) + ask a person |
-| 9 | Bei ni sawa? → Kahawa → 12,000 | Same decision as SMS #1, with the price bar |
-| 10 | "Muulize afisa" on any card | The SMS app opens with a draft. The person decides whether to send it (human in the loop) |
+| 8 | A photo that is not a coffee leaf | Uncertainty and instructions to ask a person |
+| 9 | Chat → This phone → `coffee price 12000` | Same decision as SMS #1, with offer and dated market reference |
+| 10 | Models → inspect installed/loaded state | Actual inventory without loading weights just to inspect it |
 
 Until T10's trained model replaces the stub, photo answers show the badge "Majaribio: si akili bandia halisi bado" (demo: not the real AI yet). Never present stub output as AI in the video.
 

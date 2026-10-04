@@ -39,19 +39,21 @@ public final class FrontendActivity extends Activity {
     private static final String START_URL = "https://" + LOCAL_HOST + "/assets/pandastic/index.html";
     private static final int PICK_IMAGE = 20;
     private static final int HUB_PERMISSION = 22;
+    private static final int PICK_MODEL = 23;
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
     private final List<File> cameraFiles = new ArrayList<>();
     private NativeBridge bridge;
     private Runnable afterHubPermissions;
+    private String modelRequest;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(237, 242, 233));
+        webView.setBackgroundColor(Color.rgb(250, 251, 248));
         FrameLayout container = new FrameLayout(this);
-        container.setBackgroundColor(Color.rgb(237, 242, 233));
+        container.setBackgroundColor(Color.rgb(250, 251, 248));
         container.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
@@ -136,7 +138,6 @@ public final class FrontendActivity extends Activity {
         });
         bridge = new NativeBridge(this, webView);
         webView.addJavascriptInterface(bridge, "PandasticNative");
-        bridge.initTts();
         webView.loadUrl(START_URL);
         // Opening the app answers SMS questions that arrived while the helper was stopped.
         if (new HubPrefs(this).enabled() && !HubService.isRunning()) HubService.start(this);
@@ -146,12 +147,27 @@ public final class FrontendActivity extends Activity {
         return "https".equals(uri.getScheme()) && LOCAL_HOST.equals(uri.getHost()) && uri.getPort() == -1;
     }
 
+    void pickModel(String id) {
+        modelRequest = id;
+        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+        try { startActivityForResult(picker, PICK_MODEL); }
+        catch (ActivityNotFoundException e) { modelRequest = null; bridge.finishModelImport(id, null); }
+    }
+
     /** Asks for SMS (and notification) permissions, then runs done whatever the answer was. */
     void requestHubPermissions(Runnable done) {
+        requestSmsPermissions(done, true);
+    }
+
+    void requestSmsPermissions(Runnable done) {
+        requestSmsPermissions(done, false);
+    }
+
+    private void requestSmsPermissions(Runnable done, boolean notifications) {
         List<String> missing = new ArrayList<>();
         for (String permission : new String[]{Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS})
             if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) missing.add(permission);
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+        if (notifications && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             missing.add(Manifest.permission.POST_NOTIFICATIONS);
         if (missing.isEmpty()) { done.run(); return; }
         afterHubPermissions = done;
@@ -169,6 +185,11 @@ public final class FrontendActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_MODEL && modelRequest != null) {
+            String id = modelRequest; modelRequest = null;
+            bridge.finishModelImport(id, resultCode == RESULT_OK && data != null ? data.getData() : null);
+            return;
+        }
         if (requestCode != PICK_IMAGE || fileCallback == null) return;
         Uri result = resultCode == RESULT_OK ? (cameraUri != null ? cameraUri : data == null ? null : data.getData()) : null;
         fileCallback.onReceiveValue(result == null ? null : new Uri[]{result});
@@ -191,10 +212,11 @@ public final class FrontendActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
-        if (bridge != null) bridge.announceHub();
+        if (bridge != null) { bridge.announceHub(); bridge.announceChat(); bridge.announceModels(); }
     }
 
     @Override protected void onDestroy() {
+        if (modelRequest != null) bridge.finishModelImport(modelRequest, null);
         if (fileCallback != null) { fileCallback.onReceiveValue(null); fileCallback = null; }
         bridge.close();
         webView.destroy();
