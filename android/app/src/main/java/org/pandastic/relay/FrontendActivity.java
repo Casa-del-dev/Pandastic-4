@@ -31,6 +31,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.pandastic.relay.hub.HubPrefs;
+import org.pandastic.relay.hub.HubService;
 
 /** Hosts the bundled React UI without a development server or internet connection. */
 public final class FrontendActivity extends Activity {
@@ -38,11 +40,14 @@ public final class FrontendActivity extends Activity {
     private static final String START_URL = "https://" + LOCAL_HOST + "/assets/pandastic/index.html";
     private static final int PICK_IMAGE = 20;
     private static final int MICROPHONE_PERMISSION = 21;
+    private static final int HUB_PERMISSION = 22;
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest microphoneRequest;
     private Uri cameraUri;
     private final List<File> cameraFiles = new ArrayList<>();
+    private NativeBridge bridge;
+    private Runnable afterHubPermissions;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -142,15 +147,38 @@ public final class FrontendActivity extends Activity {
                 if (microphoneRequest == request) microphoneRequest = null;
             }
         });
+        bridge = new NativeBridge(this, webView);
+        webView.addJavascriptInterface(bridge, "PandasticNative");
+        bridge.initTts();
         webView.loadUrl(START_URL);
+        // Opening the app answers SMS questions that arrived while the helper was stopped.
+        if (new HubPrefs(this).enabled() && !HubService.isRunning()) HubService.start(this);
     }
 
     private static boolean isLocalOrigin(Uri uri) {
         return "https".equals(uri.getScheme()) && LOCAL_HOST.equals(uri.getHost()) && uri.getPort() == -1;
     }
 
+    /** Asks for SMS (and notification) permissions, then runs done whatever the answer was. */
+    void requestHubPermissions(Runnable done) {
+        List<String> missing = new ArrayList<>();
+        for (String permission : new String[]{Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS})
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) missing.add(permission);
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            missing.add(Manifest.permission.POST_NOTIFICATIONS);
+        if (missing.isEmpty()) { done.run(); return; }
+        afterHubPermissions = done;
+        requestPermissions(missing.toArray(new String[0]), HUB_PERMISSION);
+    }
+
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == HUB_PERMISSION && afterHubPermissions != null) {
+            Runnable done = afterHubPermissions;
+            afterHubPermissions = null;
+            done.run();
+            return;
+        }
         if (requestCode == MICROPHONE_PERMISSION && microphoneRequest != null) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
                 microphoneRequest.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
@@ -174,11 +202,16 @@ public final class FrontendActivity extends Activity {
         super.onPause();
     }
 
-    @Override protected void onResume() { super.onResume(); if (webView != null) webView.onResume(); }
+    @Override protected void onResume() {
+        super.onResume();
+        if (webView != null) webView.onResume();
+        if (bridge != null) bridge.announceHub();
+    }
 
     @Override protected void onDestroy() {
         if (microphoneRequest != null) { microphoneRequest.deny(); microphoneRequest = null; }
         if (fileCallback != null) { fileCallback.onReceiveValue(null); fileCallback = null; }
+        bridge.close();
         webView.destroy();
         for (File file : cameraFiles) file.delete();
         super.onDestroy();
