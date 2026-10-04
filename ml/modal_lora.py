@@ -34,7 +34,8 @@ models_volume = modal.Volume.from_name("pandastic-models", create_if_missing=Tru
 hf_cache = modal.Volume.from_name("pandastic-hf-cache", create_if_missing=True)
 
 
-@app.function(image=image, gpu="L4", cpu=8, memory=32768, timeout=3 * 3600,
+@app.function(image=image, gpu="A100-80GB", cpu=8, memory=32768, timeout=3 * 3600,
+              env={"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"},
               volumes={"/models": models_volume, "/root/.cache/huggingface": hf_cache})
 def finetune(n_rows: int, epochs: int, smoke: bool) -> dict:
     import glob

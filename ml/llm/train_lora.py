@@ -65,13 +65,18 @@ def batches(examples, batch_size, pad_id, rng):
         yield input_ids, labels, attention
 
 
-def train(model_dir: str, rows: list, out_dir: Path, epochs=2, batch_size=8, accumulate=2, lr=2e-4, rank=16, alpha=32,
+def train(model_dir: str, rows: list, out_dir: Path, epochs=2, batch_size=4, accumulate=4, lr=2e-4, rank=16, alpha=32,
           max_len=1024, max_steps=None, device=None, log=print) -> Path:
     from peft import LoraConfig, get_peft_model
     from .gen_train import target
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
     tokenizer, model = load(model_dir, dtype)
+    if device == "cuda":
+        # Without flash-linear-attention, Qwen3.5's gated-delta layers keep every chunk state for backward:
+        # batch 8 x ~700 tokens ran a 22 GB L4 out of memory. Recompute activations instead.
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        model.enable_input_require_grads()
     config = LoraConfig(r=rank, lora_alpha=alpha, lora_dropout=0.05, target_modules=lora_targets(model), task_type="CAUSAL_LM")
     model = get_peft_model(model, config).to(device)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
