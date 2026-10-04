@@ -185,6 +185,33 @@ public final class BrainHost {
             .put("loading", loading);
     }
 
+    /** Loads the LLM in the background for this Brain; until then keywords answer alone. */
+    private synchronized void startLlmLoad(Brain owner, KeywordNlu keywords) {
+        llmLoading = true;
+        llmLoad = llmLoader.submit(() -> {
+            LlmNlu loaded = null;
+            try { loaded = LlmNlu.open(context, keywords); }
+            catch (Throwable e) { Log.e(TAG, "LLM unavailable; keywords only", e); }
+            synchronized (this) {  // unload() may have run meanwhile (Basic phone): then free it again
+                if (brain == owner) llm = loaded;
+                else if (loaded != null) loaded.close();
+                llmLoading = false;
+            }
+        });
+    }
+
+    /** A model file just arrived (download): load it into the running Brain, or load everything. */
+    public void loadLanguageModel() {
+        worker.execute(() -> {
+            if (!new HubPrefs(context).capable()) return;
+            synchronized (this) {
+                if (brain != null && llm == null && !llmLoading && keywords != null) { startLlmLoad(brain, keywords); return; }
+            }
+            classifier();
+            brain();
+        });
+    }
+
     /** Knowledge base + resolver. Null only if knowledge.sqlite cannot be opened; then replies stay safe fallbacks. */
     private synchronized Brain brain() {
         if (brain == null && brainError == null) {
@@ -196,17 +223,7 @@ public final class BrainHost {
                     LlmNlu model = llm;
                     return model != null ? model.parse(text, lang) : keywords.parse(text, lang);
                 });
-                llmLoading = true;
-                llmLoad = llmLoader.submit(() -> {
-                    LlmNlu loaded = null;
-                    try { loaded = LlmNlu.open(context, keywords); }
-                    catch (Throwable e) { Log.e(TAG, "LLM unavailable; keywords only", e); }
-                    synchronized (this) {  // unload() may have run meanwhile (Basic phone): then free it again
-                        if (brain == created) llm = loaded;
-                        else if (loaded != null) loaded.close();
-                        llmLoading = false;
-                    }
-                });
+                startLlmLoad(created, keywords);
             }
             catch (Exception e) {
                 brainError = e.getClass().getSimpleName();

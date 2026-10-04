@@ -76,6 +76,7 @@ public final class FrontendActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setBlockNetworkLoads(true);  // the app holds INTERNET for the model download only, never for the UI
         WebView.setWebContentsDebuggingEnabled((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0);
 
         WebViewAssetLoader assets = new WebViewAssetLoader.Builder()

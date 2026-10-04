@@ -104,8 +104,38 @@ final class NativeBridge {
 
     @JavascriptInterface public String modelStatus() {
         if (!new HubPrefs(activity).capable()) return "{}";
-        try { return BrainHost.status(activity).put("busy", modelBusy.get()).toString(); }
+        try {
+            JSONObject download = ModelDownloader.get(activity).status();
+            String state = download.optString("state");
+            if (state.equals("queued") || state.equals("running") || state.equals("paused") || state.equals("verifying"))
+                tickDownload();
+            return BrainHost.status(activity).put("busy", modelBusy.get()).put("download", download).toString();
+        }
         catch (Exception e) { return "{\"error\":\"model_status\"}"; }
+    }
+
+    /**
+     * Opt-in download of the language model over mobile data (capable phone only). action: "start" | "cancel".
+     * Returns {"ok":bool,"error":code} at once; progress arrives as "pandastic:models" events (modelStatus().download).
+     * Errors: phone_mode, storage (needs ~600 MB free), installed, unavailable, action.
+     */
+    @JavascriptInterface public String modelDownload(String action) {
+        String error;
+        if (!new HubPrefs(activity).capable()) error = "phone_mode";
+        else if ("start".equals(action)) error = ModelDownloader.get(activity).start();
+        else if ("cancel".equals(action)) { ModelDownloader.get(activity).cancel(); error = null; }
+        else error = "action";
+        announceModels();
+        return "{\"ok\":" + (error == null) + ",\"error\":" + JSONObject.quote(error == null ? "" : error) + "}";
+    }
+
+    private boolean ticking;
+
+    /** While a download is active, the Models page gets a progress event every 1.5 s. */
+    private void tickDownload() {
+        if (ticking) return;
+        ticking = true;
+        webView.postDelayed(() -> { ticking = false; announceModels(); }, 1500);
     }
 
     /** All model operations are explicit owner actions, serialized with inference. */

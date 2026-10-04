@@ -29,7 +29,7 @@ def buildFrontend = tasks.register('buildFrontend', Exec) {
 // Qwen grammar + prompt are owned by ml/llm (T31); copy them so the APK never drifts from the source.
 def generatedLlmAssets = layout.buildDirectory.dir('generated/llmAssets')
 def syncLlmAssets = tasks.register('syncLlmAssets', Sync) {
-    from(rootProject.file('../ml/llm')) { include 'slots.gbnf', 'system_prompt.txt' }
+    from(rootProject.file('../ml/llm')) { include 'slots.gbnf', 'system_prompt.txt', 'model.json' }
     into(generatedLlmAssets.map { it.dir('llm') })
 }
 

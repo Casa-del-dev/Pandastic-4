@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- No INTERNET permission: the app cannot reach the network, by construction. -->
+    <!-- INTERNET is used for one thing only: the opt-in language model download through Android's DownloadManager
+         (ModelDownloader). The UI's WebView blocks every network load, and SMS questions never touch the internet. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- SMS helper: answers questions from the owner's chosen numbers over carrier SMS (no data). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -27,6 +29,9 @@
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>
         </receiver>
         <receiver android:name=".hub.SmsStatusReceiver" android:exported="false" />
+        <receiver android:name=".DownloadDoneReceiver" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.DOWNLOAD_COMPLETE" /></intent-filter>
+        </receiver>
         <receiver android:name=".hub.BootReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
         </receiver>

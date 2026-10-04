@@ -86,6 +86,8 @@ await check('bridge exposes every method native.ts declares', async () => {
 // ---- phone modes: a Basic ('lite') phone never runs models and talks to a capable phone by SMS ----
 const isStr = v => typeof v === 'string'
 const phone = JSON.parse(await evaluate('PandasticNative.phoneInfo()'))
+// Switching to Basic mode turns the SMS helper off; remember it so the end of the run can restore it.
+const helperWasOn = JSON.parse(await evaluate('PandasticNative.hubStatus()')).enabled
 await check('phoneInfo(): mode and RAM', async () => {
   expect(['', 'lite', 'capable'].includes(phone.mode ?? ''), `mode ${phone.mode}`)
   expect(isNum(phone.totalRamMb) && phone.totalRamMb > 0, `totalRamMb ${phone.totalRamMb}`)
@@ -327,6 +329,7 @@ await check('speak: reads aloud, announces start, stops on request', async () =>
 })
 
 if (phone.mode === 'lite') await setMode('lite').catch(() => undefined)
+else if (helperWasOn) await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubEnabled(true), 10000)`).catch(() => undefined)
 else if (!phone.mode) console.log("note: phone mode was not chosen yet; it is now 'capable'")
 page.close()
 clearInterval(keepAlive)
