@@ -1,6 +1,6 @@
 # Pandastic: project memory for Claude sessions
 
-Maintained by agent B (ledger task T50); last updated 2026-10-04 06:27 UTC. **`LEDGER.md` is the source of truth for
+Maintained by agent B (ledger task T50); last updated 2026-10-04 06:29 UTC. **`LEDGER.md` is the source of truth for
 live work: read it after every pull.** Details live in `docs/`. Update this file when the codebase changes in a way
 that makes something here wrong.
 
@@ -8,11 +8,13 @@ that makes something here wrong.
 
 Hackathon entry for **Small AI for Development** (World Bank Youth Summit × Hack-Nation, agriculture track). An
 offline farm helper that runs on one 4 GB Android phone. Noor (coffee, maize, beans; Uganda/UGX as the stand-in,
-Swahili first, English too) texts the helper phone from her basic phone (`P 1 12000` = "is 12,000 a fair coffee
-price?", or a symptom in her own words) and gets an SMS reply within seconds. At home, a leaf photo is classified on
+Swahili first, English too) texts the helper phone from her basic phone with its ordinary SMS app, no Pandastic app
+needed (`P 1 12000` = "is 12,000 a fair coffee price?", or a symptom in her own words; verified with Google
+Messages on the emulators), and gets an SMS reply in the same thread within seconds. At home, a leaf photo is classified on
 the phone. Questions and answers never use the internet: transport is carrier SMS only. The INTERNET permission is
-used for one thing, the opt-in language-model download (`ModelDownloader`, Android DownloadManager, SHA-256 checked
-against `ml/llm/model.json`); the WebView blocks every network load. Models only pick labels and slots.
+used for one thing, the opt-in language-model download over mobile data (user decision: Noor's house has no Wi-Fi;
+`ModelDownloader`, Android DownloadManager, size + SHA-256 checked against `ml/llm/model.json`, from the GitHub
+release `models-v1`); the WebView blocks every network load. Models only pick labels and slots.
 Every sentence the farmer reads is a template or a cited advice row.
 
 **Submission ~13:00 UTC 2026-10-04. Feature freeze ~10:30 UTC.** Model install decisions by ~08:30 UTC, so A can
@@ -63,11 +65,15 @@ Data:  knowledge.sqlite (cited advice EN+SW, prices, lexicon) ◄── Resolver
 - **Resolver order** (contracts §2): gate → `other` → crop check → p1 ≥ `per_class_min_prob[label] ?? min_prob`
   and margin ≥ `min_margin` → CONFIDENT, else UNCERTAIN.
 - **HubPolicy:** the helper auto-replies only to farming SMS (menu request, or a price/problem/planting question the
-  keywords recognised, or the LLM recognised with a keyword crop). Personal messages from the same allowed numbers get
-  no reply and are logged as `personal` without their text.
+  keywords recognised, or the LLM recognised with a keyword crop). Personal messages from the same allowed numbers
+  ("Habari mwanangu, shule inaendaje?") get no reply; they stay in the normal SMS app and the log keeps only `personal`,
+  not the text. Plain greetings and "nisaidie" currently get no reply either (B suggested menu triggers to A).
 - **Phone modes:** *Basic* (SMS chat + Settings, no models) and *Capable* (chat with on-phone questions,
-  camera/gallery, Models page, opt-in automatic SMS replies to allowlisted numbers, contacts suggestions,
-  read-aloud, dictation).
+  camera/gallery, Models page with file import and the opt-in download, opt-in automatic SMS replies to allowlisted
+  numbers, contacts chosen from a search dropdown, read-aloud, dictation).
+- **Bridge additions (additive, A):** `modelDownload('start'|'cancel')` → `{ok, error}`; `modelStatus().download` =
+  `{state: none|queued|running|paused|verifying|done|failed, bytes, total, name, reason?, error?}`, `pandastic:models`
+  events every 1.5 s while it runs. `make e2e` reads the method list from `type Native` in `frontend/src/native.ts`.
 
 Code map:
 
@@ -81,12 +87,13 @@ android/app/src/main/java/org/pandastic/relay/
 android/app/src/main/cpp/            llama.cpp JNI (v0.5.0, fetched at build; NDK 28.2.13676358, CMake 3.22.1)
 android/app/src/main/assets/models/  leaf_classifier.onnx/.json, knowledge.sqlite
 android/app/src/test/                JVM tests (resolver, NLU, SMS formatting, NluEvalTest, PhotoWithTextTest, SmsTriageTest)
-frontend/src/                        App, Chat, Settings, PhoneSetup, Models, native.ts (bridge + browser demo),
-                                     local-phone.ts (browser phone pair), i18n, useDictation, useReadAloud
+frontend/src/                        App, Chat, Settings, ContactPicker, PhoneSetup, Models, native.ts (bridge + browser
+                                     demo), local-phone.ts (browser phone pair), i18n, useDictation, useReadAloud
 ml/modal_app.py                      leaf pipeline on Modal (fetch → manifest → cache → train → ensemble ...)
 ml/leaf/                             config, data, train, install, class_thresholds, crop_floors, photo_stats, probe_*, quantize, smoke
-ml/llm/                              eval sets, eval_llm, retrieval_eval, gen_train, train_lora, slots.gbnf, system_prompt,
-                                     model.json (download url, size, sha256 of the fine-tuned GGUF; GitHub release)
+ml/llm/                              eval sets, eval_llm, retrieval_eval, gen_train, train_lora; slots.gbnf,
+                                     system_prompt.txt, model.json (url, size, sha256 of the fine-tuned GGUF) are
+                                     bundled into the APK by app/build.gradle: editing them changes the app
 ml/modal_lora.py, ml/build_knowledge.py, ml/fetch_prices.py, ml/reports/ (eval reports, model reports)
 data/                                advice.json (cited EN+SW), lexicon.csv (200 rows), prices_*.csv, sources.csv
 scripts/                             android-emulator.sh, bridge-e2e.mjs, sms-lab.mjs, contacts-e2e.mjs,
@@ -118,18 +125,18 @@ scripts/                             android-emulator.sh, bridge-e2e.mjs, sms-la
   3 × EfficientNet-B0, 12.7 MB, + per-crop maize floor 0.85 (`ml/leaf/crop_floors.py`: each crop ≥ 90% right on calib).
   Test: 96.3% right at 91% answered; RoCoLe app path 91% answered / 97.3% right / rust→healthy 5; maize 92.2% at 81%;
   other plants 0.5%. Costs: ~3.5× compute (29 vs 8 ms on a laptop), 1/117 random photos passes the gate confidently.
-  Fallback: keep ens3 with a JSON-only maize floor 0.75. Coffee does not transfer across countries: a model never trained on
-  RoCoLe answers 1.2% of its photos.
+  Fallback (branch `b/leaf-ens3-maize`): keep ens3, JSON-only maize floor 0.75. A checks the candidate on the emulator
+  before 08:30.
+- Coffee does not transfer across countries: a model never trained on RoCoLe answers 1.2% of its photos.
 
 **SMS understanding:** `KeywordNlu` (`data/lexicon.csv`; function words pick sw/en, default sw; crop-aware
 symptoms) + optional **Qwen3.5-0.8B Q4_K_M** via llama.cpp + GBNF (`LlmNlu`, 20 s budget, NLU only, never writes
-text). Prefers the LoRA file `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf` over the base `Qwen3.5-0.8B-Q4_K_M.gguf` (533 MB,
-side-loaded or downloaded in the app, never committed). Policy: the model gives the intent only when no intent keyword matched, and a symptom
-only if it is the fine-tune, the SMS reports a problem, the keywords found the crop, `crop_symptom` is a real label
+text). Prefers the LoRA file `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf` (542 MB) over the base `Qwen3.5-0.8B-Q4_K_M.gguf`
+(533 MB). Side-loaded, imported from a file, or downloaded in the app; never committed. Policy: the model gives the
+intent only when no intent keyword matched, and a symptom only if it is the fine-tune, the SMS reports a problem, the keywords found the crop, `crop_symptom` is a real label
 and it is not "healthy". Crop, offer, language and commodity always come from keywords. "Same reply" on held-out /
 fresh / fresh2 (fresh2 = the honest set): **98% / 95% / 93%**, keywords alone 76% / 88% / 83% (held-out found the
-"p1 13000" fix, so it is no longer untouched for that rule). Retrieval (BM25,
-e5-small, RAG) was measured and not shipped; the RetrievalNlu fallback was dropped by the user (`DATA.md` §2.4).
+"p1 13000" fix, so it is no longer untouched for that rule). Retrieval (BM25, e5-small, RAG) was measured and not shipped; the RetrievalNlu fallback was dropped by the user (`DATA.md` §2.4).
 
 **knowledge.sqlite** (~370 KB, built by `ml/build_knowledge.py` from `data/`): cited advice per label (EN + SW),
 UCDA/MAAIF coffee farm-gate prices and WFP maize/bean prices with source and date, and the lexicon.
@@ -168,16 +175,17 @@ native, JS bridge · D6 confidence only from calibrated classifiers; text sympto
 prices · D7 training on Modal (user) · D8 phone = 4 GB RAM, all models < ~1 GB peak (user) · D9 freeze 10:30 UTC,
 submission ~13:00 UTC (user). The hub replies in the SMS's own language (`lang = null`).
 
-## Status (compacted ledger, 06:27 UTC)
+## Status (compacted ledger, 06:29 UTC)
 
 - **Done:** SMS hub (T01), resolver/templates/keyword NLU (T02), ONNX runner + gate + bridge (T03), knowledge base
   (T11), stub → real classifier (T10/T13/T15, now ens3), Qwen JNI + LoRA policy (T30/T31), connector tests (T41),
   model management UI (T42), browser phone pair + launcher (T43/T46/T47), TTS (T44), human-test kit (T45),
   dictation/read-aloud/Qwen install (T48), contacts + own number (T49), photo + words judged together (cff9e12),
-  helper answers only farming SMS (HubPolicy, 1d24063), opt-in LLM download over mobile data (6122039),
-  contact search dropdown (T51, C).
-- **Open:** leaf candidate effb0-ens3 (A's emulator check, install decision by 08:30); contact/composer follow-ups (T52, C);
-  UI refactor (T40/T04, C); demo script + video (T20, `docs/DEMO.md`); human-test sessions (were waiting on
+  helper answers only farming SMS (HubPolicy, 1d24063), opt-in LLM download native side (6122039), contact search
+  dropdown + immediate allowlist confirm (T51/T52, C), "P1 13000" read as a price code (91a8e16).
+- **Open:** leaf candidate effb0-ens3 vs JSON-only fallback (A's emulator check, install decision by 08:30);
+  **download UI** (C, requested by A 06:28: ask once on a Capable phone without a model, ~540 MB of mobile data;
+  Models page button, progress, cancel, plain errors; add `modelDownload` to `type Native`); UI refactor (T40/T04, C); demo script + video (T20, `docs/DEMO.md`); human-test sessions (were waiting on
   T49, now landed); optional LLM stop-after-symptom speed-up (~30% generation, queued by A); README's leaf
   classifier row and "Limits" are stale (A's file, flagged); `CLAUDE.md` upkeep (T50, B). T14 dropped; T32 stretch.
 - **Not validated:** real carrier SMS (delays, multipart, Ugandan filtering), speed and memory on a real 4 GB phone,
