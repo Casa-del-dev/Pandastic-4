@@ -105,6 +105,11 @@ public final class HubService extends Service {
                     reply = new Responder.Fallback().answer(entry.body, prefs.lang());
                 }
                 if (!prefs.enabled()) break;
+                if (!reply.farming) {
+                    // A personal message: no reply, and no copy kept here (it is in the normal SMS app).
+                    log.finishPersonal(entry.id);
+                    continue;
+                }
                 SmsSender.send(this, entry.sender, reply.sms);
                 ChatStore.get(this).recordReply(entry.sender, reply.sms);
                 log.finish(entry.id, HubLog.ANSWERED, reply.sms, reply.decisionJson);

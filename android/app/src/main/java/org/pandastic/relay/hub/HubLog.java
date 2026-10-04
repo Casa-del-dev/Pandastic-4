@@ -15,6 +15,8 @@ import java.util.List;
  */
 public final class HubLog extends SQLiteOpenHelper {
     public static final String PENDING = "pending", ANSWERED = "answered", FAILED = "failed", RATE_LIMITED = "rate_limited";
+    /** Not a farming question (e.g. family news): no automatic reply; the owner reads it in the SMS app. */
+    public static final String PERSONAL = "personal";
     private static HubLog instance;
 
     public static synchronized HubLog get(Context context) {
@@ -53,6 +55,17 @@ public final class HubLog extends SQLiteOpenHelper {
         values.put("status", status);
         values.put("reply", reply);
         values.put("decision", decision);
+        values.put("handled_at", System.currentTimeMillis());
+        getWritableDatabase().update("messages", values, "id = ?", new String[]{String.valueOf(id)});
+    }
+
+    /** A personal message the helper does not answer: its text is not kept (privacy), only that it came. */
+    public void finishPersonal(long id) {
+        ContentValues values = new ContentValues();
+        values.put("status", PERSONAL);
+        values.put("body", "");
+        values.putNull("reply");
+        values.putNull("decision");
         values.put("handled_at", System.currentTimeMillis());
         getWritableDatabase().update("messages", values, "id = ?", new String[]{String.valueOf(id)});
     }

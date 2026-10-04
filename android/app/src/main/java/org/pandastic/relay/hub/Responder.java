@@ -12,11 +12,16 @@ public interface Responder {
         public final String sms;
         /** Decision JSON (contracts §2) for the local log and UI; may be null. */
         public final String decisionJson;
+        /** False for a personal message ("how is school?"): the helper must not answer it (HubPolicy). */
+        public final boolean farming;
 
-        public Reply(String sms, String decisionJson) {
+        public Reply(String sms, String decisionJson, boolean farming) {
             this.sms = sms;
             this.decisionJson = decisionJson;
+            this.farming = farming;
         }
+
+        public Reply(String sms, String decisionJson) { this(sms, decisionJson, true); }
     }
 
     /** Answers through BrainHost, so SMS and in-app questions share one model thread. */
@@ -31,7 +36,8 @@ public interface Responder {
             String sms = "en".equals(lang)
                 ? "Pandastic: Not sure - ask a person (extension officer or cooperative). Do not spray yet."
                 : "Pandastic: Sina uhakika - uliza mtu (afisa ugani au chama cha ushirika). Usinyunyizie dawa bado.";
-            return new Reply(sms, "{\"status\":\"NO_DATA\",\"escalate\":true}");
+            // No NLU ran, so only unmistakable farming words make this a question to answer.
+            return new Reply(sms, "{\"status\":\"NO_DATA\",\"escalate\":true}", HubPolicy.looksLikeFarming(text));
         }
     }
 }

@@ -23,6 +23,7 @@ import org.pandastic.relay.brain.LlmNlu;
 import org.pandastic.relay.brain.QualityGate;
 import org.pandastic.relay.brain.SmsFormatter;
 import org.pandastic.relay.hub.Responder;
+import org.pandastic.relay.hub.HubPolicy;
 import org.pandastic.relay.hub.HubPrefs;
 
 /**
@@ -44,6 +45,7 @@ public final class BrainHost {
     private volatile Brain brain;
     private Knowledge knowledge;
     private volatile LlmNlu llm;
+    private volatile KeywordNlu keywords;
     private volatile boolean llmLoading;
     private volatile Future<?> llmLoad;
     private final java.util.concurrent.atomic.AtomicBoolean warmUpQueued = new java.util.concurrent.atomic.AtomicBoolean();
@@ -69,7 +71,7 @@ public final class BrainHost {
         }
         if (llm != null) llm.close();
         if (knowledge != null) knowledge.close();
-        classifier = null; llm = null; knowledge = null; brain = null;
+        classifier = null; llm = null; knowledge = null; brain = null; keywords = null;
         classifierError = null; brainError = null;
     }
 
@@ -156,7 +158,11 @@ public final class BrainHost {
         Brain brain = brain();
         if (brain == null) return new Responder.Fallback().answer(text, lang);
         Decision decision = brain.answerText(text, lang);
-        return new Responder.Reply(SmsFormatter.format(decision), decision.toJson());
+        // Personal messages from the same allowed numbers get no automatic reply: decide on the keywords'
+        // own reading (cheap) plus the final intent (HubPolicy).
+        KeywordNlu words = keywords;
+        boolean farming = HubPolicy.isFarmingQuestion(text, words == null ? null : words.parse(text, lang), decision.intent);
+        return new Responder.Reply(SmsFormatter.format(decision), decision.toJson(), farming);
     }
 
     /**
@@ -184,7 +190,7 @@ public final class BrainHost {
         if (brain == null && brainError == null) {
             try {
                 knowledge = Knowledge.open(context);
-                KeywordNlu keywords = new KeywordNlu(knowledge.lexicon());
+                KeywordNlu keywords = this.keywords = new KeywordNlu(knowledge.lexicon());
                 // Keywords answer until the LLM is ready; then it fills only what they missed (LlmNlu.parse).
                 Brain created = brain = new Brain(knowledge, (text, lang) -> {
                     LlmNlu model = llm;

@@ -14,7 +14,9 @@
 //   HUB=emulator-5554 BASIC=emulator-5556 node scripts/sms-lab.mjs ...   (these are the defaults)
 //   Start the second emulator with: emulator -avd pandastic_basic -port 5556 (see docs/TESTING.md)
 import { createInterface } from 'node:readline'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { ADB, adbFor, connectApp, sleep } from './lib/devtools.mjs'
 import { execFileSync } from 'node:child_process'
 
@@ -35,6 +37,16 @@ const nameOf = number => same(number, NUMBER.hub) ? 'helper phone' : same(number
   : same(number, NUMBER.phone) ? 'terminal phone' : number
 
 // ---- the carrier ---------------------------------------------------------------------------------
+
+// One carrier per phone pair: two would deliver every SMS twice (and the helper would answer twice).
+const CARRIER_PID = join(tmpdir(), `pandastic-sms-carrier-${HUB}-${BASIC}.pid`)
+function runningCarrier() {
+  try {
+    const pid = Number(readFileSync(CARRIER_PID, 'utf8'))
+    if (pid && pid !== process.pid) { process.kill(pid, 0); return pid }
+  } catch { /* none, or a stale file */ }
+  return null
+}
 
 /** Reads new rows of a device's sent box. `content query` prints one row per line; a body may span lines. */
 function sentSince(serial, lastId) {
@@ -65,7 +77,10 @@ function deliver(serial, from, body) {
  * virtual phone (onVirtual). Returns a stop function.
  */
 function startCarrier({ onVirtual = () => {}, log = console.log } = {}) {
-  const phones = [{ serial: HUB, number: NUMBER.hub }, ...(online(BASIC) ? [{ serial: BASIC, number: NUMBER.basic }] : [])]
+  // If `relay` already runs, it delivers between the emulators; here only the virtual phones are served.
+  const relayPid = runningCarrier()
+  const phones = [{ serial: HUB, number: NUMBER.hub },
+    ...(online(BASIC) && !relayPid ? [{ serial: BASIC, number: NUMBER.basic }] : [])]
   for (const p of phones) p.last = lastSentId(p.serial)
   let stopped = false
   ;(async () => {
@@ -74,6 +89,7 @@ function startCarrier({ onVirtual = () => {}, log = console.log } = {}) {
         for (const sms of sentSince(p.serial, p.last)) {
           p.last = sms.id
           const target = phones.find(q => q !== p && same(q.number, sms.to))
+          if (relayPid && same(sms.to, NUMBER.basic)) continue  // the running relay delivers this one
           if (target) {
             log(`  [carrier] ${nameOf(p.number)} -> ${nameOf(target.number)}: ${oneLine(sms.body)}`)
             deliver(target.serial, p.number, sms.body)
@@ -155,6 +171,12 @@ async function setup() {
 // ---- interactive -----------------------------------------------------------------------------------
 
 async function relay() {
+  const other = runningCarrier()
+  if (other) { console.log(`A carrier is already running (pid ${other}); not starting a second one.`); return }
+  writeFileSync(CARRIER_PID, String(process.pid))
+  const release = () => { try { if (Number(readFileSync(CARRIER_PID, 'utf8')) === process.pid) unlinkSync(CARRIER_PID) } catch { /* gone */ } }
+  process.on('exit', release)
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(0))
   console.log(`Carrier running between ${HUB} (${NUMBER.hub}) and ${online(BASIC) ? `${BASIC} (${NUMBER.basic})` : 'no Basic phone'}. Ctrl+C to stop.`)
   startCarrier({ onVirtual: sms => console.log(`  [carrier] ${nameOf(sms.from)} -> ${sms.to}: ${oneLine(sms.body)}  (no such phone in the lab)`) })
   await new Promise(() => {})
@@ -201,14 +223,25 @@ async function test() {
   async function sms(name, from, text, check, { timeoutMs = 45000, expectReply = true } = {}) {
     const sentAt = Date.now()
     deliver(HUB, from, text)
-    let reply
-    while (!reply && Date.now() - sentAt < (expectReply ? timeoutMs : 12000)) {
+    let reply, handled = null
+    // No reply expected: wait until the helper has decided (its log entry leaves "pending"; the language
+    // model may take a while), or 12 s for a number it ignores entirely, then a little longer for a reply.
+    const deadline = sentAt + (expectReply ? timeoutMs : 60000)
+    while (!reply && Date.now() < deadline) {
       await sleep(400)
       reply = inbox.find(m => same(m.to, from) && m.at >= sentAt)
+      if (!expectReply && !reply) {
+        const recent = JSON.parse(await hub.evaluate('PandasticNative.hubStatus()')).recent
+        handled = recent.find(e => e.receivedAt >= sentAt - 3000 && e.status !== 'pending')?.status ?? handled
+        if (handled || Date.now() - sentAt > 12000) { await sleep(3000); reply = inbox.find(m => same(m.to, from) && m.at >= sentAt); break }
+      }
     }
     if (reply) inbox.splice(inbox.indexOf(reply), 1)
     let ok, note
-    if (!expectReply) { ok = !reply; note = reply ? `unexpected reply: ${oneLine(reply.body)}` : 'no reply, as expected' }
+    if (!expectReply) {
+      ok = !reply
+      note = reply ? `unexpected reply: ${oneLine(reply.body)}` : `no reply, as expected${handled ? ` (helper log: ${handled})` : ''}`
+    }
     else if (!reply) {  // say why: the helper's log knows (rate_limited, failed, still pending)
       const entry = JSON.parse(await hub.evaluate('PandasticNative.hubStatus()')).recent
         .find(e => e.question === text && e.receivedAt >= sentAt - 5000)
@@ -249,6 +282,11 @@ async function test() {
     'coffee leaves have grey spots with brown ring', safe, { timeoutMs: 60000 })
   await sms('pest the keywords miss (fine-tuned LLM names it, still not sure)', NUMBER.phone2,
     'Wadudu wanachimba ndani ya majani ya kahawa', safe, { timeoutMs: 60000 })
+  // The helper is the daughter's phone: her mother's personal texts must get no automatic reply.
+  for (const text of ['Habari mwanangu, shule inaendaje?', 'Nimekutumia pesa ya ada', 'how is school?'])
+    await sms(`personal message gets no reply: "${text}"`, NUMBER.phone, text, () => null, { expectReply: false })
+  await sms('greeting + a farming question still gets the answer', NUMBER.phone2,
+    'Habari mwanangu, bei ya kahawa ni ngapi leo?', has(/UGX/, 'no price'))
   await sms('unknown number gets no reply (allowlist)', NUMBER.stranger, 'P 1 12000', () => null, { expectReply: false })
   await sms('own echo is ignored (no reply loops)', NUMBER.phone, 'Pandastic: test echo', () => null, { expectReply: false })
 
