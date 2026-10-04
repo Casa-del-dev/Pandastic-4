@@ -215,3 +215,7 @@ Done (one line each; details in git and the archived ledger):
   the "AI ya simu imeelewa" line unchanged. JVM tests 75/75. `understood()` uses only intent/crop/symptom from the
   model (offer comes from the keywords), so nothing it shows is lost. **Build note (Windows):** `fetchSpeechModel`
   calls `node`; without Node, run `bun scripts/fetch-whisper-tiny.mjs` and build with `-x fetchSpeechModel`.
+- [B 08:00] **Correction to my last O1 line (human-test photo key), measured on the final APK:** leaf1 (C6P13E2) rust 0.98
+  CONFIDENT, leaf2 (C8P14E1) rust 0.95 CONFIDENT, **leaf3 (C3P4E1) healthy 0.981 UNCERTAIN** (ens3: 0.993 CONFIDENT),
+  **leaf4 (C3P27E1) healthy 0.991 CONFIDENT** (ens3: 0.983 UNCERTAIN). So leaf3/leaf4 swap in `docs/HUMAN-TEST.md`'s
+  facilitator key (A's file). Source: `ml/reports/leaf-p2-mix-efficientnetb0-ens3-a16129a8/app_check_test*.csv`.
