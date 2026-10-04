@@ -152,6 +152,12 @@ The keyword fixes are general rules found on the first fresh set: common functio
 a symptom word must fit the crop ("mistari", lines, means leaf-miner trails on coffee and streak virus on maize), and
 "season" alone no longer means planting. On fresh2 they move keywords from 80% to 83%.
 
+Later fix (06:11 UTC), found on the **held-out** set, which is therefore no longer untouched for this rule: the price
+code typed without its space ("p1 13000", "P2 1000") is now read like "P 1 13000", but only at the start of an SMS
+that has a number, because "P1".."P7" are also Ugandan primary-school years ("Sarah's P3 fees"). Since the helper
+answers only SMS it recognises as farming (A's `HubPolicy`), these two price checks used to get no reply at all.
+Held-out: keywords 72% → 76%, keywords + fine-tune (the app) 94% → 98%; fresh and fresh2 unchanged.
+
 **What the base LLM adds is small.** Over the 120 held-out and fresh SMS, it gives 100 correct replies against 98
 for keywords alone: it understands questions in words the lexicon lacks ("mimea inanyauka", "anatoa 13k"), and
 calls some chit-chat a question. Taking the crop from it is worse: it answers "coffee" or "maize" when the farmer

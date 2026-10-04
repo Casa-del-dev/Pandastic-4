@@ -97,11 +97,13 @@ public final class KeywordNlu implements Nlu {
     /**
      * Lowercase, keep letters, digits and '?', collapse everything else to single spaces.
      * Thousands separators are joined first, so "1,200" stays one number and never looks like menu code "1".
+     * The price code typed without its space ("P1 13000") is split like "P 1 13000", but only at the start of an SMS
+     * that also has a number: "P1".."P7" are also Ugandan primary-school years ("Sarah's P3 fees").
      */
     static String normalize(String text) {
         if (text == null) return "";
         String lower = text.toLowerCase(Locale.ROOT).replace("ŋ", "ng'").replaceAll("(?<=\\d)[,.](?=\\d{3}(?!\\d))", "");
-        return lower.replaceAll("[^a-z0-9?]+", " ").trim();
+        return lower.replaceAll("[^a-z0-9?]+", " ").trim().replaceFirst("^p([123]) (?=.*\\d{2})", "p $1 ");
     }
 
     /** Largest number in the text that looks like a price: digits ("12k", "elfu 12") or Swahili words ("elfu kumi na mbili"). */

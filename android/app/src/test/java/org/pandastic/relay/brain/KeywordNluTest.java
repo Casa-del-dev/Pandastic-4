@@ -35,6 +35,17 @@ public class KeywordNluTest {
         assertEquals(12000.0, s.offer, 0.01);
     }
 
+    @Test public void priceCodeWithoutItsSpace() {
+        Slots s = nlu.parse("p1 13000", null);
+        assertEquals("price", s.intent);
+        assertEquals("coffee", s.crop);
+        assertEquals(13000.0, s.offer, 0.01);
+        assertEquals("maize", nlu.parse("P2: 1,000", null).crop);
+        // "P3" is also a primary-school year: only an SMS that starts with the code and has a number is a price check.
+        assertNull(nlu.parse("Sarah is in P3 now, fees 150000", null).crop);
+        assertNull(nlu.parse("p1 imeanza vizuri", null).crop);
+    }
+
     @Test public void cropAndNumberAloneMeansPrice() {
         Slots s = nlu.parse("mahindi 900", null);
         assertEquals("price", s.intent);

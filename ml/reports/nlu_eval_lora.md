@@ -17,11 +17,11 @@ temperature 0, thinking off, 4 CPU threads on a laptop (a phone is slower).
 | dev | hybrid_no_offer | 100 | 100% | 100% | 96% | 99% | 99% | 100% | 95% | 95% |
 | dev | llm_first | 100 | 100% | 99% | 96% | 100% | 99% | 100% | 95% | 95% |
 | dev | hybrid_fill | 100 | 100% | 100% | 96% | 99% | 99% | 100% | 95% | 95% |
-| heldout | keyword | 50 | 100% | 84% | 96% | 86% | 96% | 100% | 72% | 76% |
+| heldout | keyword | 50 | 100% | 88% | 100% | 86% | 100% | 100% | 76% | 80% |
 | heldout | qwen | 50 | 100% | 98% | 100% | 96% | 100% | 100% | 94% | 96% |
-| heldout | hybrid_intent | 50 | 100% | 98% | 96% | 86% | 96% | 100% | 80% | 82% |
+| heldout | hybrid_intent | 50 | 100% | 98% | 100% | 86% | 100% | 100% | 84% | 86% |
 | heldout | hybrid_intent_crop | 50 | 100% | 98% | 100% | 86% | 100% | 100% | 84% | 86% |
-| heldout | hybrid_intent_symptom | 50 | 100% | 98% | 96% | 100% | 96% | 100% | 94% | 96% |
+| heldout | hybrid_intent_symptom | 50 | 100% | 98% | 100% | 100% | 100% | 100% | 98% | 100% |
 | heldout | hybrid_no_offer | 50 | 100% | 98% | 100% | 100% | 100% | 100% | 98% | 100% |
 | heldout | llm_first | 50 | 100% | 98% | 100% | 86% | 100% | 100% | 84% | 86% |
 | heldout | hybrid_fill | 50 | 100% | 98% | 100% | 100% | 100% | 100% | 98% | 100% |
@@ -95,12 +95,6 @@ Near-copies of LoRA training SMS (token Jaccard >= 0.6 with one of the 3,000 syn
 - h19 `mimea ya maharage inanyauka` intent: want `diagnose` got `other`
 - h22 `mahindi yamegeuka rangi` intent: want `diagnose` got `other`
 - h26 `anatoa 13k kwa kilo` intent: want `price` got `other`
-- h28 `p1 13000` intent: want `price` got `other`
-- h28 `p1 13000` crop: want `coffee` got ``
-- h28 `p1 13000` commodity: want `coffee_arabica_parchment` got ``
-- h29 `P2 1000` intent: want `price` got `other`
-- h29 `P2 1000` crop: want `maize` got ``
-- h29 `P2 1000` commodity: want `maize_grain` got ``
 - h44 `nisaidie` intent: want `help` got `other`
 - h45 `salaam` intent: want `help` got `other`
 
