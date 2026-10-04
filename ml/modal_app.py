@@ -109,7 +109,7 @@ def _run_id(tag: str, manifest_bytes: bytes, hparams: dict) -> tuple[str, dict]:
 @app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, gpu="L4", cpu=16,
               memory=32768, timeout=4 * 3600, retries=modal.Retries(max_retries=2, initial_delay=10.0))
 def train(labels: str, coffee_split: str, epochs: int, batch_size: int, lr: float, smoke: bool, git_sha: str = "",
-          input_size: int = 224) -> dict:
+          input_size: int = 224, seed: int = 13) -> dict:
     import timm
     import torch
     from leaf import config, data, train as trainer
@@ -122,18 +122,20 @@ def train(labels: str, coffee_split: str, epochs: int, batch_size: int, lr: floa
     rows = data.read_manifest(manifest_path)
     stats = json.loads((DATA / f"manifest-{tag}.json").read_text())
     hparams = {"labels": labels, "coffee_split": coffee_split, "epochs": epochs, "batch_size": batch_size, "lr": lr, "smoke": smoke,
-               "arch": config.ARCH, "seed": 13, "patience": 4}
+               "arch": config.ARCH, "seed": seed, "patience": 4}
+    if seed != 13:  # another seed of the same recipe, e.g. an ensemble member
+        tag += f"-s{seed}"
     if input_size != 224:  # 224 keeps the hyper-parameters (and run ids) of earlier runs
         hparams["input_size"] = input_size
         tag += f"-r{input_size}"
     version, hashes = _run_id(tag, manifest_path.read_bytes(), hparams)
     version += "-smoke" if smoke else ""
-    lineage = {**hashes, "manifest": manifest_path.name, "git_sha": git_sha, "seed": 13,
+    lineage = {**hashes, "manifest": manifest_path.name, "git_sha": git_sha, "seed": seed,
                "torch": str(torch.__version__), "timm": str(timm.__version__)}
     print(f"run {version} (resumes automatically if checkpoints exist), lineage {lineage}")
     meta = trainer.run(rows, _labels(labels), MODELS / "leaf" / version, stats, epochs=1 if smoke else epochs,
                        batch_size=batch_size, lr=lr, device="cuda", workers=14, max_steps=30 if smoke else None,
-                       version=version, on_checkpoint=models_volume.commit, lineage=lineage)
+                       version=version, on_checkpoint=models_volume.commit, lineage=lineage, seed=seed)
     models_volume.commit()
     # Plain JSON types only: the laptop that receives this has no torch/numpy to unpickle their objects.
     return json.loads(json.dumps(meta, default=str))
@@ -168,7 +170,7 @@ SOURCES = ["bracol", "jmuben", "jmuben2", "rocole", "plantdoc", "ibean", "ccmt"]
 
 @app.function(image=image, timeout=8 * 3600)
 def pipeline(stage: str, labels: str, coffee_split: str, epochs: int, batch_size: int, lr: float, smoke: bool,
-             git_sha: str = "", input_size: int = 224) -> dict:
+             git_sha: str = "", input_size: int = 224, seed: int = 13) -> dict:
     """Runs the stages from Modal, not from the laptop, so a detached run finishes even if the laptop sleeps."""
     result = {}
     if stage in ("fetch", "all"):
@@ -178,20 +180,20 @@ def pipeline(stage: str, labels: str, coffee_split: str, epochs: int, batch_size
     if stage in ("cache", "train", "all"):  # idempotent: only new images are decoded
         result["cache"] = cache.remote(_tag(labels, coffee_split), input_size)
     if stage in ("train", "all"):
-        result["meta"] = train.remote(labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size)
+        result["meta"] = train.remote(labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size, seed)
     return result
 
 
 @app.local_entrypoint()
 def main(stage: str = "all", labels: str = "p0", coffee_split: str = "mix", epochs: int = 12, batch_size: int = 64,
-         lr: float = 1e-3, smoke: bool = False, version: str = "", input_size: int = 224):
+         lr: float = 1e-3, smoke: bool = False, version: str = "", input_size: int = 224, seed: int = 13):
     import subprocess
     from leaf import config
     if stage == "reeval":
         print(json.dumps(reeval.remote(labels, coffee_split, version)["eval"], indent=2))
         return
     git_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-    result = pipeline.remote(stage, labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size)
+    result = pipeline.remote(stage, labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size, seed)
     if "cache" in result:
         print(f"cache: {result['cache']['cached']} images, dropped {len(result['cache']['dropped'])}")
     if stage in ("fetch", "all"):

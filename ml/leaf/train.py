@@ -405,7 +405,7 @@ def drop_unreadable(rows, log=print, workers=32):
 
 def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size=64, lr=1e-3, pretrained=True,
         device=None, workers=4, max_steps=None, target_accuracy=0.90, version=None, log=print,
-        on_checkpoint=None, lineage: dict = None, patience: int = 4) -> dict:
+        on_checkpoint=None, lineage: dict = None, patience: int = 4, seed: int = 13) -> dict:
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = drop_unreadable(rows, log)
@@ -415,7 +415,7 @@ def run(rows, labels, out_dir: Path, manifest_stats: dict, epochs=12, batch_size
     ckpt_dir = out_dir / "checkpoints"
     ckpt_dir.mkdir(exist_ok=True)
     model, history = train_model(rows, labels, epochs, batch_size, lr, pretrained, device, workers, max_steps, log,
-                                 ckpt_dir=ckpt_dir, on_checkpoint=on_checkpoint, patience=patience)
+                                 seed=seed, ckpt_dir=ckpt_dir, on_checkpoint=on_checkpoint, patience=patience)
     save_atomic(model.state_dict(), out_dir / "model_best.pt")  # survives a crash in calibration or export
     if on_checkpoint:
         on_checkpoint()
