@@ -89,10 +89,10 @@ Open rows:
 | :- | :--- | :---- | :----- | :----------- | :------------ | :---- |
 | T20 | Demo script + video (emulator `adb emu sms send` backup) | A + B | todo | `docs/DEMO.md` | — | Script in DEMO.md §5; video not recorded |
 | T40 | Frontend UI + UX refactor and optimisation (Noor: low literacy, Swahili first, 4 GB phone, offline WebView) | C | todo | `frontend/` | 02:58 | Took over T04; ongoing through T42–T52 |
-| T53 | O1: leaf model check (emulator if B's machine can run one, else JVM/ONNX checks) + install decision | B (user request, was A) | claimed | assets `leaf_classifier.*`, `ml/reports/` | 06:49 | A: please don't merge either leaf branch meanwhile |
-| T54 | O3: help requests (`nisaidie`, "what can you do", "how does this work") get the menu by SMS | B (user request, was A) | claimed | `hub/HubPolicy.java` + test | 06:49 | |
-| T55 | O4: LLM stops after the symptom, JSON closed in Java (~30% less generation) | B (user request, was A) | claimed | `brain/LlmNlu.java` (+ JNI only if needed) | 06:49 | |
-| T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | B (user request, was A) | claimed | `README.md`, `docs/DEMO.md` | 06:49 | |
+| T53 | O1: leaf model check (emulator if B's machine can run one, else JVM/ONNX checks) + install decision | B (user request, was A) | in-progress | assets `leaf_classifier.*`, `ml/reports/`, `scripts/photo-eval.mjs` | 07:41 | Emulator check done: install effb0-ens3 with floors re-chosen on calib through the app (log 07:41); final APK check running |
+| T54 | O3: help requests (`nisaidie`, "what can you do", "how does this work") get the menu by SMS | A (B claimed after A's fix) | done | `hub/HubPolicy.java` + test | 07:41 | A's 214928a, reviewed by B |
+| T55 | O4: LLM stops after the symptom, JSON closed in Java (~30% less generation) | B (user request, was A) | in-progress | `brain/LlmNlu.java` (no JNI change), `ml/llm/stop_eval.py` | 07:41 | Grammar cut at the `,"` after the symptom; laptop eval on all 4 SMS sets running |
+| T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | A (B claimed after A's fix) | done | `README.md`, `docs/DEMO.md` | 07:41 | A's 214928a; B updates the leaf row again with the O1 install |
 | T50 | `CLAUDE.md`: compact project memory, kept current | B | done (maintained) | `CLAUDE.md` | 06:35 | User request; ledger compacted 06:35 (user request) |
 | T32 | STT, maize grain head, FAMEWS alerts, XGBoost + weather | — | todo | — | — | Stretch; only if everything else is done |
 
@@ -188,3 +188,15 @@ Done (one line each; details in git and the archived ledger):
   `nlu?`, `understood?` to `type Decision`; please ack, restyle it as a small label if you like.
   Also C: de35257 removed `EXTRA_PREFER_OFFLINE` from dictation, so the speech service may send audio online; README
   says questions never go online. Flagged to my user.
+- [B 07:41] **A: thanks, T54/T56 closed as yours (214928a, reviewed: the whole-message menu rule is what I had in mind).
+  O1 result, no need for your probe:** I ran both builds through the real app on my emulator (`scripts/photo-eval.mjs`,
+  new: every held-out photo via `__e2e.shrink` + `checkPhoto`). The EfficientNet candidate **as on its branch called 8 of
+  161 RoCoLe rust leaves healthy** (ens3: 3; the laptop copy of the app path said 5). Cause: the app's 640 → 224
+  `Bitmap.createScaledBitmap(…, true)` is not antialiased, PIL is; ens3 matches the laptop within ±0.01, EfficientNet
+  does not. So I re-chose its floors on **calib photos run through the app** (crop ≥ 90% right, healthy ≥ 99% precision):
+  coffee_healthy 0.99, maize_healthy 0.98, maize 0.82, bean_healthy 0.54. Held-out test in the app (answered / right /
+  sick→healthy), effb0 vs ens3: coffee 360 65.3% / 97.4% / **0** vs 59.4% / 96.7% / **3**; maize 336 79.2% / 90.6% / 0 vs
+  89.9% / 87.1% / 0; beans 129 100% / 96.1% / 1 vs 96.9% / 96.8% / 0; non-crop 1/137 vs 0/137; `checkPhoto` 80 vs 45 ms
+  median (x86_64 emulator). **Decision: install effb0 with these floors** (I'm committing it with README/DEMO/DATA.md
+  after a last `bridge-e2e` on the exact APK). An antialiased resize in `LeafClassifier` (yours) might recover more,
+  but both models would need re-checking, so not before the freeze unless you want it.
