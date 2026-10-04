@@ -119,9 +119,21 @@ calls some chit-chat a question. Taking the crop from it is worse: it answers "c
 names cassava, tomato or tea. It invents symptoms, so the app never takes a symptom, offer, language or crop from it.
 The app works without it (the model is a side-loaded 530 MB file).
 
-The fine-tuned model scored 94% on the held-out set, but that number is optimistic: **24 of the 50 held-out SMS have
-a near-copy** (≥ 60% of words shared) among its 3,000 training SMS, against 3 of 40 in the fresh set. Its score on
-fresh2 decides whether it replaces the base model.
+**The fine-tuned model (LoRA on 3,000 synthetic SMS, `ml/reports/nlu_eval_lora.md`) is different.** Alone it scores
+94% on the held-out set, but that number is optimistic: **24 of the 50 held-out SMS have a near-copy** (≥ 60% of
+words shared) among its training SMS, against 3 of 40 in the fresh set. On fresh2, which it never saw, it scores 90%
+alone. It also stops inventing symptoms, so it may fill a **symptom** the keywords missed (only if it fits the crop;
+a text symptom is still never CONFIDENT), as well as the intent:
+
+| | held-out | fresh | fresh2 |
+| :-- | --: | --: | --: |
+| Keywords alone | 72% | 88% | 83% |
+| Keywords + fine-tune, intent only | 80% | 88% | 80% |
+| **Keywords + fine-tune, intent + symptom** | **94%** | **90%** | **93%** |
+| Keywords + base model, intent + symptom | 82% | 85% | 73% |
+
+The model is called for about a third of the SMS (no intent keyword, or a diagnosis without a symptom), median
+1.5–2 s on a laptop. The crop, offer, language and commodity always come from the keywords.
 
 ## 3. What the data does not cover
 
