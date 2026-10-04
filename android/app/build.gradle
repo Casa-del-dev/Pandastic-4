@@ -32,16 +32,22 @@ android {
     compileSdk 35
     defaultConfig {
         applicationId 'org.pandastic.relay'
-        minSdk 23
+        minSdk 24 // onnxruntime-android 1.30 requires 24
         targetSdk 35
         versionCode 1
         versionName '0.1.0'
+        // Phones are arm64; x86_64 only for the emulator. Each ABI adds ~33-39 MB of ONNX Runtime.
+        ndk { abiFilters 'arm64-v8a', 'x86_64' }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
     sourceSets.main.assets.srcDir(generatedFrontendAssets)
+    // Models are memory-mapped/opened from assets; keep them uncompressed.
+    androidResources { noCompress += ['onnx', 'sqlite', 'gguf'] }
+    // brain/ logic is unit-tested on the JVM; android.* stubs return defaults instead of throwing.
+    testOptions { unitTests.returnDefaultValues = true }
 }
 
 tasks.named('preBuild').configure { dependsOn syncFrontendAssets }
@@ -49,4 +55,6 @@ tasks.named('preBuild').configure { dependsOn syncFrontendAssets }
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
     implementation 'androidx.core:core:1.15.0'
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.30.0'
+    testImplementation 'junit:junit:4.13.2'
 }
