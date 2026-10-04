@@ -1,6 +1,6 @@
 # Pandastic: project memory for Claude sessions
 
-Maintained by agent B (ledger task T50); last updated 2026-10-04 06:07 UTC. **`LEDGER.md` is the source of truth for
+Maintained by agent B (ledger task T50); last updated 2026-10-04 06:11 UTC. **`LEDGER.md` is the source of truth for
 live work: read it after every pull.** Details live in `docs/`. Update this file when the codebase changes in a way
 that makes something here wrong.
 
@@ -123,7 +123,8 @@ text). Prefers the LoRA file `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf` over the base 
 side-loaded, never committed). Policy: the model gives the intent only when no intent keyword matched, and a symptom
 only if it is the fine-tune, the SMS reports a problem, the keywords found the crop, `crop_symptom` is a real label
 and it is not "healthy". Crop, offer, language and commodity always come from keywords. "Same reply" on held-out /
-fresh / fresh2 (fresh2 = the honest set): **94% / 95% / 93%**, keywords alone 72% / 88% / 83%. Retrieval (BM25,
+fresh / fresh2 (fresh2 = the honest set): **98% / 95% / 93%**, keywords alone 76% / 88% / 83% (held-out found the
+"p1 13000" fix, so it is no longer untouched for that rule). Retrieval (BM25,
 e5-small, RAG) was measured and not shipped; the RetrievalNlu fallback was dropped by the user (`DATA.md` §2.4).
 
 **knowledge.sqlite** (~370 KB, built by `ml/build_knowledge.py` from `data/`): cited advice per label (EN + SW),
@@ -137,7 +138,7 @@ make run | run-device | release | web | stop
 make e2e                       # every bridge call inside the running app (56/56)
 make sms-setup / sms-relay / sms-test   # SMS lab on two emulators (sms-test 17/17)
 make human-test                # reset both phones + test photos (docs/HUMAN-TEST.md)
-cd android && ./gradlew testDebugUnitTest            # 67 JVM tests (Windows: gradlew.bat); -Pnollm builds without llama.cpp
+cd android && ./gradlew testDebugUnitTest            # 68 JVM tests (Windows: gradlew.bat); -Pnollm builds without llama.cpp
 python ml/build_knowledge.py                          # rebuild + validate knowledge.sqlite
 
 cd ml   # leaf pipeline (Modal, L4); same args resume; run id = hash(manifest, hparams, code)
