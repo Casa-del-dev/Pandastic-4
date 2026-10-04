@@ -77,6 +77,36 @@ All sources, licences and sizes, the evidence for the problem, and **what the da
 
 ## Run it
 
+### Quickest: Docker (two phones in the browser, real models)
+
+Only Docker is needed:
+
+```sh
+docker compose up --build      # first run downloads the 542 MB language model and builds llama.cpp
+```
+
+Open <http://localhost:8080>: Noor's basic phone on the left, the helper phone on the right (each also on its own
+at <http://localhost:5173> and <http://localhost:5174>). Send `P 1 12000` or a leaf problem in your own words from the
+basic phone; the helper reads it with the fine-tuned Qwen and answers by simulated SMS, in the background (its chat
+stays clear, the helper log in Settings has the exchange). On the helper phone, **+** checks a leaf photo.
+
+The answers come from the helper phone's own Java code (`Brain`, keyword + Qwen NLU, `Resolver`, `ReplyWriter`,
+`HubPolicy`, the ONNX leaf classifier and quality gate), compiled unchanged from `android/` for a normal JVM
+(`desktop/`), with llama.cpp built for Linux. Two demo settings in `docker-compose.yml` differ from the app: every SMS
+gets an answer (non-farming ones get the menu; the app leaves personal messages unanswered), and the hourly reply
+limit is raised.
+
+```sh
+docker compose up -d --build   # in the background; docker compose logs -f brain shows the model reading each SMS
+docker compose down -v         # stop and clear both phones' chats
+PANDASTIC_PUBLIC_HOST=<server IP or name> docker compose up -d --build   # on a server: open ports 8080, 5173, 5174
+docker build --target apk --output out .   # build the APK in a container (out/app-debug.apk)
+```
+
+Details, requirements and limits (shared chats when deployed, no microphone over plain HTTP): [DOCKER.md](DOCKER.md).
+
+### Android app and emulators
+
 Requirements: JDK 17, Android SDK 35, NDK `28.2.13676358` with CMake 3.22.1 (for llama.cpp), Node 20+ and **Corepack** (Gradle runs the pnpm version pinned in `frontend/package.json`) or, on Node 25+ where Corepack is no longer bundled, a global **pnpm**.
 
 ```sh
@@ -84,6 +114,8 @@ make run            # start/select emulator, build + install + launch; plain mak
 make run-device     # same on a USB-connected phone
 make release        # ~90 MB arm64 APK for side-loading
 make web            # UI only, in a desktop browser (labelled demo answers)
+./run.sh            # two emulator phones (helper + basic) with the real APK and a simulated SMS carrier
+./run.sh --web      # two browser phones on 5173/5174 without Docker (labelled demo answers, no models)
 make stop           # shut down the running emulator
 cd android && ./gradlew testDebugUnitTest   # resolver, NLU, SMS formatting, number matching
 ```
@@ -105,10 +137,12 @@ android/app/src/main/java/org/pandastic/relay/
   hub/                                       SMS receiver, foreground service, allowlist, log, sender
   brain/                                     classifier, quality gate, resolver, NLU (keywords + Qwen), SMS formatter
 android/app/src/main/cpp/                    llama.cpp JNI (fetched at build time, v0.5.0)
-frontend/                                    React UI (Swahili first), bundled into the APK
+frontend/                                    React UI (Swahili first), bundled into the APK; local/ = browser phone pair
+desktop/                                     the app's Java brain on a desktop JVM for Docker (Android shims, JNI build)
 ml/                                          Modal training, knowledge-base builder, NLU evaluation
 data/                                        price, advice and lexicon sources for knowledge.sqlite
 docs/                                        AUDIT (design review), DATA, DEMO, contracts, screenshots
+Dockerfile, docker-compose.yml, DOCKER.md    browser demo with the real models, APK build, deployment
 LEDGER.md                                    how the two coding agents split and tracked the work
 ```
 

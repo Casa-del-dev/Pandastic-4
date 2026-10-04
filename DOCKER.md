@@ -32,7 +32,10 @@ small stand-ins for the Android APIs (`desktop/`). It also loads:
 In the demo the helper answers every SMS from Noor: a message that is not
 about farming ("hello") gets the menu. The app itself leaves personal messages
 and plain greetings unanswered (`HubPolicy`); set `PANDASTIC_HUB_ANSWER_ALL: "0"`
-in `docker-compose.yml` for that behaviour. Answered SMS stay out of the
+in `docker-compose.yml` for that behaviour. The app answers one contact at most about 12 times
+an hour, to save airtime; the demo raises that to 1000
+(`PANDASTIC_HUB_HOURLY_LIMIT`). Above the limit, the SMS is not answered and
+shows in the helper's chat. Answered SMS stay out of the
 helper's chat (they are in its helper log in Settings). Dictation (Whisper) only runs in the Android app; in the
 browser the microphone uses the browser's own speech service.
 

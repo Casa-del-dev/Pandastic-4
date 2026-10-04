@@ -19,6 +19,8 @@ export function localPhonePlugin() {
   const brainUrl = process.env.PANDASTIC_BRAIN_URL?.replace(/\/$/, '')
   // Docker demo: answer every allowlisted SMS, personal ones with the menu. The app (HubPolicy) leaves those unanswered.
   const answerAll = process.env.PANDASTIC_HUB_ANSWER_ALL === '1'
+  // Automatic replies per contact per hour (airtime); a shared demo raises it.
+  const hourlyLimit = Number(process.env.PANDASTIC_HUB_HOURLY_LIMIT) || 12
   async function brain(path, body) {
     const response = await fetch(`${brainUrl}${path}`, {
       method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' },
@@ -141,7 +143,7 @@ export function localPhonePlugin() {
               const now = new Date().toISOString().slice(0, 10)
               if (state.answeredDate !== now) { state.answeredDate = now; state.hub.answeredToday = 0 }
               const recent = state.hub.recent.filter(entry => entry.contact === data.from && entry.receivedAt > Date.now() - 3600000)
-              const entry = { id: state.nextId++, contact: data.from, question: data.body, reply: null, status: recent.length >= 12 ? 'rate_limited' : 'pending', receivedAt }
+              const entry = { id: state.nextId++, contact: data.from, question: data.body, reply: null, status: recent.length >= hourlyLimit ? 'rate_limited' : 'pending', receivedAt }
               state.hub.recent.push(entry)
               if (entry.status !== 'pending') show()
               else {
