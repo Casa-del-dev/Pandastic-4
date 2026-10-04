@@ -7,16 +7,19 @@ Everything here produces files the Android app loads from `android/app/src/main/
 
 ```sh
 python -m venv ml/.venv
-ml/.venv/Scripts/python -m pip install numpy onnx onnxruntime pillow pandas requests pypdf imagehash timm modal
-ml/.venv/Scripts/python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+source ml/.venv/bin/activate          # Windows (Git Bash): source ml/.venv/Scripts/activate
+pip install numpy onnx onnxruntime pillow pandas requests pypdf imagehash timm modal
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
+
+All commands below assume the venv is active, so `python` is the venv's Python on Linux, macOS and Windows.
 
 ## Knowledge base (`knowledge.sqlite`, shipped)
 
 | Step | Command | Output |
 | :-- | :-- | :-- |
-| Refresh prices from the official sources | `ml/.venv/Scripts/python ml/fetch_prices.py` | `data/prices_coffee_ucda.csv`, `data/prices_wfp_uga.csv` |
-| Build + validate the database | `ml/.venv/Scripts/python ml/build_knowledge.py` | `assets/models/knowledge.sqlite` |
+| Refresh prices from the official sources | `python ml/fetch_prices.py` | `data/prices_coffee_ucda.csv`, `data/prices_wfp_uga.csv` |
+| Build + validate the database | `python ml/build_knowledge.py` | `assets/models/knowledge.sqlite` |
 
 Advice text lives in `data/advice.json`, sources in `data/sources.csv`, keywords in `data/lexicon.csv`.
 The build fails if any row lacks a source, any SMS text is not GSM-7 or longer than 120 characters,
@@ -28,13 +31,13 @@ The app ships a **stub** (`ml/make_stub_classifier.py`, `"stub": true`) until th
 
 ```sh
 cd ml
-../ml/.venv/Scripts/python -m leaf.smoke                 # CPU end-to-end check with synthetic images (~1 min)
+python -m leaf.smoke                         # CPU end-to-end check with synthetic images (~1 min)
 modal token new                                          # once per machine
 modal run modal_app.py --stage all --labels p0           # fetch -> manifest -> train on an L4 GPU
 modal run modal_app.py --stage train --smoke             # cheap 30-step GPU check first, if you prefer
 modal run modal_app.py --stage all --labels p2           # + maize from CCMT (Ghana): healthy, fall armyworm, streak virus
 modal volume get pandastic-models leaf/<version> ./artifacts/
-../ml/.venv/Scripts/python -m leaf.install artifacts/<version>   # replaces the stub, copies reports to ml/reports/
+python -m leaf.install artifacts/<version>   # replaces the stub, copies reports to ml/reports/
 ```
 
 What the pipeline does (`ml/leaf/`):

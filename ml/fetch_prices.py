@@ -7,7 +7,7 @@ Sources (both public, cited per row in knowledge.sqlite):
   * Maize and bean retail prices: WFP food prices for Uganda on HDX (CC BY-IGO).
 
 Outputs: data/prices_coffee_ucda.csv, data/prices_wfp_uga.csv. Raw downloads go to data/raw/ (git-ignored).
-Usage: ml/.venv/Scripts/python ml/fetch_prices.py
+Usage: python ml/fetch_prices.py
 """
 import csv
 import re

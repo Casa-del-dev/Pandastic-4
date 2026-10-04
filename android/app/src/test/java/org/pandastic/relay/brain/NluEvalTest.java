@@ -13,11 +13,11 @@ import org.junit.Test;
 /**
  * Scores KeywordNlu on ml/llm/eval_sms.csv (synthetic SW/EN SMS written by the team, labelled synthetic).
  * Commodity is scored as the Resolver uses it: the crop's default when the message names none.
- * Set -Dpandastic.evalOut=path.csv to save the predictions for ml/llm/eval_llm.py.
+ * Predictions for ml/llm/eval_llm.py are written to build/nlu-eval/kw_{dev,heldout}.csv (under android/app with Gradle).
  */
 public class NluEvalTest {
     @Test public void keywordNluOnDevSet() throws Exception {
-        int[] correct = evaluate("ml/llm/eval_sms.csv", "pandastic.evalOut");
+        int[] correct = evaluate("ml/llm/eval_sms.csv", "pandastic.evalOut", "kw_dev.csv");
         int n = correct[correct.length - 1];
         // Floors, not targets: they catch regressions in the lexicon or the matcher.
         assertTrue(correct[1] >= 0.85 * n);  // intent
@@ -27,11 +27,11 @@ public class NluEvalTest {
 
     /** Held-out set: written before any results and never used to tune the lexicon. Reported, not asserted. */
     @Test public void keywordNluOnHeldOutSet() throws Exception {
-        evaluate("ml/llm/eval_sms_heldout.csv", "pandastic.evalOutHeldout");
+        evaluate("ml/llm/eval_sms_heldout.csv", "pandastic.evalOutHeldout", "kw_heldout.csv");
     }
 
     /** @return correct counts per slot, then the number of rows as the last element. */
-    private static int[] evaluate(String relative, String outProperty) throws Exception {
+    private static int[] evaluate(String relative, String outProperty, String defaultName) throws Exception {
         File file = FakeKnowledge.findRepoFile(relative);
         List<String[]> rows = new ArrayList<>();
         List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
@@ -63,8 +63,12 @@ public class NluEvalTest {
         report.append(String.format("  all slots %5.1f%%%n", 100.0 * allCorrect / rows.size()));
         System.out.print(report);
         System.out.print(misses);
+        // Gradle does not forward -D flags to the test JVM, so by default the predictions go to the module's
+        // build/nlu-eval/ (git-ignored); -Dpandastic.evalOut* still overrides when the test runs outside Gradle.
         String target = System.getProperty(outProperty);
-        if (target != null) try (PrintWriter w = new PrintWriter(target, "UTF-8")) { w.print(out); }
+        File outFile = target != null ? new File(target) : new File("build/nlu-eval/" + defaultName);
+        if (outFile.getParentFile() != null) outFile.getParentFile().mkdirs();
+        try (PrintWriter w = new PrintWriter(outFile, "UTF-8")) { w.print(out); }
         int[] result = java.util.Arrays.copyOf(correct, correct.length + 1);
         result[correct.length] = rows.size();
         return result;

@@ -4,7 +4,7 @@ Mendeley serves each CCMT image as a separate file and blocks cloud IPs (403 fro
 redirects to an unsigned public S3 object. Run this once from a normal connection; Modal then downloads the
 S3 URLs directly. The Mendeley URL stays in the CSV as the citation.
 
-Usage (from ml/): ../ml/.venv/Scripts/python -m leaf.resolve_ccmt
+Usage (from ml/): python -m leaf.resolve_ccmt
 """
 import csv
 import time

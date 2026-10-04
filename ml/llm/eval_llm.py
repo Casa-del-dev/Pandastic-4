@@ -5,7 +5,7 @@ temperature 0, thinking disabled, and scores the slots exactly like NluEvalTest 
 default when a price question names none). Latency is measured on this computer's CPU; a phone is slower.
 
 Usage (from the repo root):
-  ml/.venv/Scripts/python ml/llm/eval_llm.py --server ml/artifacts/llm/llama/llama-server.exe \
+  python ml/llm/eval_llm.py --server path/to/llama-server \
       --model ml/artifacts/llm/Qwen3.5-0.8B-Q4_K_M.gguf [--keyword-predictions dev.csv heldout.csv]
 Writes ml/reports/nlu_eval.md and ml/reports/nlu_eval.json.
 """

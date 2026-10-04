@@ -3,7 +3,7 @@
 It checks the code path and the output format, not accuracy (no pretrained weights, a few steps).
 Optionally also indexes the real local downloads (BRACOL + a JMuBEN zip) to check label mapping and de-duplication.
 
-Usage (from ml/):  ../ml/.venv/Scripts/python -m leaf.smoke [--real-local ../data/raw]
+Usage (from ml/):  python -m leaf.smoke [--real-local ../data/raw]
 """
 import argparse
 import json

@@ -6,7 +6,7 @@ Schema: docs/contracts/README.md section 3. The build fails on any rule violatio
 every advice/price row cites a source, en/sw SMS text is GSM-7 and <= 120 chars, long text <= 600 chars,
 no virtual tables (Android's SQLite has no FTS5), journal_mode=DELETE, user_version=1.
 
-Usage: ml/.venv/Scripts/python ml/build_knowledge.py
+Usage: python ml/build_knowledge.py
 """
 import csv
 import json

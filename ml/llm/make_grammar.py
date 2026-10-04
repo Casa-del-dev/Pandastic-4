@@ -4,7 +4,7 @@ The LLM (Qwen3.5-0.8B via llama.cpp) may only emit this one compact JSON object,
 {"lang":..,"intent":..,"crop":..,"symptom":..,"commodity":..,"offer":..}
 Symptoms are the condition suffixes of the classifier labels, so the model can only name a condition we know.
 
-Usage: ml/.venv/Scripts/python ml/llm/make_grammar.py
+Usage: python ml/llm/make_grammar.py
 """
 import json
 import sys

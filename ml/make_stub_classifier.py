@@ -5,7 +5,7 @@ with a hand-set linear rule (green -> healthy, orange/yellow -> rust, brown -> c
 grey/blue/white -> other), so the Android app can integrate ONNX Runtime and exercise every
 resolver status before the real model (T10) exists. The real model ships under the same file names.
 
-Usage: ml/.venv/Scripts/python ml/make_stub_classifier.py
+Usage: python ml/make_stub_classifier.py
 """
 import json
 from pathlib import Path

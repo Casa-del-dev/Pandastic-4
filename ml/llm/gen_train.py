@@ -4,7 +4,7 @@ Templates in Swahili, English and mixed, with menu codes, typos, number formats 
 elfu 12, Swahili number words) and the symptom phrasings of the label set. Every row is checked against
 the grammar's enums, and texts that appear in the eval sets are removed, so evaluation stays honest.
 
-Usage: ml/.venv/Scripts/python -m llm.gen_train --n 3000 --out ml/artifacts/llm/train.jsonl   (from ml/)
+Usage: python -m llm.gen_train --n 3000 --out ml/artifacts/llm/train.jsonl   (from ml/)
 """
 import argparse
 import csv
