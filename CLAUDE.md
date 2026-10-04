@@ -14,8 +14,9 @@ Messages on the emulators), and gets an SMS reply in the same thread within seco
 the phone. Questions and answers never use the internet: transport is carrier SMS only. The INTERNET permission is
 used for one thing, the opt-in language-model download over mobile data (user decision: Noor's house has no Wi-Fi;
 `ModelDownloader`, Android DownloadManager, size + SHA-256 checked against `ml/llm/model.json`, from the GitHub
-release `models-v1`); the WebView blocks every network load. Models only pick labels and slots.
-Every sentence the farmer reads is a template or a cited advice row.
+release `models-v1`); the WebView blocks every network load. Models pick labels and slots; every fact the farmer
+reads is a template or a cited advice row. In the helper's chat only, a model may also reword the fixed answer
+(`ReplyWriter`, checked word by word in code, shown above the fixed answer); automatic SMS always get the fixed text.
 
 **Submission ~13:00 UTC 2026-10-04. Feature freeze ~10:30 UTC.** Model install decisions by ~08:30 UTC, so A can
 check them on the emulator first.
@@ -134,8 +135,9 @@ scripts/                             android-emulator.sh, bridge-e2e.mjs, sms-la
 - Coffee does not transfer across countries: a model never trained on RoCoLe answers 1.2% of its photos.
 
 **SMS understanding:** `KeywordNlu` (`data/lexicon.csv`; function words pick sw/en, default sw; crop-aware
-symptoms) + optional **Qwen3.5-0.8B Q4_K_M** via llama.cpp + GBNF (`LlmNlu`, 20 s budget, NLU only, never writes
-text). Prefers the LoRA file `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf` (542 MB) over the base `Qwen3.5-0.8B-Q4_K_M.gguf`
+symptoms) + optional **Qwen3.5-0.8B Q4_K_M** via llama.cpp + GBNF (`LlmNlu`, 20 s budget). **Chat writer:** an
+optional `Qwen3.5-2B-Q4_K_M.gguf` (1.28 GB, side-loaded into `files/models/`, A, ddbd89a) rewords the helper's chat
+replies when present; otherwise the 0.8B does; reading SMS stays with the 0.8B (`docs/LLM-WRITING.md`). Prefers the LoRA file `Qwen3.5-0.8B-pandastic-Q4_K_M.gguf` (542 MB) over the base `Qwen3.5-0.8B-Q4_K_M.gguf`
 (533 MB). Side-loaded, imported from a file, or downloaded in the app; never committed. **The model reads every
 message** (user decision, fddc272) and each reply ends with one template line "AI ya simu imeelewa: bei, kahawa,
 12,000." naming only what it read too (`decision.understood`, `decision.nlu`). Which reading wins is unchanged: the
