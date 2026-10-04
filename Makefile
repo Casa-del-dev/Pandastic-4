@@ -22,7 +22,7 @@ EMULATOR_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-e)
 PHONE_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-d)
 EMULATOR_OPTIONS = --adb "$(ADB)" --emulator "$(EMULATOR)" --sdk "$(SDK_DIR)" --name "$(EMULATOR_NAME)" --device "$(DEVICE)" --timeout "$(BOOT_TIMEOUT)" --log "$(EMULATOR_LOG)"
 
-.PHONY: run run-device build release web stop
+.PHONY: run run-device build release web stop e2e
 
 # Gradle also builds React and bundles it into the APK.
 build:
@@ -55,3 +55,8 @@ run-device:
 
 stop:
 	@bash scripts/android-emulator.sh stop $(EMULATOR_OPTIONS)
+
+# Tests every UI <-> native connector inside the running debug app (emulator or phone): bridge methods,
+# questions, photos, hub settings, SMS round trip. Extra flags: make e2e ARGS="--photo leaf.jpg"
+e2e:
+	@ADB="$(ADB)" DEVICE="$(DEVICE)" node scripts/bridge-e2e.mjs --sms $(ARGS)
