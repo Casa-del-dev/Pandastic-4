@@ -47,6 +47,7 @@ avd_name() {
     printf '%s\n' "$response" | sed '/^OK$/d; /^$/d' | head -1
 }
 
+basic_lab_avd=pandastic_basic
 selected_serial=
 if [[ -n "$requested_serial" ]]; then
     for serial in "${running_serials[@]}"; do
@@ -60,10 +61,17 @@ elif [[ -n "$requested_name" ]]; then
             selected_serial=$serial
         fi
     done
-elif [[ ${#running_serials[@]} -eq 1 ]]; then
-    selected_serial=${running_serials[0]}
-elif [[ ${#running_serials[@]} -gt 1 ]]; then
-    fail "Multiple emulators are running: ${running_serials[*]}. Select DEVICE=emulator-5554 or EMULATOR_NAME=Your_AVD."
+else
+    # The SMS lab's second phone (AVD pandastic_basic, `make emulator-basic`) is never the default target.
+    candidates=()
+    for serial in "${running_serials[@]}"; do
+        [[ "$(avd_name "$serial" || true)" == "$basic_lab_avd" ]] || candidates+=("$serial")
+    done
+    if [[ ${#candidates[@]} -eq 1 ]]; then
+        selected_serial=${candidates[0]}
+    elif [[ ${#candidates[@]} -gt 1 ]]; then
+        fail "Multiple emulators are running: ${candidates[*]}. Select DEVICE=emulator-5554 or EMULATOR_NAME=Your_AVD."
+    fi
 fi
 
 if [[ "$action" == stop ]]; then
@@ -92,6 +100,9 @@ if [[ -z "$selected_serial" ]]; then
     command -v "$emulator_command" >/dev/null || fail "Emulator not found: $emulator_command. Set SDK_DIR or EMULATOR."
     available_names=$(ANDROID_HOME="$sdk_directory" ANDROID_SDK_ROOT="$sdk_directory" "$emulator_command" -list-avds) || fail "Could not list Android virtual devices."
     mapfile -t names < <(printf '%s\n' "$available_names" | tr -d '\r' | sed '/^$/d')
+    if [[ -z "$requested_name" && ${#names[@]} -gt 1 ]]; then  # skip the SMS lab's Basic phone AVD
+        mapfile -t names < <(printf '%s\n' "${names[@]}" | grep -vx "$basic_lab_avd")
+    fi
     if [[ -n "$requested_name" ]]; then
         found=false
         for name in "${names[@]}"; do [[ "$name" != "$requested_name" ]] || found=true; done
