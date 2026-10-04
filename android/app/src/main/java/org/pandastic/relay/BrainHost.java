@@ -28,6 +28,8 @@ import org.pandastic.relay.hub.HubPrefs;
 /**
  * One place that owns the on-device models. The UI bridge and the SMS hub both submit work here,
  * and it runs on a single thread, so two inferences never compete for the phone's memory.
+ * The LLM loads on its own thread (tens of seconds on a slow phone); until it is ready, questions
+ * are answered by the keyword NLU alone instead of waiting.
  */
 public final class BrainHost {
     private static final String TAG = "PandasticBrain";
@@ -35,11 +37,14 @@ public final class BrainHost {
 
     private final Context context;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService llmLoader = Executors.newSingleThreadExecutor();
+    // volatile: info() and status() read them from the UI thread without waiting for a load in progress.
     private volatile LeafClassifier classifier;
     private volatile String classifierError;
     private volatile Brain brain;
     private Knowledge knowledge;
     private volatile LlmNlu llm;
+    private volatile boolean llmLoading;
     private volatile String brainError;
 
     public static synchronized BrainHost get(Context context) {
@@ -102,8 +107,8 @@ public final class BrainHost {
 
     public <T> Future<T> submit(Callable<T> task) { return worker.submit(task); }
 
-    /** Loads the knowledge base and the LLM (and caches its prompt) before the first question arrives. */
-    public void warmUp() { worker.execute(() -> { if (new HubPrefs(context).capable()) brain(); }); }
+    /** Capable phone: loads the classifier, the knowledge base and (in the background) the LLM before the first question. */
+    public void warmUp() { worker.execute(() -> { if (new HubPrefs(context).capable()) { classifier(); brain(); } }); }
 
     /** Photo + optional question → decision JSON (contracts §2). Call from the worker thread. */
     public String photo(Bitmap bitmap, String text, String lang) throws Exception {
@@ -131,15 +136,24 @@ public final class BrainHost {
         return new Responder.Reply(SmsFormatter.format(decision), decision.toJson());
     }
 
+    /**
+     * What is loaded right now. Never waits for a model (the UI calls it on its own thread); while
+     * something is still loading, "loading" is true and the load is started if nobody asked yet.
+     */
     public JSONObject info() throws JSONException {
-        LeafClassifier model = classifier();
+        LeafClassifier model = classifier;
+        boolean missing = (model == null && classifierError == null) || (brain == null && brainError == null);
+        boolean capable = new HubPrefs(context).capable();  // a Basic phone never loads models
+        boolean loading = capable && (missing || llmLoading);
+        if (capable && missing) warmUp();
         return new JSONObject()
             .put("classifier", model == null ? JSONObject.NULL : model.version)
             .put("classifierStub", model != null && model.stub)
             .put("classifierError", classifierError == null ? JSONObject.NULL : classifierError)
-            .put("brain", brain() != null)
+            .put("brain", brain != null)
             .put("llm", llm == null ? JSONObject.NULL : LlmNlu.MODEL_NAME)
-            .put("brainError", brainError == null ? JSONObject.NULL : brainError);
+            .put("brainError", brainError == null ? JSONObject.NULL : brainError)
+            .put("loading", loading);
     }
 
     /** Knowledge base + resolver. Null only if knowledge.sqlite cannot be opened; then replies stay safe fallbacks. */
@@ -147,8 +161,23 @@ public final class BrainHost {
         if (brain == null && brainError == null) {
             try {
                 knowledge = Knowledge.open(context);
-                llm = LlmNlu.open(context, new KeywordNlu(knowledge.lexicon()));
-                brain = new Brain(knowledge, llm);
+                KeywordNlu keywords = new KeywordNlu(knowledge.lexicon());
+                // Keywords answer until the LLM is ready; then it fills only what they missed (LlmNlu.parse).
+                Brain created = brain = new Brain(knowledge, (text, lang) -> {
+                    LlmNlu model = llm;
+                    return model != null ? model.parse(text, lang) : keywords.parse(text, lang);
+                });
+                llmLoading = true;
+                llmLoader.execute(() -> {
+                    LlmNlu loaded = null;
+                    try { loaded = LlmNlu.open(context, keywords); }
+                    catch (Throwable e) { Log.e(TAG, "LLM unavailable; keywords only", e); }
+                    synchronized (this) {  // unload() may have run meanwhile (Basic phone): then free it again
+                        if (brain == created) llm = loaded;
+                        else if (loaded != null) loaded.close();
+                        llmLoading = false;
+                    }
+                });
             }
             catch (Exception e) {
                 brainError = e.getClass().getSimpleName();

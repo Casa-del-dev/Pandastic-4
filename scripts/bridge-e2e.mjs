@@ -1,0 +1,349 @@
+#!/usr/bin/env node
+// End-to-end test of the UI <-> native connectors on a running emulator or phone with a debug build.
+// It drives the real window.PandasticNative inside the app's WebView (Chrome DevTools protocol over adb),
+// so it checks the Java bridge, BrainHost, the knowledge base, the classifier and the JSON the UI reads.
+//
+//   node scripts/bridge-e2e.mjs            # bridge, questions, photo, hub settings (restored afterwards)
+//   node scripts/bridge-e2e.mjs --sms      # also an SMS round trip through the hub (grants SMS permissions,
+//                                          # turns the hub on if needed, restores its state at the end)
+//   node scripts/bridge-e2e.mjs --photo a.jpg --photo b.jpg   # also real photos, shrunk exactly like the UI does;
+//                                          # a file named <label>__*.jpg (e.g. coffee_rust__x.jpg) is also scored
+//   ADB=/path/to/adb DEVICE=emulator-5554 node scripts/bridge-e2e.mjs
+//
+// Needs Node 22+ (global WebSocket). Exit code 1 if any check fails.
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { basename } from 'node:path'
+
+const PACKAGE = 'org.pandastic.relay'
+const PORT = 9333
+const withSms = process.argv.includes('--sms')
+const photos = process.argv.flatMap((arg, i) => arg === '--photo' ? [process.argv[i + 1]] : [])
+const sdkAdb = `${process.env.ANDROID_HOME || `${homedir()}/Android/Sdk`}/platform-tools/adb`
+const ADB = process.env.ADB || (existsSync(sdkAdb) ? sdkAdb : 'adb')
+const target = process.env.DEVICE ? ['-s', process.env.DEVICE] : []
+const adb = (...args) => execFileSync(ADB, [...target, ...args], { encoding: 'utf8' }).trim()
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+// Every status the Brain may send (Decision.java) plus the bridge's own ERROR.
+const STATUSES = ['CONFIDENT', 'UNCERTAIN', 'UNSUPPORTED', 'RETAKE', 'ASK_CROP', 'TEXT_ONLY', 'PRICE', 'PRICE_STALE',
+  'NO_DATA', 'HELP', 'ERROR']
+const BRIDGE = ['checkPhoto', 'ask', 'info', 'hubStatus', 'setHubEnabled', 'setHubContacts', 'setHubLang',
+  'clearHubHistory', 'draftSms', 'share', 'speak', 'voices', 'stopSpeaking']  // = type Native in frontend/src/native.ts
+
+// ---- results ---------------------------------------------------------------------------------
+
+const results = []
+async function check(name, fn) {
+  const started = Date.now()
+  try {
+    const note = await fn()
+    results.push({ name, ok: true, ms: Date.now() - started, note: note ?? '' })
+  } catch (e) {
+    results.push({ name, ok: false, ms: Date.now() - started, note: e.message })
+  }
+  const r = results.at(-1)
+  console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}  ${r.ms} ms  ${r.note}`)
+}
+function expect(condition, message) { if (!condition) throw new Error(message) }
+const isNum = v => typeof v === 'number' && Number.isFinite(v)
+const isStrOrNull = v => v === null || v === undefined || typeof v === 'string'
+
+/** The fields the UI reads (frontend/src/native.ts type Decision), with the types it expects. */
+function expectDecision(d, where) {
+  expect(d && typeof d === 'object', `${where}: not an object`)
+  expect(STATUSES.includes(d.status), `${where}: unknown status ${d.status}`)
+  expect(typeof d.escalate === 'boolean', `${where}: escalate is ${typeof d.escalate}`)
+  for (const key of ['intent', 'title', 'message', 'translation', 'crop', 'label', 'runner_up', 'advice_sms',
+    'advice_long', 'quality', 'error']) expect(isStrOrNull(d[key]), `${where}: ${key} is ${typeof d[key]}`)
+  for (const key of ['prob', 'runner_up_prob']) expect(d[key] == null || isNum(d[key]), `${where}: ${key} is ${d[key]}`)
+  if (d.stub !== undefined) expect(typeof d.stub === 'boolean', `${where}: stub is ${typeof d.stub}`)
+  if (d.source) expect(typeof d.source.id === 'string' && isStrOrNull(d.source.title), `${where}: bad source`)
+  if (d.price) {
+    const p = d.price
+    expect(typeof p.commodity === 'string' && isNum(p.low) && isNum(p.high) && p.low <= p.high, `${where}: bad price range`)
+    expect(typeof p.currency === 'string' && typeof p.unit === 'string' && typeof p.date === 'string', `${where}: bad price units`)
+    expect(typeof p.source_id === 'string', `${where}: price without source_id`)
+    expect(p.offer == null || isNum(p.offer), `${where}: offer is ${p.offer}`)
+    expect(p.gap_pct == null || isNum(p.gap_pct), `${where}: gap_pct is ${p.gap_pct}`)
+    expect(p.stale === undefined || typeof p.stale === 'boolean', `${where}: stale is ${p.stale}`)
+  }
+  // Safety rules the UI relies on (contracts §2): only a photo can be CONFIDENT, and it never escalates.
+  if (d.status === 'CONFIDENT') expect(d.escalate === false && typeof d.label === 'string', `${where}: CONFIDENT shape`)
+  if (['UNCERTAIN', 'UNSUPPORTED', 'RETAKE', 'ERROR'].includes(d.status)) expect(d.escalate, `${where}: ${d.status} must escalate`)
+}
+
+// ---- DevTools connection ---------------------------------------------------------------------
+
+async function connect() {
+  let pid = ''
+  try { pid = adb('shell', 'pidof', PACKAGE) } catch { /* not running */ }
+  if (!pid) {
+    adb('shell', 'am', 'start', '-W', '-n', `${PACKAGE}/.FrontendActivity`)
+    await sleep(2500)
+    pid = adb('shell', 'pidof', PACKAGE)
+  }
+  pid = pid.split(/\s+/)[0]
+  adb('forward', `tcp:${PORT}`, `localabstract:webview_devtools_remote_${pid}`)
+  let pages = []
+  for (let i = 0; i < 20 && !pages.length; i++) {
+    try { pages = (await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()).filter(p => p.type === 'page') }
+    catch { await sleep(500) }
+  }
+  expect(pages.length, 'no WebView page: is this a debug build, and is the app in the foreground?')
+  const ws = new WebSocket(pages[0].webSocketDebuggerUrl)
+  await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = () => reject(new Error('DevTools socket failed')) })
+  let next = 0
+  const pending = new Map()
+  ws.onclose = () => {  // the page reloaded or the app died: fail what is waiting instead of hanging
+    for (const done of pending.values()) done({ error: { message: 'WebView went away (app crashed or page reloaded?)' } })
+    pending.clear()
+  }
+  ws.onmessage = event => {
+    const msg = JSON.parse(event.data)
+    if (pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id) }
+  }
+  /** Evaluates an expression in the page; awaits promises; returns the value. */
+  const evaluate = expression => new Promise((resolve, reject) => {
+    const id = ++next
+    pending.set(id, msg => {
+      if (msg.error) return reject(new Error(msg.error.message))
+      if (msg.result.exceptionDetails) return reject(new Error(msg.result.exceptionDetails.exception?.description ?? 'page exception'))
+      resolve(msg.result.result.value)
+    })
+    ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }))
+  })
+  return { evaluate, url: pages[0].url, close: () => { ws.close(); try { adb('forward', '--remove', `tcp:${PORT}`) } catch { /* gone */ } } }
+}
+
+// In-page helpers: answers to our ids go to us, everything else still reaches the app's own handler.
+const INSTALL = `(() => {
+  // Wrap the app's reply handler once per page load; the helpers below are replaced on every run.
+  if (!window.__e2eWaiting) {
+    const appReply = window.__pandasticReply;
+    const pending = window.__e2eWaiting = new Map();
+    window.__pandasticReply = (id, d) => pending.has(id) ? (pending.get(id)(d), pending.delete(id)) : appReply && appReply(id, d);
+  }
+  const waiting = window.__e2eWaiting;
+  window.__e2e = {
+    reply(method, args, timeoutMs) {
+      const id = 'e2e-' + Math.random().toString(36).slice(2);
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { waiting.delete(id); reject(new Error(method + ' gave no answer in ' + timeoutMs + ' ms')); }, timeoutMs);
+        waiting.set(id, d => { clearTimeout(timer); resolve(d); });
+        window.PandasticNative[method](id, ...args);
+      });
+    },
+    hubEvent(trigger, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('no pandastic:hub event')), timeoutMs);
+        window.addEventListener('pandastic:hub', e => { clearTimeout(timer); resolve(e.detail); }, { once: true });
+        trigger();
+      });
+    },
+    /** frontend/src/native.ts toJpegBase64: longest side 640 px, JPEG quality 0.88. */
+    async shrink(base64) {
+      const bitmap = await createImageBitmap(await (await fetch('data:image/jpeg;base64,' + base64)).blob(), { imageOrientation: 'from-image' });
+      const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(bitmap.width * scale); c.height = Math.round(bitmap.height * scale);
+      c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.88).split(',')[1];
+    },
+    jpeg(kind) {
+      const c = document.createElement('canvas'); c.width = 640; c.height = 480;
+      const g = c.getContext('2d');
+      if (kind === 'dark') { g.fillStyle = '#050505'; g.fillRect(0, 0, 640, 480); }
+      else {  // a leaf-like shape with spots and texture, so the quality gate lets it through
+        g.fillStyle = '#6b5a3a'; g.fillRect(0, 0, 640, 480);
+        g.fillStyle = '#2f7d32'; g.beginPath(); g.ellipse(320, 240, 260, 130, 0.3, 0, 2 * Math.PI); g.fill();
+        g.strokeStyle = '#9ccc65'; g.lineWidth = 4; g.beginPath(); g.moveTo(90, 330); g.lineTo(560, 150); g.stroke();
+        for (let i = 0; i < 400; i++) { g.fillStyle = i % 9 ? 'rgba(20,60,20,0.25)' : '#e09a2a'; g.fillRect((i * 97) % 600 + 20, (i * 57) % 440 + 20, 6, 6); }
+      }
+      return c.toDataURL('image/jpeg', 0.9).split(',')[1];
+    },
+  };
+  return true;
+})()`
+
+// ---- checks ----------------------------------------------------------------------------------
+
+// Node's WebSocket does not keep the process alive on its own: without this, a slow answer ends the run.
+const keepAlive = setInterval(() => {}, 1000)
+const page = await connect()
+const { evaluate } = page
+await evaluate(INSTALL)
+const ask = (text, lang) => evaluate(`__e2e.reply('ask', [${JSON.stringify(text)}, ${JSON.stringify(lang)}], 60000)`)
+
+await check('bridge exposes every method native.ts declares', async () => {
+  const missing = await evaluate(`${JSON.stringify(BRIDGE)}.filter(m => typeof window.PandasticNative?.[m] !== 'function')`)
+  expect(missing.length === 0, `missing: ${missing.join(', ')}`)
+  return page.url
+})
+
+let info
+await check('info(): answers at once, even while models load', async () => {
+  const started = Date.now()
+  info = JSON.parse(await evaluate('PandasticNative.info()'))
+  expect(Date.now() - started < 1000, `info() blocked the page for ${Date.now() - started} ms`)
+  return info.loading ? 'models still loading' : 'all loaded'
+})
+
+await check('info(): knowledge base, classifier (and LLM, if side-loaded) finish loading', async () => {
+  const started = Date.now()
+  while (info.loading && Date.now() - started < 120000) {
+    await sleep(500)
+    info = JSON.parse(await evaluate('PandasticNative.info()'))
+  }
+  expect(!info.loading, 'still loading after 120 s')
+  expect(info.brain === true, `brain ${info.brain}, brainError ${info.brainError}`)
+  expect(typeof info.classifier === 'string', `classifier ${info.classifier}, error ${info.classifierError}`)
+  expect(typeof info.classifierStub === 'boolean', 'classifierStub not boolean')
+  return `${Math.round((Date.now() - started) / 1000)} s: classifier ${info.classifier}${info.classifierStub ? ' (STUB)' : ''}, llm ${info.llm ?? 'none (keywords only)'}`
+})
+
+await check('ask: SMS price code "P 1 12000"', async () => {
+  const d = await ask('P 1 12000', 'sw')
+  expectDecision(d, 'P 1 12000')
+  expect(['PRICE', 'PRICE_STALE'].includes(d.status) && d.price?.offer === 12000, `${d.status}, offer ${d.price?.offer}`)
+  return `${d.price.commodity} ${d.price.low}-${d.price.high} ${d.price.currency}, gap ${d.price.gap_pct}%`
+})
+
+// The Price screen builds this exact sentence (App.tsx PriceCheck: cropWords + "bei"/"price" + offer).
+const uiPhrases = { sw: { coffee: 'kahawa', maize: 'mahindi', bean: 'maharage' }, en: { coffee: 'coffee', maize: 'maize', bean: 'beans' } }
+for (const [lang, crops] of Object.entries(uiPhrases)) {
+  for (const [crop, word] of Object.entries(crops)) {
+    const text = `${word} ${lang === 'sw' ? 'bei' : 'price'} 1500`
+    await check(`ask: Price screen sentence "${text}"`, async () => {
+      const d = await ask(text, lang)
+      expectDecision(d, text)
+      expect(['PRICE', 'PRICE_STALE'].includes(d.status), `status ${d.status}: the Price screen would show "not sure"`)
+      expect(d.crop === crop || d.crop?.startsWith(crop), `crop ${d.crop}, expected ${crop}`)
+      expect(d.price.offer === 1500, `offer ${d.price.offer}`)
+      return `${d.status} ${d.price.commodity} ${d.price.low}-${d.price.high}, gap ${d.price.gap_pct}%${d.price.stale ? ', stale' : ''}`
+    })
+  }
+}
+
+await check('ask: "?" gives the menu without escalating', async () => {
+  const d = await ask('?', 'sw')
+  expectDecision(d, '?')
+  expect(d.status === 'HELP' && !d.escalate && d.message, `${d.status} escalate=${d.escalate}`)
+})
+
+await check('ask: symptom in words is never CONFIDENT and escalates', async () => {
+  const d = await ask('majani ya kahawa yana unga wa njano', 'sw')
+  expectDecision(d, 'symptom text')
+  expect(d.status !== 'CONFIDENT' && d.escalate, `${d.status} escalate=${d.escalate}`)
+  expect(typeof d.message === 'string' && d.message.length > 0, 'no message for the card')
+  return d.status
+})
+
+await check('ask: price question with no crop asks which crop (the LLM must not invent one)', async () => {
+  const d = await ask('how much is it today', 'en')
+  expectDecision(d, 'no crop')
+  expect(d.status === 'ASK_CROP' && d.crop === 'unknown', `${d.status} for crop ${d.crop}: ${(d.message ?? '').slice(0, 60)}`)
+})
+
+await check('checkPhoto: leaf-like photo gets a decision the card can render', async () => {
+  const d = await evaluate(`__e2e.reply('checkPhoto', [__e2e.jpeg('leaf'), '', 'sw'], 60000)`)
+  expectDecision(d, 'leaf photo')
+  expect(d.status !== 'ERROR', `bridge error ${d.error}`)
+  expect(typeof d.stub === 'boolean', 'photo decisions carry stub')
+  return `${d.status} ${d.label ?? ''} ${d.prob ?? ''}${d.stub ? ' (stub model)' : ''}`
+})
+
+await check('checkPhoto: dark photo asks for a retake', async () => {
+  const d = await evaluate(`__e2e.reply('checkPhoto', [__e2e.jpeg('dark'), '', 'en'], 60000)`)
+  expectDecision(d, 'dark photo')
+  expect(d.status === 'RETAKE' && d.quality === 'dark', `${d.status} ${d.quality}`)
+})
+
+await check('checkPhoto: bytes that are not a photo give ERROR, not a crash', async () => {
+  const d = await evaluate(`__e2e.reply('checkPhoto', [btoa('not a photo'), '', 'sw'], 30000)`)
+  expectDecision(d, 'garbage photo')
+  expect(d.status === 'ERROR' && d.escalate, `${d.status}`)
+  return d.error
+})
+
+for (const file of photos) {
+  const expected = basename(file).includes('__') ? basename(file).split('__')[0] : null
+  await check(`checkPhoto: ${basename(file)}`, async () => {
+    const b64 = JSON.stringify(readFileSync(file).toString('base64'))
+    const d = await evaluate(`__e2e.shrink(${b64}).then(small => __e2e.reply('checkPhoto', [small, '', 'sw'], 60000))`)
+    expectDecision(d, file)
+    if (expected) expect(d.label === expected || d.status !== 'CONFIDENT', `CONFIDENT ${d.label}, truth ${expected}`)
+    return `${d.status} ${d.label} p=${d.prob}${d.runner_up ? ` (2nd ${d.runner_up} ${d.runner_up_prob})` : ''}`
+  })
+}
+
+let hub
+await check('hubStatus(): every field the SMS helper screen reads', async () => {
+  hub = JSON.parse(await evaluate('PandasticNative.hubStatus()'))
+  for (const key of ['enabled', 'running', 'smsPermission', 'notificationPermission']) expect(typeof hub[key] === 'boolean', `${key}`)
+  expect(['sw', 'en'].includes(hub.lang), `lang ${hub.lang}`)
+  expect(Array.isArray(hub.contacts) && hub.contacts.every(c => typeof c.name === 'string' && typeof c.number === 'string'), 'contacts')
+  expect(isNum(hub.answeredToday), 'answeredToday')
+  expect(Array.isArray(hub.recent) && hub.recent.every(e => isNum(e.id) && typeof e.contact === 'string'
+    && typeof e.question === 'string' && isStrOrNull(e.reply) && typeof e.status === 'string' && isNum(e.receivedAt)), 'recent')
+  return `enabled ${hub.enabled}, running ${hub.running}, ${hub.contacts.length} contacts, ${hub.recent.length} recent`
+})
+
+if (hub) {
+  const otherLang = hub.lang === 'sw' ? 'en' : 'sw'
+  await check('setHubLang: change is announced to the UI and kept', async () => {
+    const detail = await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubLang('${otherLang}'), 5000)`)
+    expect(detail.lang === otherLang, `event lang ${detail.lang}`)
+    expect(JSON.parse(await evaluate('PandasticNative.hubStatus()')).lang === otherLang, 'not persisted')
+  })
+  await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubLang('${hub.lang}'), 5000)`).catch(() => undefined)
+
+  const testContact = { name: 'E2E test', number: '+256700999123' }
+  await check('setHubContacts: list is announced and kept', async () => {
+    const list = JSON.stringify(JSON.stringify([...hub.contacts, testContact]))
+    const detail = await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubContacts(${list}), 5000)`)
+    expect(detail.contacts.some(c => c.number === testContact.number), 'test contact missing from event')
+  })
+  await check('setHubContacts: malformed JSON is ignored, list unchanged', async () => {
+    const detail = await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubContacts('[{oops'), 5000)`)
+    expect(detail.contacts.length === hub.contacts.length + 1, `now ${detail.contacts.length} contacts`)
+  })
+
+  if (withSms) {
+    await check('SMS round trip: allowlisted "P 1 12000" is answered by the hub', async () => {
+      for (const p of ['RECEIVE_SMS', 'SEND_SMS', 'POST_NOTIFICATIONS']) {
+        try { adb('shell', 'pm', 'grant', PACKAGE, `android.permission.${p}`) } catch { /* older Android */ }
+      }
+      try { adb('shell', 'dumpsys', 'deviceidle', 'whitelist', `+${PACKAGE}`) } catch { /* no battery prompt either way */ }
+      if (!hub.enabled) await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubEnabled(true), 10000)`)
+      const since = Date.now()
+      adb('emu', 'sms', 'send', testContact.number.replace('+', ''), 'P 1 12000')
+      for (let i = 0; i < 60; i++) {
+        await sleep(1000)
+        const now = JSON.parse(await evaluate('PandasticNative.hubStatus()'))
+        const entry = now.recent.find(e => e.question === 'P 1 12000' && e.receivedAt >= since - 60000)
+        if (entry && entry.status !== 'received') {
+          expect(entry.status === 'answered' && entry.reply, `status ${entry.status}`)
+          return `${Math.round((Date.now() - since) / 1000)} s: ${entry.reply.slice(0, 70)}…`
+        }
+      }
+      throw new Error('no answered entry within 60 s (is the hub running?)')
+    })
+    if (!hub.enabled) await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubEnabled(false), 10000)`).catch(() => undefined)
+  }
+  await evaluate(`__e2e.hubEvent(() => PandasticNative.setHubContacts(${JSON.stringify(JSON.stringify(hub.contacts))}), 5000)`)
+    .catch(() => undefined)
+}
+
+await check('voices(): answers without blocking', async () => {
+  const v = JSON.parse(await evaluate('PandasticNative.voices()'))
+  expect(typeof v.ready === 'boolean', 'ready')
+  return v.ready ? `sw ${v.sw}, en ${v.en}` : 'TTS engine still starting'
+})
+
+page.close()
+clearInterval(keepAlive)
+const failed = results.filter(r => !r.ok).length
+console.log(`\n${results.length - failed}/${results.length} passed${withSms ? '' : ' (SMS round trip skipped: --sms)'}`)
+process.exit(failed ? 1 : 0)
