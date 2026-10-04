@@ -66,3 +66,20 @@ JMUBEN_FOLDERS = [("cerc", "coffee_cercospora"), ("cersc", "coffee_cercospora"),
 # P1 mappings (used only when labels = P1_LABELS); anything unmapped from these sources becomes `other`.
 PLANTDOC_P1 = {"corn leaf blight": "maize_leaf_blight", "corn gray leaf spot": "maize_leaf_spot"}
 IBEAN_P1 = {"angular_leaf_spot": "bean_angular_leaf_spot", "bean_rust": "bean_rust", "healthy": "bean_healthy"}
+
+# Mendeley blocks cloud IPs (403 from Modal), but its files live on public, unsigned S3 objects.
+# Resolved from a residential IP on 2026-10-04; the Mendeley URLs above stay the citation.
+S3_MIRRORS = {
+    "https://data.mendeley.com/public-files/datasets/yy2k5y8mxg/files/c16b08ee-3ca6-4bf0-8f4e-4285a53a4a24/file_downloaded":
+        "https://prod-dcd-datasets-public-files-eu-west-1.s3.eu-west-1.amazonaws.com/74af38d1-f2ac-492c-83b3-c6bfe92368ac",
+    "https://data.mendeley.com/public-files/datasets/t2r6rszp5c/files/8657d2a2-c9a1-4733-9dbc-00c83aa3575a/file_downloaded":
+        "https://prod-dcd-datasets-public-files-eu-west-1.s3.eu-west-1.amazonaws.com/237c4edc-4565-4884-81fe-6418c833c654",
+    "https://data.mendeley.com/public-files/datasets/t2r6rszp5c/files/8c7c2915-f979-43f6-b3fd-b3bc7407da87/file_downloaded":
+        "https://prod-dcd-datasets-public-files-eu-west-1.s3.eu-west-1.amazonaws.com/690545a1-0f10-42f4-92d1-fd14ef5b1d35",
+    "https://data.mendeley.com/public-files/datasets/t2r6rszp5c/files/82625dd3-e908-4224-93b5-06a3b74f0c8a/file_downloaded":
+        "https://prod-dcd-datasets-public-files-eu-west-1.s3.eu-west-1.amazonaws.com/10ae2322-69f4-4b9e-9086-0c82b538f747",
+    "https://data.mendeley.com/public-files/datasets/tgv3zb82nd/files/d126777d-c495-4b7a-846a-c0228540ea10/file_downloaded":
+        "https://prod-dcd-datasets-public-files-eu-west-1.s3.eu-west-1.amazonaws.com/e54a6f09-b449-4eb8-8189-d7e345c36576",
+    "https://data.mendeley.com/public-files/datasets/tgv3zb82nd/files/f6d37632-6349-4be9-9af0-c3177dbfaa8a/file_downloaded":
+        "https://prod-dcd-datasets-public-files-eu-west-1.s3.eu-west-1.amazonaws.com/ee37230e-4f7c-458d-97eb-cd8d684e5607",
+}

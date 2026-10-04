@@ -28,7 +28,7 @@ image = (
         " | tar -xz -C /opt && ln -s /opt/llama-* /opt/llama-bin || true",
     )
     # The llm package needs its prompt, grammar and eval CSVs, not only .py files.
-    .add_local_python_source("llm", ignore=["**/__pycache__", "**/*.pyc"])
+    .add_local_python_source("llm", "leaf", ignore=["**/__pycache__", "**/*.pyc"])
 )
 models_volume = modal.Volume.from_name("pandastic-models", create_if_missing=True)
 hf_cache = modal.Volume.from_name("pandastic-hf-cache", create_if_missing=True)

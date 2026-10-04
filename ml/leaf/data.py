@@ -33,7 +33,12 @@ def download(sources, raw_dir: Path, log=print) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             log(f"download {name}/{filename}")
             tmp = target.with_suffix(target.suffix + ".part")
-            with requests.get(url, stream=True, timeout=600, headers={"User-Agent": "pandastic-research"}) as r:
+            r = requests.get(url, stream=True, timeout=600, headers={"User-Agent": "pandastic-research"})
+            if r.status_code == 403 and url in config.S3_MIRRORS:
+                r.close()
+                log(f"  403 from {url.split('/')[2]}; using its public S3 mirror")
+                r = requests.get(config.S3_MIRRORS[url], stream=True, timeout=600)
+            with r:
                 r.raise_for_status()
                 with open(tmp, "wb") as f:
                     for chunk in r.iter_content(1 << 20):
