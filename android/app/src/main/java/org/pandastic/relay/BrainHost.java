@@ -46,6 +46,7 @@ public final class BrainHost {
     private volatile LlmNlu llm;
     private volatile boolean llmLoading;
     private volatile Future<?> llmLoad;
+    private final java.util.concurrent.atomic.AtomicBoolean warmUpQueued = new java.util.concurrent.atomic.AtomicBoolean();
     private volatile String brainError;
 
     public static synchronized BrainHost get(Context context) {
@@ -118,7 +119,13 @@ public final class BrainHost {
     public <T> Future<T> submit(Callable<T> task) { return worker.submit(task); }
 
     /** Capable phone: loads the classifier, the knowledge base and (in the background) the LLM before the first question. */
-    public void warmUp() { worker.execute(() -> { if (new HubPrefs(context).capable()) { classifier(); brain(); } }); }
+    public void warmUp() {
+        if (!warmUpQueued.compareAndSet(false, true)) return;  // info() polls; one queued warm-up is enough
+        worker.execute(() -> {
+            try { if (new HubPrefs(context).capable()) { classifier(); brain(); } }
+            finally { warmUpQueued.set(false); }
+        });
+    }
 
     /** Photo + optional question → decision JSON (contracts §2). Call from the worker thread. */
     public String photo(Bitmap bitmap, String text, String lang) throws Exception {

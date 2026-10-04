@@ -138,6 +138,7 @@ public final class FrontendActivity extends Activity {
             }
         });
         bridge = new NativeBridge(this, webView);
+        bridge.initTts();  // the voice engine takes a moment to start; start it before the first "listen"
         webView.addJavascriptInterface(bridge, "PandasticNative");
         webView.loadUrl(START_URL);
         // Opening the app answers SMS questions that arrived while the helper was stopped.

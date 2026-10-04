@@ -16,6 +16,7 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.provider.OpenableColumns;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
@@ -339,34 +340,62 @@ final class NativeBridge {
         activity.runOnUiThread(() -> activity.startActivity(Intent.createChooser(send, null)));
     }
 
-    /** Reads text aloud with an installed offline voice. Returns false if none fits the language. */
+    /**
+     * Reads text aloud with an installed offline voice. Returns false if no voice fits the language (the UI
+     * then hides its button) or the engine is still starting. Progress is announced with a
+     * "pandastic:speech" event, detail {state: "start" | "done" | "stopped" | "error"}, so the UI can show a stop button.
+     */
     @JavascriptInterface public boolean speak(String text, String lang) {
         if (!ttsReady) { initTts(); return false; }
-        Locale locale = "en".equals(lang) ? Locale.ENGLISH : new Locale("sw");
-        int available = tts.isLanguageAvailable(locale);
-        if (available < TextToSpeech.LANG_AVAILABLE) return false;
+        if (text == null || text.trim().isEmpty()) return false;
+        Locale locale = locale(lang);
+        if (tts.isLanguageAvailable(locale) < TextToSpeech.LANG_AVAILABLE) return false;
         tts.setLanguage(locale);
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pandastic");
-        return true;
+        tts.setSpeechRate(0.9f);  // a little slower: many listeners read little and hear the advice once
+        String clipped = text.length() > TextToSpeech.getMaxSpeechInputLength()
+            ? text.substring(0, TextToSpeech.getMaxSpeechInputLength()) : text;
+        return tts.speak(clipped, TextToSpeech.QUEUE_FLUSH, null, "pandastic") == TextToSpeech.SUCCESS;
     }
 
+    /** {ready, sw, en, speaking}: which offline voices exist. Starts the engine if it is not running yet. */
     @JavascriptInterface public String voices() {
         try {
             if (!ttsReady) { initTts(); return new JSONObject().put("ready", false).toString(); }
             return new JSONObject().put("ready", true)
-                .put("sw", tts.isLanguageAvailable(new Locale("sw")) >= TextToSpeech.LANG_AVAILABLE)
-                .put("en", tts.isLanguageAvailable(Locale.ENGLISH) >= TextToSpeech.LANG_AVAILABLE).toString();
+                .put("sw", tts.isLanguageAvailable(locale("sw")) >= TextToSpeech.LANG_AVAILABLE)
+                .put("en", tts.isLanguageAvailable(locale("en")) >= TextToSpeech.LANG_AVAILABLE)
+                .put("speaking", tts.isSpeaking()).toString();
         } catch (JSONException e) { return "{}"; }
     }
 
-    @JavascriptInterface public void stopSpeaking() { if (ttsReady) tts.stop(); }
+    @JavascriptInterface public void stopSpeaking() {
+        if (ttsReady && tts.isSpeaking()) { tts.stop(); announceSpeech("stopped"); }
+    }
 
     // ---- Internals -------------------------------------------------------------------------
 
+    private static Locale locale(String lang) { return "en".equals(lang) ? Locale.ENGLISH : new Locale("sw"); }
+
+    /** Started when the page loads, so the first tap on "listen" already has a voice. */
     void initTts() {
         activity.runOnUiThread(() -> {
-            if (tts == null) tts = new TextToSpeech(activity, status -> ttsReady = status == TextToSpeech.SUCCESS);
+            if (tts != null) return;
+            tts = new TextToSpeech(activity, status -> {
+                ttsReady = status == TextToSpeech.SUCCESS;
+                if (!ttsReady) { Log.w(TAG, "No text-to-speech engine"); return; }
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) { announceSpeech("start"); }
+                    @Override public void onDone(String id) { announceSpeech("done"); }
+                    @Override public void onError(String id) { announceSpeech("error"); }
+                    @Override public void onStop(String id, boolean interrupted) { announceSpeech("stopped"); }
+                });
+            });
         });
+    }
+
+    private void announceSpeech(String state) {
+        webView.post(() -> webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('pandastic:speech', {detail: {state: '" + state + "'}}))", null));
     }
 
     void close() {

@@ -117,7 +117,7 @@ async function setup() {
   for (let i = 0; i < 20 && !status.running; i++) { await sleep(500); status = JSON.parse(await hub.evaluate('PandasticNative.hubStatus()')) }
   hub.close()
   if (!status.running) throw new Error(`SMS helper did not start on ${HUB}: ${JSON.stringify(status)}`)
-  console.log(`${HUB}: helper phone ${NUMBER.hub}, SMS helper ON, replies in ${status.lang === 'en' ? 'English' : 'Swahili'}, allows ${NUMBER.basic} + ${NUMBER.phone}`)
+  console.log(`${HUB}: helper phone ${NUMBER.hub}, SMS helper ON, replies in the SMS's language (default ${status.lang === 'en' ? 'English' : 'Swahili'}), allows ${NUMBER.basic} + ${NUMBER.phone}`)
 
   if (online(BASIC)) {
     const basic = await connectApp(BASIC, 9334)

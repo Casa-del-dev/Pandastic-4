@@ -96,7 +96,9 @@ public final class HubService extends Service {
             wakeLock.acquire(90_000);
             try {
                 Responder.Reply reply;
-                try { reply = responder.answer(entry.body, prefs.lang()); }
+                // The reply follows the language of the SMS (keywords detect it; Swahili when unclear, D3).
+                // The owner's language is used for the safe fallback only.
+                try { reply = responder.answer(entry.body, null); }
                 catch (Exception e) {
                     // Noor always gets an answer: if the models fail, the safe "ask a person" reply goes out.
                     Log.e(TAG, "Answering failed, sending the safe reply: " + e.getClass().getSimpleName());

@@ -305,10 +305,25 @@ if (hub) {
     .catch(() => undefined)
 }
 
-await check('voices(): answers without blocking', async () => {
+await check('voices(): the offline voice engine starts with the page', async () => {
+  let v = JSON.parse(await evaluate('PandasticNative.voices()'))
+  for (let i = 0; i < 20 && !v.ready; i++) { await sleep(250); v = JSON.parse(await evaluate('PandasticNative.voices()')) }
+  expect(v.ready, 'TTS engine not ready after 5 s')
+  expect(typeof v.sw === 'boolean' && typeof v.en === 'boolean' && typeof v.speaking === 'boolean', JSON.stringify(v))
+  return `Swahili voice ${v.sw}, English voice ${v.en}`
+})
+
+await check('speak: reads aloud, announces start, stops on request', async () => {
   const v = JSON.parse(await evaluate('PandasticNative.voices()'))
-  expect(typeof v.ready === 'boolean', 'ready')
-  return v.ready ? `sw ${v.sw}, en ${v.en}` : 'TTS engine still starting'
+  const lang = v.sw ? 'sw' : 'en'
+  const started = await evaluate(`__e2e.event('pandastic:speech', () => { window.__e2eSpoke = PandasticNative.speak(
+    ${JSON.stringify('Habari Noor. Sina uhakika kwa maneno pekee. Usinyunyizie dawa bado. Uliza afisa ugani.')}, '${lang}') }, 8000)`)
+  expect(await evaluate('window.__e2eSpoke') === true, 'speak() returned false')
+  expect(started.state === 'start', `first event ${started.state}`)
+  const stopped = await evaluate(`__e2e.event('pandastic:speech', () => PandasticNative.stopSpeaking(), 5000)`)
+  expect(['stopped', 'done'].includes(stopped.state), `after stop: ${stopped.state}`)
+  expect(await evaluate(`PandasticNative.speak('', '${lang}')`) === false, 'empty text should not speak')
+  return `${lang} voice: start -> ${stopped.state}`
 })
 
 if (phone.mode === 'lite') await setMode('lite').catch(() => undefined)
