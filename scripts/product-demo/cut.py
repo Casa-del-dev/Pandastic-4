@@ -288,7 +288,7 @@ def main():
     total = duration(joined)
     music = DEMO / 'music.mp3'  # ElevenLabs Music, generated for this film
     if music.exists():  # a quiet bed under the voice, faded in and out
-        run(['ffmpeg', '-v', 'error', '-y', '-i', str(joined), '-stream_loop', '-1', '-i', str(music), '-filter_complex',
+        run(['ffmpeg', '-v', 'error', '-y', '-i', str(joined), '-i', str(music), '-filter_complex',
              f"[1:a]atrim=0:{total},volume=0.16,afade=t=in:st=0:d=0.8,afade=t=out:st={total - 2.5}:d=2.5[m];"
              "[0:a][m]amix=inputs=2:duration=first:normalize=0[a]",
              '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', str(out)])
