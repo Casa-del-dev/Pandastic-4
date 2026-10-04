@@ -13,8 +13,6 @@ export default function Settings({ lang, setLang, mode, chooseMode, chat, hub }:
 }) {
   const t = ux[lang]
   const [peer, setPeer] = useState(chat.peer)
-  const [candidate, setCandidate] = useState<HubContact>()
-  const [contactError, setContactError] = useState('')
   const [asked, setAsked] = useState(false)
   const [detectedNumber, setDetectedNumber] = useState(() => native.localPhoneNumber || native.phoneInfo().number || '')
   const [ownNumber, setOwnNumber] = useState(() => native.localPhoneNumber || native.phoneInfo().number || load('pandastic.own-number'))
@@ -66,12 +64,9 @@ export default function Settings({ lang, setLang, mode, chooseMode, chat, hub }:
     save('pandastic.own-number', ownNumber.trim())
     setOwnNumberError(''); setOwnNumberSaved(true)
   }
-  function addContact(event: FormEvent) {
-    event.preventDefault()
-    if (!candidate) return
-    if (hub.contacts.some(contact => native.sameNumber(contact.number, candidate.number))) { setContactError(t.duplicate); return }
-    native.setHubContacts([...hub.contacts, candidate])
-    setCandidate(undefined); setContactError('')
+  function selectAllowedContact(contact?: HubContact) {
+    if (!contact || hub.contacts.some(other => native.sameNumber(other.number, contact.number))) return
+    native.setHubContacts([...hub.contacts, contact])
     setAddingContact(false)
     addButton.current?.focus()
   }
@@ -94,12 +89,11 @@ export default function Settings({ lang, setLang, mode, chooseMode, chat, hub }:
         {asked && !hub.enabled && !hub.smsPermission && <p className="field-error" role="alert">{t.permission}</p>}
         <h3 className="subsection-title">{t.allowedPhones}</h3>
         {hub.contacts.length > 0 && <ul className="contacts">{hub.contacts.map(contact => <li key={contact.number}><button type="button" className="selected-contact" aria-label={`${t.remove} ${contact.name}`} onClick={() => { const contacts = hub.contacts.filter(other => other.number !== contact.number); native.setHubContacts(contacts); if (!contacts.length) native.setHubEnabled(false) }}><span className="avatar">{(contact.name || '?').slice(0, 1)}</span><span className="contact-name"><strong>{contact.name}</strong><small>{contact.number}</small></span><Icon name="close" size={19} /></button></li>)}</ul>}
-        <button ref={addButton} type="button" className="text-button add-phone-button" aria-expanded={addingContact} aria-controls="add-phone-form" onClick={() => { setAddingContact(!addingContact); setCandidate(undefined); setContactError('') }}><Icon name={addingContact ? 'close' : 'plus'} size={18} />{addingContact ? t.cancel : t.add}</button>
-        {addingContact && <form id="add-phone-form" className="add-contact" onSubmit={addContact}>
-          <ContactPicker lang={lang} contacts={contacts} state={contactsState} selected={candidate} excluded={[detectedNumber, ...hub.contacts.map(contact => contact.number)]}
-            onSelect={contact => { setCandidate(contact); setContactError('') }} retry={() => void refreshContacts()} />
-          {contactError && <p id="contact-error" className="field-error" role="alert">{contactError}</p>}<button className="secondary compact" type="submit" disabled={!candidate}><Icon name="check" size={18} />{t.add}</button>
-        </form>}
+        <button ref={addButton} type="button" className="text-button add-phone-button" aria-expanded={addingContact} aria-controls="add-phone-form" onClick={() => setAddingContact(!addingContact)}><Icon name={addingContact ? 'close' : 'plus'} size={18} />{addingContact ? t.cancel : t.add}</button>
+        {addingContact && <div id="add-phone-form" className="add-contact">
+          <ContactPicker lang={lang} contacts={contacts} state={contactsState} excluded={[detectedNumber, ...hub.contacts.map(contact => contact.number)]}
+            onSelect={selectAllowedContact} retry={() => void refreshContacts()} />
+        </div>}
         <div className="setting-row"><h3>{t.replyLanguage}</h3><LanguageChoice lang={hub.lang} setLang={native.setHubLang} /></div>
     </section>}
     <div className="settings-footer"><details className="settings-disclosure"><summary><span>{t.storage}</span><Icon name="arrow" size={17} /></summary><div className="disclosure-content"><p className="field-hint">{t.privacy}</p><button className="danger-link" disabled={!chat.messages.length && !hub.recent.length} onClick={() => { if (window.confirm(t.clearConfirm)) { native.clearChatHistory(); native.clearHubHistory() } }}><Icon name="trash" size={18} />{t.clear}</button></div></details>

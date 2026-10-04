@@ -82,9 +82,7 @@ input[aria-invalid='true'] { border-color: #a7443f; }
 /* Photos belong in the composer and appear inline in the conversation. */
 .composer-area { flex-shrink: 0; padding-top: 8px; }
 .composer { border: 1px solid #dfe5d9; border-radius: 24px; background: var(--paper); padding: 12px 12px 9px; box-shadow: 0 3px 16px #34453605; }
-.composer:focus-within { border-color: #9baea0; }
 .composer textarea { display: block; width: 100%; min-height: 38px; max-height: 132px; padding: 6px 6px 9px; resize: none; border: 0; background: transparent; font-size: 16px; line-height: 1.5; outline: none; overflow-y: auto; }
-.composer textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 8px; }
 .composer-tools { display: flex; align-items: center; gap: 8px; min-height: 40px; }
 .send-button { width: 40px; height: 40px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--leaf); color: white; flex-shrink: 0; margin-left: auto; }
 .attach-control { position: relative; flex-shrink: 0; }
