@@ -110,13 +110,14 @@ def _run_id(tag: str, manifest_bytes: bytes, hparams: dict) -> tuple[str, dict]:
 @app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, gpu="L4", cpu=16,
               memory=32768, timeout=4 * 3600, retries=modal.Retries(max_retries=2, initial_delay=10.0))
 def train(labels: str, coffee_split: str, epochs: int, batch_size: int, lr: float, smoke: bool, git_sha: str = "",
-          input_size: int = 224, seed: int = 13) -> dict:
+          input_size: int = 224, seed: int = 13, arch: str = "") -> dict:
     import timm
     import torch
     from leaf import config, data, train as trainer
     data_volume.reload()
     models_volume.reload()
     config.INPUT_SIZE = input_size  # read at call time by train.py (resize, ONNX export, leaf_classifier.json)
+    config.ARCH = arch or config.ARCH  # another timm backbone; the run id changes with it (hparams["arch"])
     tag = _tag(labels, coffee_split)
     cached = _cached_manifest(tag, input_size)
     manifest_path = cached if cached.exists() else DATA / f"manifest-{tag}.csv"
@@ -124,6 +125,8 @@ def train(labels: str, coffee_split: str, epochs: int, batch_size: int, lr: floa
     stats = json.loads((DATA / f"manifest-{tag}.json").read_text())
     hparams = {"labels": labels, "coffee_split": coffee_split, "epochs": epochs, "batch_size": batch_size, "lr": lr, "smoke": smoke,
                "arch": config.ARCH, "seed": seed, "patience": 4}
+    if arch:
+        tag += "-" + arch.split(".")[0].replace("mobilenetv4_", "").replace("_", "")
     if seed != 13:  # another seed of the same recipe, e.g. an ensemble member
         tag += f"-s{seed}"
     if input_size != 224:  # 224 keeps the hyper-parameters (and run ids) of earlier runs
@@ -188,6 +191,37 @@ def photo_stats(tag: str, splits: list[str]) -> dict:
     return ps.summarise(rows, values)
 
 
+@app.function(image=image, volumes={"/data": data_volume, "/models": models_volume}, cpu=16, memory=16384,
+              timeout=3600)
+def probs(labels: str, coffee_split: str, version: str, splits: list[str]) -> dict:
+    """The exported ONNX's calibrated probabilities on held-out splits (same preprocessing as eval), so per-label
+    minimums can be studied on the laptop without retraining (leaf/label_floors.py)."""
+    import numpy as np
+    import onnxruntime as ort
+    from concurrent.futures import ThreadPoolExecutor
+    from leaf import data, train as trainer
+    data_volume.reload()
+    models_volume.reload()
+    tag = _tag(labels, coffee_split)
+    cached = _cached_manifest(tag, 224)
+    rows = [r for r in data.read_manifest(cached if cached.exists() else DATA / f"manifest-{tag}.csv")
+            if r["split"] in splits]
+    model_dir = MODELS / "leaf" / version
+    meta = json.loads((model_dir / "leaf_classifier.json").read_text())
+    options = ort.SessionOptions()
+    options.add_session_config_entry("session.disable_quant_qdq", "1")
+    sess = ort.InferenceSession(str(model_dir / "leaf_classifier.onnx"), options)
+    one = lambda r: sess.run(None, {"input": trainer.to_tensor(trainer.load_rgb(r["path"])).numpy()[None]})[0][0]
+    with ThreadPoolExecutor(16) as pool:  # the exported graph takes one photo at a time, like the app
+        logits = np.stack(list(pool.map(one, rows)))
+    z = logits / meta["temperature"]
+    p = np.exp(z - z.max(1, keepdims=True))
+    p /= p.sum(1, keepdims=True)
+    return {"labels": meta["labels"], "probs": p.round(5).tolist(), "y": [meta["labels"].index(r["label"]) for r in rows],
+            "split": [r["split"] for r in rows], "source": [r["source"] for r in rows],
+            "group": [r.get("group", "") for r in rows], "path": [r["path"] for r in rows]}
+
+
 @app.function(image=image, cpu=8, memory=8192, timeout=1800)
 def smoke_test() -> str:
     """leaf/smoke.py for machines without torch: `modal run modal_app.py::smoke_test` (synthetic data, CPU)."""
@@ -204,7 +238,7 @@ SOURCES = ["bracol", "jmuben", "jmuben2", "rocole", "plantdoc", "ibean", "ccmt",
 
 @app.function(image=image, timeout=8 * 3600)
 def pipeline(stage: str, labels: str, coffee_split: str, epochs: int, batch_size: int, lr: float, smoke: bool,
-             git_sha: str = "", input_size: int = 224, seed: int = 13) -> dict:
+             git_sha: str = "", input_size: int = 224, seed: int = 13, arch: str = "") -> dict:
     """Runs the stages from Modal, not from the laptop, so a detached run finishes even if the laptop sleeps."""
     result = {}
     if stage in ("fetch", "all"):
@@ -214,13 +248,14 @@ def pipeline(stage: str, labels: str, coffee_split: str, epochs: int, batch_size
     if stage in ("cache", "train", "all"):  # idempotent: only new images are decoded
         result["cache"] = cache.remote(_tag(labels, coffee_split), input_size)
     if stage in ("train", "all"):
-        result["meta"] = train.remote(labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size, seed)
+        result["meta"] = train.remote(labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size, seed, arch)
     return result
 
 
 @app.local_entrypoint()
 def main(stage: str = "all", labels: str = "p0", coffee_split: str = "mix", epochs: int = 12, batch_size: int = 64,
-         lr: float = 1e-3, smoke: bool = False, version: str = "", input_size: int = 224, seed: int = 13):
+         lr: float = 1e-3, smoke: bool = False, version: str = "", input_size: int = 224, seed: int = 13,
+         arch: str = ""):
     import subprocess
     from leaf import config
     if stage == "reeval":
@@ -232,11 +267,17 @@ def main(stage: str = "all", labels: str = "p0", coffee_split: str = "mix", epoc
         print(json.dumps(meta["eval"], indent=2))
         print(f"\nmodal volume get pandastic-models leaf/{meta['version']} ./artifacts/")
         return
+    if stage == "probs":  # --version <model>: calib + test probabilities -> artifacts/<model>/probs.json
+        out = Path(__file__).parent / "artifacts" / version / "probs.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(probs.remote(labels, coffee_split, version, ["calib", "test"])))
+        print(f"wrote {out}")
+        return
     if stage == "photo-stats":
         print(json.dumps(photo_stats.remote(_tag(labels, coffee_split), ["calib", "test"]), indent=1))
         return
     git_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-    result = pipeline.remote(stage, labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size, seed)
+    result = pipeline.remote(stage, labels, coffee_split, epochs, batch_size, lr, smoke, git_sha, input_size, seed, arch)
     if "cache" in result:
         print(f"cache: {result['cache']['cached']} images, dropped {len(result['cache']['dropped'])}")
     if stage in ("fetch", "all"):
