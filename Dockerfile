@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Two targets (DOCKER.md):
-#   web  browser phone pair (Basic 5173 + Capable 5174)     docker compose up
+#   web  browser phone pair: both phones on 8080 (Basic 5173, Capable 5174)  docker compose up
 #   apk  debug APK built with the pinned Android toolchain  docker build --target apk --output out .
 
 # ---------- web: the browser phone pair ----------
@@ -12,9 +12,9 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store CI=true corepack pnp
 COPY frontend/ ./
 # The local phones answer from the same knowledge base as the app.
 COPY android/app/src/main/assets/models/knowledge.sqlite /app/android/app/src/main/assets/models/knowledge.sqlite
-ENV PANDASTIC_HOST=0.0.0.0 BASIC_PORT=5173 CAPABLE_PORT=5174 PANDASTIC_PHONE_STATE_DIR=/state
+ENV PANDASTIC_HOST=0.0.0.0 BASIC_PORT=5173 CAPABLE_PORT=5174 PANDASTIC_DEMO_PORT=8080 PANDASTIC_PHONE_STATE_DIR=/state
 VOLUME /state
-EXPOSE 5173 5174
+EXPOSE 8080 5173 5174
 CMD ["node", "local/run-pair.mjs"]
 
 # ---------- android-build: SDK 35, NDK 28.2, CMake 3.22.1, JDK 17, Node 24 ----------

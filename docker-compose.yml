@@ -1,10 +1,10 @@
-# Browser phone pair: http://localhost:5173 (Basic) and http://localhost:5174 (Capable).
-# Keep host port = container port: each phone's number is its port.
+# Both phones side by side: http://localhost:8080 (Basic 5173 left, Capable 5174 right).
+# Keep host port = container port for 5173/5174: each phone's number is its port.
 services:
   phones:
     build: { context: ., target: web }
     image: pandastic-phones
-    ports: ["5173:5173", "5174:5174"]
+    ports: ["8080:8080", "5173:5173", "5174:5174"]
     volumes: [phone-state:/state]
 volumes:
   phone-state:

@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 
 const cwd = fileURLToPath(new URL('../', import.meta.url))
@@ -24,6 +26,18 @@ for (const [port, peer, mode] of [[basic, capable, 'lite'], [capable, basic, 'ca
   children.push(child)
   child.on('error', error => { console.error(error.message); stop(1) })
   child.on('exit', (code, signal) => { if (!stopping) { console.error(`Phone ${port} stopped (${signal || code}). Closing the pair.`); stop(code || 1) } })
+}
+// Optional page showing both phones side by side (Docker sets PANDASTIC_DEMO_PORT=8080).
+const demoPort = process.env.PANDASTIC_DEMO_PORT
+if (demoPort) {
+  const page = readFileSync(new URL('demo.html', import.meta.url), 'utf8').replace('__BASIC_PORT__', basic).replace('__CAPABLE_PORT__', capable)
+  const demo = createServer((req, res) => {
+    res.writeHead(req.url === '/' ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+    res.end(req.url === '/' ? page : 'Not found')
+  })
+  demo.on('error', error => { console.error(`Demo page: ${error.message}`); stop(1) })
+  demo.listen(Number(demoPort), host, () => console.log(`Both phones:   http://localhost:${demoPort}`))
+  children.push({ kill: () => { demo.close(); demo.closeAllConnections() } })
 }
 process.on('SIGINT', () => stop())
 process.on('SIGTERM', () => stop())

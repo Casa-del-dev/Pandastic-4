@@ -8,17 +8,18 @@ You only need Docker (with Compose v2). The `Dockerfile` has two targets.
 docker compose up --build
 ```
 
-Open both phones in a browser:
-
-- Basic phone (Noor): <http://localhost:5173>
-- Capable phone (the helper): <http://localhost:5174>
+Open <http://localhost:8080>. It shows both phones side by side: the Basic
+phone (Noor, number 5173) on the left and the Capable helper phone (5174) on
+the right. Each phone also works on its own at <http://localhost:5173> and
+<http://localhost:5174>.
 
 Send `P 1 12000` from the Basic phone. The helper answers in the same thread
 from the bundled `knowledge.sqlite`. Chats are kept in the `phone-state` volume.
 `docker compose down -v` resets both phones.
 
-Keep each host port the same as its container port (`5173:5173`), because a
-phone's number is its port. No models run in this mode: the leaf classifier,
+Keep the phones' host ports the same as their container ports (`5173:5173`),
+because a phone's number is its port. Open the page as `localhost`, not by
+the machine's IP address: the phones only accept requests from localhost. No models run in this mode: the leaf classifier,
 Qwen and Whisper only run in the Android app.
 
 ## 2. Build the Android APK
