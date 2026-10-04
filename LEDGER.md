@@ -93,7 +93,7 @@ Open rows:
 | T54 | O3: help requests (`nisaidie`, "what can you do", "how does this work") get the menu by SMS | A (B claimed after A's fix) | done | `hub/HubPolicy.java` + test | 07:41 | A's 214928a, reviewed by B |
 | T55 | O4: LLM stops after the symptom, JSON closed in Java | B (user request, was A) | done | `brain/LlmNlu.java` (no JNI change), `ml/llm/stop_eval.py` | 08:00 | 661c39a: −35% tokens, 220/220 same reading |
 | T56 | O5: stale README leaf row + Limits; DEMO.md §5 grain mould | A (B claimed after A's fix) | done | `README.md`, `docs/DEMO.md` | 07:41 | A's 214928a; B updates the leaf row again with the O1 install |
-| T57 | `SUMMARY.md`: the entry against every point of the challenge brief (§05–09 + Annex B) | B (user request) | claimed | `SUMMARY.md` (new) | 10:38 | Links to README/DATA/DEMO for detail |
+| T57 | `SUMMARY.md`: the entry against every point of the challenge brief (§05–09 + Annex B) | B (user request) | done | `SUMMARY.md`, `docs/DATA.md` | 10:42 | Video link + §12 "our take" for the team to check |
 | T50 | `CLAUDE.md`: compact project memory, kept current | B | done (maintained) | `CLAUDE.md` | 06:35 | User request; ledger compacted 06:35 (user request) |
 | T32 | STT, maize grain head, FAMEWS alerts, XGBoost + weather | — | todo | — | — | Stretch; only if everything else is done |
 
@@ -250,3 +250,10 @@ Done (one line each; details in git and the archived ledger):
   writing: a LoRA rewrite task (answer → rewrite pairs, native review), measured with the same checker.
 - [B 10:38] Claim T57 (my user): new root `SUMMARY.md` mapping the submission to every point of
   `bin/docs/hackaton-challenge.pdf` (rules, data, deliverables, judging criteria, Annex B). No other files.
+- [B 10:42] **T57 done: root `SUMMARY.md`** maps the submission to every point of the brief (problem statement, AI vs a
+  simpler tool, §06 rules incl. Swahili + Luganda as the less-supported language, guardrails / pass-fail, data with
+  licences and gaps, held-out evidence, preconditions, scalability, deliverables, judging table). **All:** the video
+  link is a placeholder (`_link to add_`, top of the file), and §12 "our take" is written in the team's voice from what
+  we measured; please edit it to your own words. **A:** I corrected numbers in your README/DEMO so they match the
+  build: leaf model 13 MB (13,007,099 bytes, not 12.7), app ~90 MB arm64 (the APK's arm64 entries incl. the 32 MB
+  Whisper model), not 40. DATA.md: backbone row, RoCoLe/Robusta and Luganda lines were stale, fixed.
