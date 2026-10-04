@@ -1,6 +1,6 @@
 # Pandastic: project memory for Claude sessions
 
-Maintained by agent B (ledger task T50); last updated 2026-10-04 05:45 UTC. **`LEDGER.md` is the source of truth for
+Maintained by agent B (ledger task T50); last updated 2026-10-04 06:07 UTC. **`LEDGER.md` is the source of truth for
 live work: read it after every pull.** Details live in `docs/`. Update this file when the codebase changes in a way
 that makes something here wrong.
 
@@ -46,7 +46,7 @@ B's user: **do not touch frontend/UI** (C's area).
 ## Architecture
 
 ```text
-SMS:   basic phone ─SMS─► SmsReceiver ─► HubService (allowlist, ≤10/sender/h, ≤30/h, log) ─► BrainHost (one thread)
+SMS:   basic phone ─SMS─► SmsReceiver ─► HubService (allowlist, ≤10/sender/h, ≤30/h, log, HubPolicy) ─► BrainHost (one thread)
          ─► Brain.answerText ─► KeywordNlu (+ LlmNlu) ─► Resolver ─► Decision ─► SmsFormatter (safety line first, ≤2 parts) ─► SmsSender
 Photo: WebView (EXIF upright, 640 px JPEG) ─► NativeBridge.checkPhoto(id, photo, text, lang) ─► QualityGate ─► LeafClassifier (ONNX)
          ─► Brain.answerPhoto (the words go through the same NLU: crop mismatch → ASK_CROP, contradicting symptom → UNCERTAIN) ─► Resolver
@@ -60,6 +60,9 @@ Data:  knowledge.sqlite (cited advice EN+SW, prices, lexicon) ◄── Resolver
   pixels, 64 px) < 0.05 → forced `other` → UNSUPPORTED.
 - **Resolver order** (contracts §2): gate → `other` → crop check → p1 ≥ `per_class_min_prob[label] ?? min_prob`
   and margin ≥ `min_margin` → CONFIDENT, else UNCERTAIN.
+- **HubPolicy:** the helper auto-replies only to farming SMS (menu request, or a price/problem/planting question the
+  keywords recognised, or the LLM recognised with a keyword crop). Personal messages from the same allowed numbers get
+  no reply and are logged as `personal` without their text.
 - **Phone modes:** *Basic* (SMS chat + Settings, no models) and *Capable* (chat with on-phone questions,
   camera/gallery, Models page, opt-in automatic SMS replies to allowlisted numbers, contacts suggestions,
   read-aloud, dictation).
@@ -71,14 +74,14 @@ android/app/src/main/java/org/pandastic/relay/
   FrontendActivity, NativeBridge (window.PandasticNative), BrainHost, DictationController, PhoneContacts
   brain/  Brain Resolver Templates KeywordNlu LlmNlu Nlu Slots Decision Knowledge SqliteKnowledge
           ClassifierResult LeafClassifier QualityGate SmsFormatter
-  hub/    SmsReceiver HubService Responder SmsSender SmsStatusReceiver ChatStore HubLog HubPrefs BootReceiver
+  hub/    SmsReceiver HubService HubPolicy Responder SmsSender SmsStatusReceiver ChatStore HubLog HubPrefs BootReceiver
 android/app/src/main/cpp/            llama.cpp JNI (v0.5.0, fetched at build; NDK 28.2.13676358, CMake 3.22.1)
 android/app/src/main/assets/models/  leaf_classifier.onnx/.json, knowledge.sqlite
-android/app/src/test/                JVM tests (resolver, NLU, SMS formatting, NluEvalTest, PhotoWithTextTest)
+android/app/src/test/                JVM tests (resolver, NLU, SMS formatting, NluEvalTest, PhotoWithTextTest, SmsTriageTest)
 frontend/src/                        App, Chat, Settings, PhoneSetup, Models, native.ts (bridge + browser demo),
                                      local-phone.ts (browser phone pair), i18n, useDictation, useReadAloud
 ml/modal_app.py                      leaf pipeline on Modal (fetch → manifest → cache → train → ensemble ...)
-ml/leaf/                             config, data, train, install, class_thresholds, photo_stats, probe_*, quantize, smoke
+ml/leaf/                             config, data, train, install, class_thresholds, crop_floors, photo_stats, probe_*, quantize, smoke
 ml/llm/                              eval sets, eval_llm, retrieval_eval, gen_train, train_lora, slots.gbnf, system_prompt
 ml/modal_lora.py, ml/build_knowledge.py, ml/fetch_prices.py, ml/reports/ (eval reports, model reports)
 data/                                advice.json (cited EN+SW), lexicon.csv (200 rows), prices_*.csv, sources.csv
@@ -106,7 +109,12 @@ scripts/                             android-emulator.sh, bridge-e2e.mjs, sms-la
   non-plants 1.1%; random everyday photos: 3/117 confident, 0 with the plant gate. On the emulator, 20/20 non-plant
   photos are turned away.
 - Measured and not shipped: input 288/320/384 px, int8 activations (−3 pts), flip TTA (+0.6 pt for 3× compute),
-  per-label maize floors (calib label noise). Coffee does not transfer across countries: a model never trained on
+  MobileNetV4-Conv-Medium (worse).
+- **Candidate, waiting for A's emulator check (branch `b/leaf-effb0-ens3`):** `leaf-p2-mix-efficientnetb0-ens3-a16129a8`,
+  3 × EfficientNet-B0, 12.7 MB, + per-crop maize floor 0.85 (`ml/leaf/crop_floors.py`: each crop ≥ 90% right on calib).
+  Test: 96.3% right at 91% answered; RoCoLe app path 91% answered / 97.3% right / rust→healthy 5; maize 92.2% at 81%;
+  other plants 0.5%. Costs: ~3.5× compute (29 vs 8 ms on a laptop), 1/117 random photos passes the gate confidently.
+  Fallback: keep ens3 with a JSON-only maize floor 0.75. Coffee does not transfer across countries: a model never trained on
   RoCoLe answers 1.2% of its photos.
 
 **SMS understanding:** `KeywordNlu` (`data/lexicon.csv`; function words pick sw/en, default sw; crop-aware
@@ -127,15 +135,16 @@ UCDA/MAAIF coffee farm-gate prices and WFP maize/bean prices with source and dat
 ./run.sh                       # two Android emulator phones (5554 capable helper, 5556 basic) + SMS carrier; --web = browser pair 5173/5174
 make run | run-device | release | web | stop
 make e2e                       # every bridge call inside the running app (56/56)
-make sms-setup / sms-relay / sms-test   # SMS lab on two emulators (sms-test 13/13)
+make sms-setup / sms-relay / sms-test   # SMS lab on two emulators (sms-test 17/17)
 make human-test                # reset both phones + test photos (docs/HUMAN-TEST.md)
-cd android && ./gradlew testDebugUnitTest            # 62 JVM tests (Windows: gradlew.bat); -Pnollm builds without llama.cpp
+cd android && ./gradlew testDebugUnitTest            # 67 JVM tests (Windows: gradlew.bat); -Pnollm builds without llama.cpp
 python ml/build_knowledge.py                          # rebuild + validate knowledge.sqlite
 
 cd ml   # leaf pipeline (Modal, L4); same args resume; run id = hash(manifest, hparams, code)
 modal run --detach modal_app.py --stage all --labels p2 [--coffee-split mix|xc] [--seed N] [--input-size N] [--arch timm_name] [--lr X]
 modal run modal_app.py --stage ensemble --labels p2 --version m1,m2,m3
-modal run modal_app.py --stage reeval|probs|photo-stats --labels p2 [--version v]
+modal run modal_app.py --stage reeval|probs|photo-stats --labels p2 [--version v]   # probs → artifacts/<v>/probs.json
+python -m leaf.crop_floors artifacts/<v> [--write]   # per-crop minimum probability from probs.json
 modal volume get pandastic-models leaf/<version> ./artifacts/ && python -m leaf.install artifacts/<version>
 python -m leaf.smoke | leaf.probe_photos <dir> | leaf.probe_nonplant <dir>... | leaf.class_thresholds <dir> --label L --precision P [--write]
 python ml/llm/eval_llm.py --rescore                   # NLU eval from saved predictions (needs NluEvalTest output)
@@ -154,13 +163,15 @@ native, JS bridge · D6 confidence only from calibrated classifiers; text sympto
 prices · D7 training on Modal (user) · D8 phone = 4 GB RAM, all models < ~1 GB peak (user) · D9 freeze 10:30 UTC,
 submission ~13:00 UTC (user). The hub replies in the SMS's own language (`lang = null`).
 
-## Status (compacted ledger, 05:45 UTC)
+## Status (compacted ledger, 06:07 UTC)
 
 - **Done:** SMS hub (T01), resolver/templates/keyword NLU (T02), ONNX runner + gate + bridge (T03), knowledge base
   (T11), stub → real classifier (T10/T13/T15, now ens3), Qwen JNI + LoRA policy (T30/T31), connector tests (T41),
   model management UI (T42), browser phone pair + launcher (T43/T46/T47), TTS (T44), human-test kit (T45),
-  dictation/read-aloud/Qwen install (T48), contacts + own number (T49), photo + words judged together (cff9e12).
-- **Open:** UI refactor (T40/T04, C); demo script + video (T20, `docs/DEMO.md`); human-test sessions (were waiting on
+  dictation/read-aloud/Qwen install (T48), contacts + own number (T49), photo + words judged together (cff9e12),
+  helper answers only farming SMS (HubPolicy, 1d24063).
+- **Open:** leaf candidate effb0-ens3 (A's emulator check, install decision by 08:30); contact dropdown (T51, C);
+  UI refactor (T40/T04, C); demo script + video (T20, `docs/DEMO.md`); human-test sessions (were waiting on
   T49, now landed); optional LLM stop-after-symptom speed-up (~30% generation, queued by A); README's leaf
   classifier row and "Limits" are stale (A's file, flagged); `CLAUDE.md` upkeep (T50, B). T14 dropped; T32 stretch.
 - **Not validated:** real carrier SMS (delays, multipart, Ugandan filtering), speed and memory on a real 4 GB phone,
