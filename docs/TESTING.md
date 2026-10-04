@@ -48,12 +48,13 @@ avdmanager create avd -n pandastic_basic -k "system-images;android-35;google_api
 | `bei ni ngapi leo?` | "Which crop?" + how to ask |
 | `majani ya kahawa yana unga wa njano` | "Not sure from words alone, don't spray yet", possible rust, show a photo or ask an officer |
 | `emmwanyi zange zirwadde` (Luganda) | Read by the language model if side-loaded (~8 s), safe reply |
+| `coffee leaves have grey spots with brown ring` | With the fine-tuned model: "maybe Cercospora", still "not sure, ask a person" |
 | any SMS from a number that is not in the allowlist | No reply |
 | more than 10 SMS from one number in an hour | Silence after the 10th (rate limit; the helper's log says `rate_limited`) |
 
 ### Automated SMS suite
 
-`make sms-test` sends 10 SMS from virtual phones and does one round trip from the Basic phone app (if `emulator-5556` runs). It checks each reply:
+`make sms-test` sends 12 SMS from virtual phones and does one round trip from the Basic phone app (if `emulator-5556` runs). It checks each reply:
 - the price is in it,
 - the safety wording is in it,
 - it fits in at most 2 SMS,

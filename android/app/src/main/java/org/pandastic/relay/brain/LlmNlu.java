@@ -18,7 +18,9 @@ import org.json.JSONObject;
  */
 public final class LlmNlu implements Nlu, AutoCloseable {
     private static final String TAG = "PandasticLlm";
+    /** The base model; FINE_TUNED (our LoRA, ml/modal_lora.py) is preferred when both are side-loaded. */
     public static final String MODEL_NAME = "Qwen3.5-0.8B-Q4_K_M.gguf";
+    public static final String FINE_TUNED = "Qwen3.5-0.8B-pandastic-Q4_K_M.gguf";
     /** Prompt + answer; set explicitly so llama.cpp does not size the cache for the model's 262k context. */
     private static final int CONTEXT = 1536, MAX_TOKENS = 64;
     /** The SMS hub waits up to 60 s per question; the model gets a third of that, then keywords answer. */
@@ -61,7 +63,7 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     public static LlmNlu open(Context context, Nlu keywords) {
         if (!libraryLoaded) return null;
         File model = find(context);
-        if (model == null) { Log.i(TAG, "No " + MODEL_NAME + " side-loaded; keyword NLU only"); return null; }
+        if (model == null) { Log.i(TAG, "No " + FINE_TUNED + " or " + MODEL_NAME + " side-loaded; keyword NLU only"); return null; }
         int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors() - 2));
         long handle = nativeLoad(model.getAbsolutePath(), CONTEXT, threads);
         if (handle == 0) return null;
@@ -83,30 +85,47 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     }
 
     /**
-     * Hybrid policy measured by B (ml/reports/nlu_eval.md, all slots right: keywords 0.68 on held-out and
-     * fresh SMS; keywords + model intent 0.78 / 0.68; also taking the model's crop 0.78 / 0.62, because it says
-     * coffee or maize when the farmer wrote cassava, tomato or tea). So: keywords first, and the model only
-     * names the intent of a message the keywords could not read. It is never trusted for the crop, the
-     * symptom, the offer, the language or the commodity.
+     * Hybrid policy measured by B (ml/reports/nlu_eval*.md; all slots right on held-out / fresh / fresh2 SMS):
+     * keywords 0.72 / 0.88 / 0.83; fine-tuned model filling the intent and a crop-consistent symptom 0.94 /
+     * 0.90 / 0.93. The base model invents symptoms (0.73 on fresh2), so it only names the intent. Taking the
+     * model's crop always hurt: it says coffee or maize when the farmer wrote cassava, tomato or tea. So the
+     * model never sets the crop, the offer, the language or the commodity.
      */
     @Override public Slots parse(String text, String lang) {
         Slots slots = keywords.parse(text, lang);
-        if (!needsModel(slots)) return slots;
+        boolean symptoms = fineTuned();
+        if (!needsModel(slots, symptoms)) return slots;
         JSONObject json = complete(text);
-        return merge(slots, json == null ? null : json.optString("intent", null));
+        if (json == null) return slots;
+        return merge(slots, json.optString("intent", null), symptoms ? json.optString("symptom", null) : null);
     }
 
-    static boolean needsModel(Slots keywordSlots) {
-        return keywordSlots.intentProb == 0;
+    boolean fineTuned() { return FINE_TUNED.equals(modelName()); }
+
+    /** The model runs when the keywords found no intent, or (fine-tune only) a crop problem without a symptom. */
+    static boolean needsModel(Slots keywordSlots, boolean symptoms) {
+        return keywordSlots.intentProb == 0 || (symptoms && "diagnose".equals(keywordSlots.intent)
+            && keywordSlots.symptom == null && keywordSlots.crop != null);
     }
 
-    /** Takes the model's intent only if the keywords found none and it is one of the known intents. */
-    static Slots merge(Slots keywordSlots, String modelIntent) {
+    /**
+     * The model's intent only if the keywords found none; its symptom only for a problem report without one,
+     * and only if it exists for the crop the keywords found. Without a known crop the model's symptom can
+     * belong to the wrong plant (SMS lab: Luganda "emmwanyi" = coffee got "maybe maize lethal necrosis"), so
+     * it is dropped. Text symptoms are never CONFIDENT anyway: "may be X, don't spray yet, ask a person".
+     */
+    static Slots merge(Slots keywordSlots, String modelIntent, String modelSymptom) {
         if (keywordSlots.intentProb == 0 && INTENTS.contains(modelIntent)) {
             keywordSlots.intent = modelIntent;
             keywordSlots.intentProb = 0.8f;
         }
+        if (modelSymptom != null && "diagnose".equals(keywordSlots.intent) && keywordSlots.symptom == null
+            && symptomFits(keywordSlots.crop, modelSymptom)) keywordSlots.symptom = modelSymptom;
         return keywordSlots;
+    }
+
+    private static boolean symptomFits(String crop, String symptom) {
+        return crop != null && !symptom.equals("healthy") && Resolver.LABELS.contains(crop + "_" + symptom);
     }
 
     /** Fixed part of the chat prompt; evaluated once and cached (B's T31 note). */
@@ -128,17 +147,26 @@ public final class LlmNlu implements Nlu, AutoCloseable {
 
     public static boolean runtimeAvailable() { return libraryLoaded; }
 
+    public static boolean isModelName(String name) { return MODEL_NAME.equals(name) || FINE_TUNED.equals(name); }
+
+    /** The fine-tuned file if present, else the base one; internal files first, then the USB-reachable folder. */
     public static File find(Context context) {
-        File[] places = {new File(context.getFilesDir(), "models/" + MODEL_NAME),
-            context.getExternalFilesDir(null) == null ? null : new File(context.getExternalFilesDir(null), "models/" + MODEL_NAME)};
-        for (File place : places) {
-            if (place == null) continue;
-            // The app creates the folders itself: a folder made by adb belongs to the shell user and is unreadable here.
-            place.getParentFile().mkdirs();
-            if (place.isFile() && place.length() > 100_000_000L) return place;
+        File external = context.getExternalFilesDir(null);
+        for (String name : new String[]{FINE_TUNED, MODEL_NAME}) {
+            File[] places = {new File(context.getFilesDir(), "models/" + name),
+                external == null ? null : new File(external, "models/" + name)};
+            for (File place : places) {
+                if (place == null) continue;
+                // The app creates the folders itself: a folder made by adb belongs to the shell user and is unreadable here.
+                place.getParentFile().mkdirs();
+                if (place.isFile() && place.length() > 100_000_000L) return place;
+            }
         }
         return null;
     }
+
+    /** File name of the loaded model (shown on the Models page). */
+    public String modelName() { return new File(modelPath).getName(); }
 
     private static String asset(Context context, String path, String fallback) {
         try (InputStream in = context.getAssets().open(path); ByteArrayOutputStream out = new ByteArrayOutputStream()) {

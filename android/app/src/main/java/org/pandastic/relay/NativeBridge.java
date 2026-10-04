@@ -153,7 +153,7 @@ final class NativeBridge {
                 try (Cursor cursor = activity.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
                     if (cursor != null && cursor.moveToFirst()) name = cursor.getString(0);
                 }
-                if (!LlmNlu.MODEL_NAME.equals(name)) throw new IllegalArgumentException("model_name");
+                if (!LlmNlu.isModelName(name)) throw new IllegalArgumentException("model_name");
                 File directory = temporary.getParentFile();
                 if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("storage");
                 long total = 0;
@@ -184,7 +184,10 @@ final class NativeBridge {
                 if (!new HubPrefs(activity).capable()) throw new IllegalStateException("phone_mode");
                 host.unload();
                 // Atomic replacement on the same filesystem: a failed import preserves the old file.
-                android.system.Os.rename(temporary.getAbsolutePath(), new File(directory, LlmNlu.MODEL_NAME).getAbsolutePath());
+                android.system.Os.rename(temporary.getAbsolutePath(), new File(directory, name).getAbsolutePath());
+                // One language model at a time (533 MB each): the import replaces the other variant.
+                String other = LlmNlu.FINE_TUNED.equals(name) ? LlmNlu.MODEL_NAME : LlmNlu.FINE_TUNED;
+                new File(directory, other).delete();
                 modelReply(id, true, "");
             } catch (Exception e) {
                 Log.w(TAG, "Model import failed: " + e.getClass().getSimpleName());

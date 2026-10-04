@@ -21,7 +21,8 @@ import { execFileSync } from 'node:child_process'
 const HUB = process.env.HUB || 'emulator-5554'
 const BASIC = process.env.BASIC || 'emulator-5556'
 // The SIM numbers the lab pretends each phone has (Uganda format; nothing is really sent).
-const NUMBER = { hub: '+256772000001', basic: '+256772000002', phone: '+256772000003', stranger: '+256779999999' }
+const NUMBER = { hub: '+256772000001', basic: '+256772000002', phone: '+256772000003', phone2: '+256772000004',
+  stranger: '+256779999999' }
 const APK = new URL('../android/app/build/outputs/apk/debug/app-debug.apk', import.meta.url).pathname
 
 const digits = n => String(n).replace(/[^0-9]/g, '')
@@ -108,7 +109,8 @@ async function setup() {
   const hub = await connectApp(HUB, 9333)
   await hub.evaluate(`PandasticNative.setPhoneMode('capable')`)
   await hub.evaluate(`PandasticNative.setHubContacts(${JSON.stringify(JSON.stringify([
-    { name: 'Noor (Basic phone)', number: NUMBER.basic }, { name: 'Noor (kabambe)', number: NUMBER.phone }]))})`)
+    { name: 'Noor (Basic phone)', number: NUMBER.basic }, { name: 'Noor (kabambe)', number: NUMBER.phone },
+    { name: 'Juma (kabambe)', number: NUMBER.phone2 }]))})`)
   await hub.evaluate(`PandasticNative.setHubLang('${process.argv.includes('--en') ? 'en' : 'sw'}')`)  // Swahili first
   await hub.evaluate(`PandasticNative.setHubEnabled(true)`)
   let status = {}
@@ -213,8 +215,17 @@ async function test() {
     body => /hakika|sure|picha|photo|afisa|officer|uliza|ask/i.test(body) ? null : 'no "not sure / ask a person / photo" guidance')
   await sms('price without a crop asks which crop', NUMBER.phone, 'bei ni ngapi leo?',
     has(/kahawa|mahindi|maharage|coffee|maize|beans/i, 'does not ask which crop'))
-  await sms('Luganda (LLM if side-loaded, else the menu)', NUMBER.phone, 'emmwanyi zange zirwadde amakoola gafuuse kyenvu',
-    () => null, { timeoutMs: 60000 })
+  // Read by the language model when one is side-loaded (another sender: 10 answers per number per hour).
+  const safe = body => /hakika|sure|afisa|officer|uliza|ask/i.test(body) ? null : 'no "not sure / ask a person" wording'
+  // "emmwanyi" = coffee in Luganda; the keywords don't know it, so no disease of another crop may be named.
+  await sms('Luganda coffee problem: safe, no other crop\'s disease', NUMBER.phone2,
+    'emmwanyi zange zirwadde amakoola gafuuse kyenvu',
+    body => safe(body) ?? (/mahindi|maize|maharage|bean/i.test(body) ? 'names a maize/bean disease for coffee' : null),
+    { timeoutMs: 60000 })
+  await sms('symptom the keywords miss (fine-tuned LLM names it, still not sure)', NUMBER.phone2,
+    'coffee leaves have grey spots with brown ring', safe, { timeoutMs: 60000 })
+  await sms('pest the keywords miss (fine-tuned LLM names it, still not sure)', NUMBER.phone2,
+    'Wadudu wanachimba ndani ya majani ya kahawa', safe, { timeoutMs: 60000 })
   await sms('unknown number gets no reply (allowlist)', NUMBER.stranger, 'P 1 12000', () => null, { expectReply: false })
   await sms('own echo is ignored (no reply loops)', NUMBER.phone, 'Pandastic: test echo', () => null, { expectReply: false })
 

@@ -102,7 +102,7 @@ public final class BrainHost {
                 .put("stub", meta.optBoolean("stub", false))
                 .put("bytes", assetSize(context, "models/leaf_classifier.onnx"))
                 .put("error", host == null || host.classifierError == null ? JSONObject.NULL : host.classifierError))
-            .put("language", new JSONObject().put("name", LlmNlu.MODEL_NAME)
+            .put("language", new JSONObject().put("name", model == null ? LlmNlu.MODEL_NAME : model.getName())
                 .put("installed", model != null).put("loaded", host != null && host.llm != null)
                 .put("runtimeAvailable", LlmNlu.runtimeAvailable()).put("bytes", model == null ? 0 : model.length()))
             .put("knowledge", new JSONObject().put("installed", true).put("loaded", host != null && host.brain != null)
@@ -161,7 +161,7 @@ public final class BrainHost {
             .put("classifierStub", model != null && model.stub)
             .put("classifierError", classifierError == null ? JSONObject.NULL : classifierError)
             .put("brain", brain != null)
-            .put("llm", llm == null ? JSONObject.NULL : LlmNlu.MODEL_NAME)
+            .put("llm", llm == null ? JSONObject.NULL : llm.modelName())
             .put("brainError", brainError == null ? JSONObject.NULL : brainError)
             .put("loading", loading);
     }
