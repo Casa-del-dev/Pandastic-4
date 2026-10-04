@@ -145,7 +145,7 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
       {error && <p className="composer-error" role="alert">{error}</p>}
       {dictationError && <p className="composer-error" role="alert">{dictationError}</p>}
       {readAloud.failed && <p className="composer-error" role="alert">{t.speechFailed}</p>}
-      {dictation.listening && <p className="dictation-status" role="status">{t.listening}{dictation.interim && ` · ${dictation.interim}`}</p>}
+      {dictation.listening && <p className="dictation-status" role="status">{dictation.processing ? t.transcribingOffline : t.listening}{dictation.interim && ` · ${dictation.interim}`}</p>}
       <form className="composer" onSubmit={event => void submit(event)}>
         {local && attachment && <div className="attachment-preview">
           <img src={attachment.url} alt={t.attachmentAlt} />
@@ -175,7 +175,7 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
               {peers.map(number => <option key={number} value={number}>{hub.contacts.find(contact => native.sameNumber(contact.number, number))?.name || number}</option>)}
             </select> : <button className="destination-button" type="button" disabled={busy} onClick={openSettings}><Icon name="phone" size={14} /><span>{contact?.name || chat.peer || t.choosePhone}</span></button>)}
           </div>
-          <button className={`icon-button dictate-button ${dictation.listening ? 'dictate-active' : ''}`} type="button" aria-label={dictation.listening ? t.stopDictation : t.dictate} aria-pressed={dictation.listening} aria-describedby="dictation-note" title={dictation.supported ? t.dictate : t.dictationUnsupported} disabled={busy} onClick={dictation.toggle}><Icon name={dictation.listening ? 'stop' : 'microphone'} size={21} /></button>
+          <button className={`icon-button dictate-button ${dictation.listening ? 'dictate-active' : ''}`} type="button" aria-label={dictation.processing ? t.transcribingOffline : dictation.listening ? t.stopDictation : t.dictate} aria-pressed={dictation.listening} aria-describedby="dictation-note" title={dictation.supported ? t.dictate : t.dictationUnsupported} disabled={busy || dictation.processing} onClick={dictation.toggle}><Icon name={dictation.listening ? 'stop' : 'microphone'} size={21} /></button>
           <button className="send-button" type="submit" aria-label={local ? t.ask : t.send} title={t.keyboardHint} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={busy || dictation.listening || (!current.trim() && !(local && attachment)) || (!local && (!native.validNumber(chat.peer) || !native.canSms))}><Icon name="arrow" size={21} /></button>
         </div>
       </form>

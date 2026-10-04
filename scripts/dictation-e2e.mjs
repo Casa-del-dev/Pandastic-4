@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Real Android speech-provider regression. Input is mono, signed 16-bit LE PCM at 16 kHz.
-// DEVICE=emulator-5556 node scripts/dictation-e2e.mjs /tmp/speech.pcm 'price of coffee'
+// Real Android microphone -> bundled Tiny -> composer regression, including offline operation.
+// DEVICE=emulator-5556 node scripts/dictation-e2e.mjs speech.pcm 'price of coffee' --offline --lang en
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -9,9 +9,13 @@ import http2 from 'node:http2'
 import { connectApp, sleep } from './lib/devtools.mjs'
 
 const serial = process.env.DEVICE || 'emulator-5556'
-const [file, expected] = process.argv.slice(2)
+const args = process.argv.slice(2)
+const [file, expected] = args
+const offline = args.includes('--offline')
+const language = args.includes('--lang') ? args[args.indexOf('--lang') + 1] : undefined
+assert(!language || ['sw', 'en'].includes(language), '--lang must be sw or en')
 assert(/^emulator-\d+$/.test(serial) && file && expected,
-  'Usage: DEVICE=emulator-5556 node scripts/dictation-e2e.mjs speech.pcm expected-words')
+  'Usage: DEVICE=emulator-5556 node scripts/dictation-e2e.mjs speech.pcm expected-words [--offline] [--lang en|sw]')
 const audio = readFileSync(file)
 assert(audio.length > 0 && audio.length % 2 === 0 && audio.length <= 32000 * 30, 'Use up to 30 seconds of 16 kHz mono PCM')
 let config
@@ -68,13 +72,43 @@ function inject(pcm) {
   return rpc('injectAudio', packets, 100)
 }
 const keep = setInterval(() => {}, 1000)
-let page, originalDraft, micState
+let page, originalDraft, micState, originalLanguage, wifi, data
+async function changeLanguage(language) {
+  await page.evaluate(`document.querySelector('nav button:last-child').click()`)
+  await sleep(100)
+  await page.evaluate(`[...document.querySelectorAll('.settings-language button')].find(b=>b.textContent===${JSON.stringify(language === 'sw' ? 'Kiswahili' : 'English')}).click()`)
+  await sleep(100)
+  await page.evaluate(`document.querySelector('nav button:first-child').click()`)
+  await sleep(100)
+}
 try {
   page = await connectApp(serial, Number(serial.slice(9)) + 4000)
   const { evaluate } = page
+  for (let i = 0; i < 50; i++) {
+    if (await evaluate(`Boolean(document.querySelector('.dictate-button'))`)) break
+    await sleep(100)
+  }
+  assert(await evaluate(`Boolean(document.querySelector('.dictate-button'))`), 'Choose a phone mode first')
+  await evaluate(`document.querySelector('nav button:first-child').click()`)
+  await sleep(100)
+  originalLanguage = await evaluate('document.documentElement.lang')
+  if (language && language !== originalLanguage) await changeLanguage(language)
   assert(await evaluate(`Boolean(document.querySelector('.dictate-button'))`), 'Open Chat first')
   const status = JSON.parse(await evaluate('PandasticNative.dictationStatus()'))
   assert(status.available && status.permission && !status.listening, `Speech provider not ready: ${JSON.stringify(status)}`)
+  if (offline) {
+    assert.equal(status.offline, true, 'Native dictation must use the bundled offline engine')
+    wifi = page.adb('shell', 'settings', 'get', 'global', 'wifi_on')
+    data = page.adb('shell', 'settings', 'get', 'global', 'mobile_data')
+    page.adb('shell', 'svc', 'wifi', 'disable')
+    page.adb('shell', 'svc', 'data', 'disable')
+    await sleep(1500)
+    assert.equal(page.adb('shell', 'settings', 'get', 'global', 'wifi_on'), '0')
+    assert.equal(page.adb('shell', 'settings', 'get', 'global', 'mobile_data'), '0')
+    const network = page.adb('shell', 'dumpsys', 'connectivity').split('\n').find(line => /Active default network:/.test(line))
+    assert(network && /none/.test(network), `Device still has a network: ${network}`)
+    console.log('Wi-Fi and mobile data disabled; no active default network.')
+  }
   originalDraft = await evaluate(`document.querySelector('textarea').value`)
   micState = await rpc('getMicrophoneState', [Buffer.alloc(0)])
   await rpc('setMicrophoneState', [Buffer.from([8, 0])])
@@ -87,7 +121,7 @@ try {
     }
     assert(await evaluate(`__dictationTestEvents.some(e=>e.state==='start')`), 'Recognition did not start')
     await inject(pcm)
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 600; i++) {
       if (await evaluate(`__dictationTestEvents.some(e=>e.state==='end')`)) break
       await sleep(100)
     }
@@ -99,10 +133,11 @@ try {
   const silent = await run(Buffer.alloc(32000 * 6))
   assert(silent.some(e => e.error === 'no-speech'), JSON.stringify(silent))
   assert.equal(await evaluate(`document.querySelector('textarea').value`), originalDraft, 'Silence changed the draft')
-  console.log('PASS: missing offline pack falls back; silence preserves draft and ends listening')
+  console.log('PASS: silence preserves draft and ends listening without inference')
   const beforeMessages = await evaluate(`document.querySelectorAll('.message-row').length`)
   const spoken = await run(Buffer.concat([Buffer.alloc(16000), audio, Buffer.alloc(32000 * 2)]))
   const result = spoken.find(e => e.state === 'result')
+  assert(spoken.some(e=>e.state === 'processing'), 'Offline processing state was not announced')
   assert(result?.text.toLowerCase().includes(expected.toLowerCase()), JSON.stringify(spoken))
   const draft = await evaluate(`document.querySelector('textarea').value`)
   assert.equal(draft, [originalDraft.trimEnd(), result.text].filter(Boolean).join(' ').slice(0, 480))
@@ -125,6 +160,9 @@ try {
   if (page) {
     await page.evaluate(`PandasticNative.cancelDictation();window.removeEventListener('pandastic:dictation',window.__dictationTestListener)` ).catch(() => {})
     if (originalDraft !== undefined) await page.evaluate(`(() => { const field=document.querySelector('textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,${JSON.stringify(originalDraft)});field.dispatchEvent(new Event('input',{bubbles:true})); })()`).catch(() => {})
+    if (originalLanguage && language && originalLanguage !== language) await changeLanguage(originalLanguage).catch(() => {})
+    if (wifi !== undefined) page.adb('shell', 'svc', 'wifi', wifi === '1' ? 'enable' : 'disable')
+    if (data !== undefined) page.adb('shell', 'svc', 'data', data === '1' ? 'enable' : 'disable')
     page.close()
   }
   if (micState) await rpc('setMicrophoneState', [micState.subarray(5)]).catch(() => {})

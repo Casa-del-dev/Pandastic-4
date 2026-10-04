@@ -39,6 +39,23 @@ def syncFrontendAssets = tasks.register('syncFrontendAssets', Sync) {
     into(generatedFrontendAssets.map { it.dir('pandastic') })
 }
 
+def speechModel = rootProject.file('../ml/artifacts/speech/ggml-tiny-q5_1.bin')
+def generatedSpeechAssets = layout.buildDirectory.dir('generated/speechAssets')
+def fetchSpeechModel = tasks.register('fetchSpeechModel', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine 'node', 'scripts/fetch-whisper-tiny.mjs'
+    inputs.file(rootProject.file('../scripts/fetch-whisper-tiny.mjs'))
+    outputs.file(speechModel)
+    // Verify the cached file too, so a damaged model never enters an APK.
+    outputs.upToDateWhen { false }
+}
+def syncSpeechAssets = tasks.register('syncSpeechAssets', Sync) {
+    dependsOn fetchSpeechModel
+    from(speechModel) { into 'speech' }
+    from('src/main/speech-NOTICE.txt') { into 'speech' }
+    into(generatedSpeechAssets)
+}
+
 android {
     namespace 'org.pandastic.relay'
     compileSdk 35
@@ -63,17 +80,17 @@ android {
     }
     sourceSets.main.assets.srcDir(generatedFrontendAssets)
     sourceSets.main.assets.srcDir(generatedLlmAssets)
-    // llama.cpp for the optional on-device LLM (contracts §5). Build without it: ./gradlew -Pnollm assembleDebug
-    if (!project.hasProperty('nollm')) {
-        externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
-    }
+    sourceSets.main.assets.srcDir(generatedSpeechAssets)
+    // Speech is available on Basic phones too; -Pnollm disables only Qwen's runtime.
+    externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
+    defaultConfig.externalNativeBuild.cmake.arguments "-DPANDASTIC_NO_LLM=${project.hasProperty('nollm') ? 'ON' : 'OFF'}"
     // Models are memory-mapped/opened from assets; keep them uncompressed.
-    androidResources { noCompress += ['onnx', 'sqlite', 'gguf'] }
+    androidResources { noCompress += ['onnx', 'sqlite', 'gguf', 'bin'] }
     // brain/ logic is unit-tested on the JVM; android.* stubs return defaults instead of throwing.
     testOptions { unitTests.returnDefaultValues = true }
 }
 
-tasks.named('preBuild').configure { dependsOn syncFrontendAssets, syncLlmAssets }
+tasks.named('preBuild').configure { dependsOn syncFrontendAssets, syncLlmAssets, syncSpeechAssets }
 
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'

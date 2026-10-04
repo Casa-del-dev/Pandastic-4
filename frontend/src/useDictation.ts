@@ -7,6 +7,7 @@ type Recognition = {
   onresult: ((event: { results: ArrayLike<Result> }) => void) | null
   onerror: ((event: { error: string }) => void) | null
   onend: (() => void) | null
+  onprocessing?: (() => void) | null
   start(): void; stop(): void; abort(): void
 }
 type SpeechWindow = Window & {
@@ -21,12 +22,15 @@ class NativeRecognition implements Recognition {
   onresult: Recognition['onresult'] = null
   onerror: Recognition['onerror'] = null
   onend: Recognition['onend'] = null
+  onprocessing: Recognition['onprocessing'] = null
   private id = crypto.randomUUID()
   private receive = (event: Event) => {
     const detail = (event as CustomEvent<{ id: string; state: string; text?: string; error?: string }>).detail
     if (detail.id !== this.id) return
     if (detail.state === 'partial' || detail.state === 'result') {
       this.onresult?.({ results: [{ isFinal: detail.state === 'result', 0: { transcript: detail.text || '' } }] })
+    } else if (detail.state === 'processing') {
+      this.onprocessing?.()
     } else if (detail.state === 'error') {
       this.onerror?.({ error: detail.error === 'permission' ? 'not-allowed' : detail.error || 'failed' })
     } else if (detail.state === 'end') {
@@ -51,6 +55,7 @@ export function useDictation({ lang, active, context, value, setValue }: {
   const browser = window as SpeechWindow
   const Constructor = window.PandasticNative?.startDictation ? NativeRecognition : browser.SpeechRecognition || browser.webkitSpeechRecognition
   const [listening, setListening] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<DictationError>()
   const [interim, setInterim] = useState('')
   const recognition = useRef<Recognition | undefined>(undefined)
@@ -62,7 +67,7 @@ export function useDictation({ lang, active, context, value, setValue }: {
     generation.current++
     recognition.current?.abort()
     recognition.current = undefined
-    setListening(false); setInterim('')
+    setListening(false); setProcessing(false); setInterim('')
   }
   useEffect(() => {
     if (!active) cancel()
@@ -74,6 +79,7 @@ export function useDictation({ lang, active, context, value, setValue }: {
   }, [])
 
   function toggle() {
+    if (processing) return
     if (recognition.current) { recognition.current.stop(); return }
     if (!Constructor) { setError('unsupported'); return }
     if (!active) return
@@ -84,6 +90,7 @@ export function useDictation({ lang, active, context, value, setValue }: {
     try { instance = new Constructor() }
     catch { setError('failed'); return }
     recognition.current = instance
+    setProcessing(false)
     instance.lang = lang === 'sw' ? 'sw-KE' : 'en-US'
     instance.continuous = false
     instance.interimResults = true
@@ -100,18 +107,19 @@ export function useDictation({ lang, active, context, value, setValue }: {
       if (final.length) update.current([prefix, ...final].filter(Boolean).join(' ').slice(0, 480))
       setInterim(partial.join(' '))
     }
+    instance.onprocessing = () => { if (currentSession()) setProcessing(true) }
     instance.onerror = event => {
       if (!currentSession() || event.error === 'aborted') return
       setError(event.error === 'unsupported' ? 'unsupported' : event.error === 'not-allowed' || event.error === 'service-not-allowed' ? 'permission' : event.error === 'network' ? 'network' : event.error === 'language' || event.error === 'language-not-supported' ? 'language' : event.error === 'no-speech' ? 'no-speech' : 'failed')
-      setListening(false); setInterim('')
+      setListening(false); setProcessing(false); setInterim('')
     }
     instance.onend = () => {
       if (!currentSession()) return
       recognition.current = undefined
-      setListening(false); setInterim('')
+      setListening(false); setProcessing(false); setInterim('')
     }
     try { setListening(true); instance.start() }
     catch { instance.abort(); recognition.current = undefined; setListening(false); setError('failed') }
   }
-  return { supported: Boolean(Constructor), listening, interim, error, toggle }
+  return { supported: Boolean(Constructor), listening, processing, interim, error, toggle }
 }

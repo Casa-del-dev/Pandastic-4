@@ -1,36 +1,55 @@
 package org.pandastic.relay;
 
 import android.Manifest;
-import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.os.Bundle;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.MediaRecorder;
 import android.os.Handler;
 import android.os.Looper;
-import android.speech.RecognitionListener;
-import android.speech.RecognizerIntent;
-import android.speech.SpeechRecognizer;
-import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONObject;
 
-/** Android speech service input. Session ids prevent late results from editing another draft. */
+/** Bounded microphone capture followed by local Tiny inference. No speech-provider/network calls. */
 final class DictationController {
     interface Events { void send(JSONObject event); }
     private final FrontendActivity activity;
     private final Events events;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private SpeechRecognizer recognizer;
-    private String activeId = "";
-    private volatile boolean listening;
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private volatile Session active;
     private boolean closed;
+
+    private static final class Session {
+        final String id;
+        final String lang;
+        final AtomicBoolean cancelled = new AtomicBoolean();
+        volatile boolean stopRequested;
+        volatile boolean processing;
+        volatile AudioRecord recorder;
+        Session(String id, String lang) { this.id = id; this.lang = "sw".equals(lang) ? "sw" : "en"; }
+        void stopRecording() {
+            stopRequested = true;
+            AudioRecord current = recorder;
+            if (current != null) try { current.stop(); } catch (IllegalStateException ignored) { }
+        }
+    }
 
     DictationController(FrontendActivity activity, Events events) { this.activity = activity; this.events = events; }
 
     JSONObject status() {
         JSONObject value = new JSONObject();
         try {
-            value.put("available", SpeechRecognizer.isRecognitionAvailable(activity));
+            value.put("available", OfflineSpeech.AVAILABLE);
+            value.put("offline", true);
+            value.put("model", "Whisper Tiny multilingual Q5_1");
+            value.put("bytes", OfflineSpeech.MODEL_BYTES);
             value.put("permission", activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
-            value.put("listening", listening);
+            Session session = active;
+            value.put("listening", session != null);
+            value.put("processing", session != null && session.processing);
         } catch (Exception ignored) { }
         return value;
     }
@@ -39,98 +58,111 @@ final class DictationController {
         activity.runOnUiThread(() -> {
             if (closed || id == null || id.isEmpty()) return;
             cancel();
-            activeId = id;
-            listening = true;
-            emit(id, "requesting", null, null);
+            Session session = new Session(id, lang);
+            active = session;
+            emit(session, "requesting", null, null);
             activity.requestMicrophonePermission(() -> {
-                if (!id.equals(activeId) || closed) return;
+                if (active != session || closed) return;
                 if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                    finish(id, "permission"); return;
+                    finish(session, null, "permission"); return;
                 }
-                if (!SpeechRecognizer.isRecognitionAvailable(activity)) { finish(id, "unsupported"); return; }
-                try {
-                    recognizer = SpeechRecognizer.createSpeechRecognizer(activity);
-                    recognizer.setRecognitionListener(new RecognitionListener() {
-                        @Override public void onReadyForSpeech(Bundle params) { if (id.equals(activeId)) emit(id, "start", null, null); }
-                        @Override public void onBeginningOfSpeech() { }
-                        @Override public void onRmsChanged(float rmsdB) { }
-                        @Override public void onBufferReceived(byte[] buffer) { }
-                        @Override public void onEndOfSpeech() { }
-                        @Override public void onError(int code) {
-                            if (!id.equals(activeId)) return;
-                            finish(id, code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ? "permission"
-                                : code == SpeechRecognizer.ERROR_NETWORK || code == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ? "network"
-                                : code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ? "no-speech"
-                                : code == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED || code == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ? "language"
-                                : "failed");
-                        }
-                        @Override public void onResults(Bundle results) {
-                            if (!id.equals(activeId)) return;
-                            String text = transcript(results);
-                            if (!text.isEmpty()) emit(id, "result", text, null);
-                            else emit(id, "error", null, "no-speech");
-                            emit(id, "end", null, null);
-                            release();
-                        }
-                        @Override public void onPartialResults(Bundle results) {
-                            if (id.equals(activeId)) emit(id, "partial", transcript(results), null);
-                        }
-                        @Override public void onEvent(int type, Bundle params) { }
-                    });
-                    // EXTRA_PREFER_OFFLINE forces offline-only recognition in Google's provider.
-                    // Leave it unset so the service can fall back when a language pack is missing.
-                    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "sw".equals(lang) ? "sw-KE" : "en-US")
-                        .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                        .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
-                    recognizer.startListening(intent);
-                    main.postDelayed(() -> { if (id.equals(activeId)) finish(id, "no-speech"); }, 45000);
-                } catch (Exception error) { finish(id, "failed"); }
+                if (!OfflineSpeech.AVAILABLE) { finish(session, null, "unsupported"); return; }
+                worker.execute(() -> capture(session));
             });
         });
     }
 
+    private void capture(Session session) {
+        if (session.cancelled.get()) return;
+        short[] samples = new short[SpeechCapture.MAX_SAMPLES];
+        SpeechCapture detector = new SpeechCapture();
+        int count = 0;
+        AudioRecord recorder = null;
+        Runnable timeLimit = session::stopRecording;
+        try {
+            int minimum = AudioRecord.getMinBufferSize(SpeechCapture.RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+            if (minimum <= 0) throw new IllegalStateException("Microphone format unavailable");
+            recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SpeechCapture.RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(minimum, 6400));
+            if (recorder.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("Microphone unavailable");
+            session.recorder = recorder;
+            if (session.cancelled.get() || session.stopRequested) { finish(session, null, "no-speech"); return; }
+            recorder.startRecording();
+            // Bound wall time too if a microphone stalls instead of returning samples.
+            main.postDelayed(timeLimit, 30_000);
+            main.post(() -> { if (active == session) emit(session, "start", null, null); });
+            while (!session.cancelled.get() && !session.stopRequested && count < samples.length) {
+                int read = recorder.read(samples, count, Math.min(1600, samples.length - count));
+                if (read < 0) {
+                    if (session.stopRequested || session.cancelled.get()) break;
+                    throw new IllegalStateException("Microphone read failed");
+                }
+                if (read == 0) continue;
+                detector.add(samples, count, read);
+                count += read;
+                if (detector.finished()) break;
+            }
+        } catch (Exception error) {
+            if (!session.cancelled.get()) finish(session, null, "failed");
+            return;
+        } finally {
+            main.removeCallbacks(timeLimit);
+            session.recorder = null;
+            if (recorder != null) {
+                try { recorder.stop(); } catch (IllegalStateException ignored) { }
+                recorder.release();
+            }
+        }
+        if (session.cancelled.get()) return;
+        if (!detector.hasSpeech()) { finish(session, null, "no-speech"); return; }
+        session.processing = true;
+        main.post(() -> { if (active == session) emit(session, "processing", null, null); });
+        try {
+            String text = OfflineSpeech.transcribe(activity.getAssets(), samples, count, session.lang, session.cancelled);
+            if (!session.cancelled.get()) {
+                text = text == null ? "" : text.trim();
+                finish(session, text.isEmpty() ? null : text, text.isEmpty() ? "no-speech" : null);
+            }
+        } catch (Exception | LinkageError error) {
+            android.util.Log.e("PandasticSpeech", "Offline dictation failed", error);
+            if (!session.cancelled.get()) finish(session, null, "failed");
+        }
+    }
+
     void stop() {
         activity.runOnUiThread(() -> {
-            if (recognizer == null) { cancel(); return; }
-            String id = activeId;
-            try { recognizer.stopListening(); }
-            catch (Exception error) { finish(id, "failed"); return; }
-            main.postDelayed(() -> { if (id.equals(activeId)) finish(id, "no-speech"); }, 5000);
+            Session session = active;
+            if (session == null || session.processing) return;
+            if (session.recorder == null) { cancel(); return; }
+            session.stopRecording();
         });
     }
 
     void cancel() {
-        String id = activeId;
-        release();
-        if (!id.isEmpty()) emit(id, "end", null, null);
+        Session session = active;
+        active = null;
+        if (session != null) {
+            session.cancelled.set(true);
+            session.stopRecording();
+            emit(session, "end", null, null);
+        }
     }
 
-    void close() { closed = true; cancel(); main.removeCallbacksAndMessages(null); }
+    void close() { cancel(); closed = true; worker.shutdown(); main.removeCallbacksAndMessages(null); }
 
-    private void finish(String id, String error) {
-        emit(id, "error", null, error);
-        emit(id, "end", null, null);
-        release();
+    private void finish(Session session, String text, String error) {
+        main.post(() -> {
+            if (closed || active != session || session.cancelled.get()) return;
+            emit(session, error == null ? "result" : "error", text, error);
+            emit(session, "end", null, null);
+            active = null;
+        });
     }
 
-    private void release() {
-        activeId = ""; listening = false;
-        if (recognizer != null) { recognizer.cancel(); recognizer.destroy(); recognizer = null; }
-        main.removeCallbacksAndMessages(null);
-    }
-
-    private static String transcript(Bundle results) {
-        if (results == null) return "";
-        ArrayList<String> words = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-        return words == null || words.isEmpty() ? "" : words.get(0);
-    }
-
-    private void emit(String id, String state, String text, String error) {
+    private void emit(Session session, String state, String text, String error) {
         if (closed) return;
         try {
-            JSONObject event = new JSONObject().put("id", id).put("state", state);
+            JSONObject event = new JSONObject().put("id", session.id).put("state", state);
             if (text != null) event.put("text", text);
             if (error != null) event.put("error", error);
             events.send(event);

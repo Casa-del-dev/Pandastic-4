@@ -2,12 +2,13 @@ import type { Lang } from './native'
 
 const en = {
   readAloud: 'Read aloud', stopReading: 'Stop reading', speechFailed: 'Couldn’t read aloud. Check the phone’s speech voices and media volume.',
-  nativeDictationNote: 'Uses your phone’s speech service and may use internet. Offline support depends on installed languages. Review before sending.',
+  nativeDictationNote: 'Dictation works offline in English and Swahili. Review the words before sending.',
   localPhone: 'Local phone', simulatedSms: 'Simulated SMS', localSmsNote: 'Messages travel to the other local instance. No SIM or SMS charges.',
   localNumberHint: 'Use the other instance’s port as its phone number (for example, 5174).', localInvalidNumber: 'Enter a port between 1024 and 65535.', localOwnNumberHint: 'This instance’s port is its phone number.',
   localSendFailed: 'Couldn’t reach the other phone. Check that both local instances are running and the destination is the other port.',
   localSettingFailed: 'Couldn’t save the setting. Check that this local instance is still running.',
   dictate: 'Dictate message', stopDictation: 'Stop dictation', listening: 'Listening… Tap stop when you’re done.',
+  transcribingOffline: 'Writing down your words… No internet needed.',
   dictationNote: 'Dictation may use your browser’s online speech service. Review the words before sending.',
   dictationUnsupported: 'Dictation is unavailable here. Try a supported browser or your keyboard’s microphone.',
   dictationPermission: 'Allow microphone access in settings to dictate. Your draft is still here.',
@@ -68,12 +69,13 @@ const en = {
 }
 const sw: typeof en = {
   readAloud: 'Sikiliza', stopReading: 'Acha kusoma', speechFailed: 'Sauti haipatikani. Kagua sauti za kusoma na kiwango cha sauti kwenye simu.',
-  nativeDictationNote: 'Inatumia huduma ya sauti ya simu na inaweza kutumia intaneti. Bila intaneti inategemea lugha zilizowekwa. Kagua kabla ya kutuma.',
+  nativeDictationNote: 'Unaweza kusema ujumbe bila intaneti kwa Kiingereza na Kiswahili. Kagua maneno kabla ya kutuma.',
   localPhone: 'Simu ya ndani', simulatedSms: 'SMS ya kuiga', localSmsNote: 'Ujumbe unaenda kwa app nyingine ya ndani. Hakuna SIM wala gharama za SMS.',
   localNumberHint: 'Tumia port ya app nyingine kama namba ya simu (mfano, 5174).', localInvalidNumber: 'Weka port kati ya 1024 na 65535.', localOwnNumberHint: 'Port ya app hii ndiyo namba yake ya simu.',
   localSendFailed: 'Simu nyingine haipatikani. Kagua kama app zote mbili zinaendesha na namba ni port ya app nyingine.',
   localSettingFailed: 'Mpangilio haukuhifadhiwa. Kagua kama app hii bado inaendesha.',
   dictate: 'Sema ujumbe', stopDictation: 'Acha kusikiliza', listening: 'Ninasikiliza… Gusa kuacha ukimaliza.',
+  transcribingOffline: 'Ninaandika maneno yako… Hakuna intaneti inayohitajika.',
   dictationNote: 'Kusema ujumbe kunaweza kutumia huduma ya sauti ya kivinjari mtandaoni. Kagua maneno kabla ya kutuma.',
   dictationUnsupported: 'Kusema ujumbe hakupatikani hapa. Jaribu kivinjari kinachoruhusu au kipaza sauti cha kibodi.',
   dictationPermission: 'Ruhusu kipaza sauti kwenye mipangilio. Ujumbe wako bado upo.',
