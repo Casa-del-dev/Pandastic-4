@@ -68,13 +68,17 @@ test('two real local phone processes', { timeout: 45000 }, async t => {
     assert.match(state.chat.messages[1].body, /23%/)
     assert.match(state.chat.messages[1].body, /2026-08/)
     assert.match(state.chat.messages[1].body, /Onyesho/)
-    assert.equal((await get(helper)).chat.messages.length, 2)
+    // The helper answers in the background: the question and its reply are in the helper log, not its chat.
+    const hub = await get(helper)
+    assert.equal(hub.chat.messages.length, 0)
+    assert.equal(hub.hub.recent.at(-1).status, 'sent')
+    assert.match(hub.hub.recent.at(-1).reply, /15,500/)
   })
   await t.test('manual replies travel in the reverse direction without an echo', async () => {
     assert.equal((await send(helper, basic, 'Hello Mama')).body.ok, true)
     await delay(400)
     assert.equal((await get(basic)).chat.messages.at(-1).body, 'Hello Mama')
-    assert.equal((await get(helper)).chat.messages.length, 3)
+    assert.equal((await get(helper)).chat.messages.length, 1)
   })
   await t.test('English helper and symptom safety wording', async () => {
     await update(helper, 'lang', 'en')

@@ -5,8 +5,7 @@ export { hasLocalBrain, isLocalPhone, localPhoneNumber } from './local-phone'
 
 export type Lang = 'sw' | 'en'
 export type PhoneMode = 'lite' | 'capable'
-/** hub: what the helper's automatic replies did with an incoming SMS; automatic: an outgoing SMS the helper sent itself. */
-export type ChatMessage = { id: number; number: string; body: string; direction: 'in' | 'out'; time: number; status: string; hub?: 'pending' | 'answered' | 'personal' | 'rate_limited' | 'failed'; automatic?: boolean }
+export type ChatMessage = { id: number; number: string; body: string; direction: 'in' | 'out'; time: number; status: string }
 export type ChatStatus = { peer: string; messages: ChatMessage[]; smsPermission: boolean }
 export type SmsResult = { ok: boolean; error?: string }
 export type ModelFile = { installed: boolean; loaded: boolean; bytes: number; error?: string | null }
