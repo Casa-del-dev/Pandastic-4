@@ -143,6 +143,11 @@ public final class FrontendActivity extends Activity {
                     } else { request.deny(); }
                 });
             }
+            @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage message) {
+                if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
+                    android.util.Log.d("PandasticWeb", message.messageLevel() + " " + message.message() + " @" + message.lineNumber());
+                return true;
+            }
             @Override public void onPermissionRequestCanceled(PermissionRequest request) {
                 if (microphoneRequest == request) microphoneRequest = null;
             }
@@ -194,6 +199,12 @@ public final class FrontendActivity extends Activity {
         fileCallback.onReceiveValue(result == null ? null : new Uri[]{result});
         fileCallback = null;
         cameraUri = null;
+    }
+
+    /** The React app keeps its own screen history; walk it before leaving the app. */
+    @Override public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
     }
 
     @Override protected void onPause() {

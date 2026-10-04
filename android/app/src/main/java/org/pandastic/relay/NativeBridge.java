@@ -128,6 +128,12 @@ final class NativeBridge {
         });
     }
 
+    /** Opens Android's share sheet; the person picks the app and the recipient. */
+    @JavascriptInterface public void share(String text) {
+        Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text);
+        activity.runOnUiThread(() -> activity.startActivity(Intent.createChooser(send, null)));
+    }
+
     /** Reads text aloud with an installed offline voice. Returns false if none fits the language. */
     @JavascriptInterface public boolean speak(String text, String lang) {
         if (!ttsReady) { initTts(); return false; }
