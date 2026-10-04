@@ -11,20 +11,13 @@
 //   ADB=/path/to/adb DEVICE=emulator-5554 node scripts/bridge-e2e.mjs
 //
 // Needs Node 22+ (global WebSocket). Exit code 1 if any check fails.
-import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
+import { PACKAGE, adbFor, connectApp, sleep } from './lib/devtools.mjs'
 
-const PACKAGE = 'org.pandastic.relay'
-const PORT = 9333
 const withSms = process.argv.includes('--sms')
 const photos = process.argv.flatMap((arg, i) => arg === '--photo' ? [process.argv[i + 1]] : [])
-const sdkAdb = `${process.env.ANDROID_HOME || `${homedir()}/Android/Sdk`}/platform-tools/adb`
-const ADB = process.env.ADB || (existsSync(sdkAdb) ? sdkAdb : 'adb')
-const target = process.env.DEVICE ? ['-s', process.env.DEVICE] : []
-const adb = (...args) => execFileSync(ADB, [...target, ...args], { encoding: 'utf8' }).trim()
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+const adb = adbFor(process.env.DEVICE)
 
 // Every status the Brain may send (Decision.java) plus the bridge's own ERROR.
 const STATUSES = ['CONFIDENT', 'UNCERTAIN', 'UNSUPPORTED', 'RETAKE', 'ASK_CROP', 'TEXT_ONLY', 'PRICE', 'PRICE_STALE',
@@ -76,122 +69,12 @@ function expectDecision(d, where) {
   if (['UNCERTAIN', 'UNSUPPORTED', 'RETAKE', 'ERROR'].includes(d.status)) expect(d.escalate, `${where}: ${d.status} must escalate`)
 }
 
-// ---- DevTools connection ---------------------------------------------------------------------
-
-async function connect() {
-  let pid = ''
-  try { pid = adb('shell', 'pidof', PACKAGE) } catch { /* not running */ }
-  if (!pid) {
-    adb('shell', 'am', 'start', '-W', '-n', `${PACKAGE}/.FrontendActivity`)
-    await sleep(2500)
-    pid = adb('shell', 'pidof', PACKAGE)
-  }
-  pid = pid.split(/\s+/)[0]
-  adb('forward', `tcp:${PORT}`, `localabstract:webview_devtools_remote_${pid}`)
-  let pages = []
-  for (let i = 0; i < 20 && !pages.length; i++) {
-    try { pages = (await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()).filter(p => p.type === 'page') }
-    catch { await sleep(500) }
-  }
-  expect(pages.length, 'no WebView page: is this a debug build, and is the app in the foreground?')
-  const ws = new WebSocket(pages[0].webSocketDebuggerUrl)
-  await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = () => reject(new Error('DevTools socket failed')) })
-  let next = 0
-  const pending = new Map()
-  ws.onclose = () => {  // the page reloaded or the app died: fail what is waiting instead of hanging
-    for (const done of pending.values()) done({ error: { message: 'WebView went away (app crashed or page reloaded?)' } })
-    pending.clear()
-  }
-  ws.onmessage = event => {
-    const msg = JSON.parse(event.data)
-    if (pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id) }
-  }
-  /** Evaluates an expression in the page; awaits promises; returns the value. */
-  const evaluate = expression => new Promise((resolve, reject) => {
-    const id = ++next
-    pending.set(id, msg => {
-      if (msg.error) return reject(new Error(msg.error.message))
-      if (msg.result.exceptionDetails) return reject(new Error(msg.result.exceptionDetails.exception?.description ?? 'page exception'))
-      resolve(msg.result.result.value)
-    })
-    ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }))
-  })
-  return { evaluate, url: pages[0].url, close: () => { ws.close(); try { adb('forward', '--remove', `tcp:${PORT}`) } catch { /* gone */ } } }
-}
-
-// In-page helpers: answers to our ids go to us, everything else still reaches the app's own handler.
-const INSTALL = `(() => {
-  // Wrap the app's reply handler once per page load; the helpers below are replaced on every run.
-  if (!window.__e2eWaiting) {
-    const appReply = window.__pandasticReply;
-    const pending = window.__e2eWaiting = new Map();
-    window.__pandasticReply = (id, d) => pending.has(id) ? (pending.get(id)(d), pending.delete(id)) : appReply && appReply(id, d);
-  }
-  const waiting = window.__e2eWaiting;
-  window.__e2e = {
-    reply(method, args, timeoutMs) {
-      const id = 'e2e-' + Math.random().toString(36).slice(2);
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { waiting.delete(id); reject(new Error(method + ' gave no answer in ' + timeoutMs + ' ms')); }, timeoutMs);
-        waiting.set(id, d => { clearTimeout(timer); resolve(d); });
-        window.PandasticNative[method](id, ...args);
-      });
-    },
-    hubEvent(trigger, timeoutMs) { return window.__e2e.event('pandastic:hub', trigger, timeoutMs); },
-    event(name, trigger, timeoutMs) {
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('no ' + name + ' event')), timeoutMs);
-        window.addEventListener(name, e => { clearTimeout(timer); resolve(e.detail); }, { once: true });
-        trigger();
-      });
-    },
-    /** manageModels / sendSms answer through their own window callbacks; wrap them once, like __pandasticReply. */
-    result(callback, method, args, timeoutMs) {
-      const key = '__e2e_' + callback;
-      if (!window[key]) {
-        const app = window[callback];
-        const pending = window[key] = new Map();
-        window[callback] = (id, r) => pending.has(id) ? (pending.get(id)(r), pending.delete(id)) : app && app(id, r);
-      }
-      const id = 'e2e-' + Math.random().toString(36).slice(2);
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { window[key].delete(id); reject(new Error(method + ' gave no answer')); }, timeoutMs);
-        window[key].set(id, r => { clearTimeout(timer); resolve(r); });
-        window.PandasticNative[method](id, ...args);
-      });
-    },
-    /** frontend/src/native.ts toJpegBase64: longest side 640 px, JPEG quality 0.88. */
-    async shrink(base64) {
-      const bitmap = await createImageBitmap(await (await fetch('data:image/jpeg;base64,' + base64)).blob(), { imageOrientation: 'from-image' });
-      const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(bitmap.width * scale); c.height = Math.round(bitmap.height * scale);
-      c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', 0.88).split(',')[1];
-    },
-    jpeg(kind) {
-      const c = document.createElement('canvas'); c.width = 640; c.height = 480;
-      const g = c.getContext('2d');
-      if (kind === 'dark') { g.fillStyle = '#050505'; g.fillRect(0, 0, 640, 480); }
-      else {  // a leaf-like shape with spots and texture, so the quality gate lets it through
-        g.fillStyle = '#6b5a3a'; g.fillRect(0, 0, 640, 480);
-        g.fillStyle = '#2f7d32'; g.beginPath(); g.ellipse(320, 240, 260, 130, 0.3, 0, 2 * Math.PI); g.fill();
-        g.strokeStyle = '#9ccc65'; g.lineWidth = 4; g.beginPath(); g.moveTo(90, 330); g.lineTo(560, 150); g.stroke();
-        for (let i = 0; i < 400; i++) { g.fillStyle = i % 9 ? 'rgba(20,60,20,0.25)' : '#e09a2a'; g.fillRect((i * 97) % 600 + 20, (i * 57) % 440 + 20, 6, 6); }
-      }
-      return c.toDataURL('image/jpeg', 0.9).split(',')[1];
-    },
-  };
-  return true;
-})()`
-
 // ---- checks ----------------------------------------------------------------------------------
 
 // Node's WebSocket does not keep the process alive on its own: without this, a slow answer ends the run.
 const keepAlive = setInterval(() => {}, 1000)
-const page = await connect()
+const page = await connectApp(process.env.DEVICE)
 const { evaluate } = page
-await evaluate(INSTALL)
 const ask = (text, lang) => evaluate(`__e2e.reply('ask', [${JSON.stringify(text)}, ${JSON.stringify(lang)}], 60000)`)
 
 await check('bridge exposes every method native.ts declares', async () => {

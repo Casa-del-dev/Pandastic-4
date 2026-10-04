@@ -22,7 +22,7 @@ EMULATOR_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-e)
 PHONE_TARGET = $(if $(DEVICE),-s "$(DEVICE)",-d)
 EMULATOR_OPTIONS = --adb "$(ADB)" --emulator "$(EMULATOR)" --sdk "$(SDK_DIR)" --name "$(EMULATOR_NAME)" --device "$(DEVICE)" --timeout "$(BOOT_TIMEOUT)" --log "$(EMULATOR_LOG)"
 
-.PHONY: run run-device build release web stop reset-state e2e
+.PHONY: run run-device build release web stop reset-state e2e emulator-basic sms-setup sms-relay sms-phone sms-test
 
 # Gradle also builds React and bundles it into the APK.
 build:
@@ -67,6 +67,20 @@ reset-state:
 	"$(ADB)" $(if $(DEVICE),-s "$(DEVICE)",-e) shell pm clear "$(PACKAGE_NAME)"
 
 # Tests every UI <-> native connector inside the running debug app (emulator or phone): bridge methods,
-# questions, photos, hub settings, SMS round trip. Extra flags: make e2e ARGS="--photo leaf.jpg"
+# questions, photos, hub settings, SMS round trip. With two devices attached, pass DEVICE=<serial>.
+# Extra flags: make e2e ARGS="--photo leaf.jpg"
 e2e:
 	@ADB="$(ADB)" DEVICE="$(DEVICE)" node scripts/bridge-e2e.mjs --sms $(ARGS)
+
+# SMS lab (docs/TESTING.md): helper phone = emulator-5554, Basic phone = emulator-5556, the script is the carrier.
+emulator-basic:
+	@nohup "$(EMULATOR)" -avd pandastic_basic -port 5556 -no-snapshot-save -no-boot-anim > /tmp/pandastic-basic.log 2>&1 &
+	@"$(ADB)" -s emulator-5556 wait-for-device && echo "emulator-5556 is starting (Basic phone)"
+sms-setup:
+	@ADB="$(ADB)" node scripts/sms-lab.mjs setup $(ARGS)
+sms-relay:
+	@ADB="$(ADB)" node scripts/sms-lab.mjs relay
+sms-phone:
+	@ADB="$(ADB)" node scripts/sms-lab.mjs phone
+sms-test:
+	@ADB="$(ADB)" node scripts/sms-lab.mjs test $(ARGS)
