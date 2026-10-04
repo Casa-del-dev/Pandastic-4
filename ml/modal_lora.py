@@ -55,7 +55,8 @@ def finetune(n_rows: int, epochs: int, smoke: bool) -> dict:
                               Path("/opt/llama.cpp/convert_hf_to_gguf.py"), quantize)
     import shutil
     shutil.rmtree(merged)  # keep the adapter + GGUF only
-    results = eval_llm.evaluate_model(str(server), str(gguf), threads=8)
+    # Predictions are saved next to the GGUF, so the keyword + LLM hybrid can be scored later without the model.
+    results = eval_llm.evaluate_model(str(server), str(gguf), threads=8, predictions_dir=out)
     (out / "eval.json").write_text(json.dumps(results, indent=2))
     models_volume.commit()
     return {"version": version, "gguf": str(gguf), "heldout_all_slots": results["heldout"]["qwen"]["all_slots"],

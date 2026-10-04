@@ -87,6 +87,12 @@ class LeafDataset(Dataset):
 
 # ---------------------------------------------------------------- model + training
 
+def _seed_worker(_):
+    """Each DataLoader worker gets a copy of the dataset's RNG; reseed it so workers (and epochs) augment differently."""
+    info = torch.utils.data.get_worker_info()
+    info.dataset.rng = random.Random(torch.initial_seed() % 2**32)
+
+
 def create_model(num_classes: int, pretrained: bool):
     import timm
     return timm.create_model(config.ARCH, pretrained=pretrained, num_classes=num_classes)
@@ -115,7 +121,8 @@ def train_model(rows, labels, epochs=12, batch_size=64, lr=1e-3, pretrained=True
     counts = np.bincount([dataset.index[r["label"]] for r in train_rows], minlength=len(labels))
     weights = [1.0 / max(1, counts[dataset.index[r["label"]]]) for r in train_rows]  # class-balanced sampling
     sampler = WeightedRandomSampler(weights, num_samples=len(train_rows), replacement=True)
-    loader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=workers, drop_last=len(train_rows) > batch_size)
+    loader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=workers, drop_last=len(train_rows) > batch_size,
+                        worker_init_fn=_seed_worker)
 
     model = create_model(len(labels), pretrained).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.05)

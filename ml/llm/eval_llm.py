@@ -118,7 +118,8 @@ def write_report(results: dict, threads: int) -> None:
     print("wrote ml/reports/nlu_eval.md")
 
 
-def evaluate_model(server_path: str, model_path: str, threads: int = 4, port: int = 8089, save_predictions: bool = True) -> dict:
+def evaluate_model(server_path: str, model_path: str, threads: int = 4, port: int = 8089, save_predictions: bool = True,
+                   predictions_dir: Path = None) -> dict:
     """Start llama-server with the GGUF, run both SMS sets through it, return per-set scores and latency."""
     system = (HERE / "system_prompt.txt").read_text(encoding="utf-8").strip()
     grammar = (HERE / "slots.gbnf").read_text(encoding="utf-8")
@@ -149,8 +150,9 @@ def evaluate_model(server_path: str, model_path: str, threads: int = 4, port: in
                     predictions[row["id"]] = {k: "" for k in SLOTS}
                     print("failed:", row["text"], e)
             if save_predictions:
-                (ROOT / "ml/reports").mkdir(parents=True, exist_ok=True)
-                with open(ROOT / f"ml/reports/qwen_predictions_{name}.csv", "w", newline="", encoding="utf-8") as f:
+                out_dir = Path(predictions_dir) if predictions_dir else ROOT / "ml/reports"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                with open(out_dir / f"qwen_predictions_{name}.csv", "w", newline="", encoding="utf-8") as f:
                     w = csv.DictWriter(f, fieldnames=["id"] + SLOTS)
                     w.writeheader()
                     for rid, pred in predictions.items():
