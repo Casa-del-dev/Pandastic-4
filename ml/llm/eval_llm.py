@@ -118,6 +118,56 @@ def write_report(results: dict, threads: int) -> None:
     print("wrote ml/reports/nlu_eval.md")
 
 
+def evaluate_model(server_path: str, model_path: str, threads: int = 4, port: int = 8089, save_predictions: bool = True) -> dict:
+    """Start llama-server with the GGUF, run both SMS sets through it, return per-set scores and latency."""
+    system = (HERE / "system_prompt.txt").read_text(encoding="utf-8").strip()
+    grammar = (HERE / "slots.gbnf").read_text(encoding="utf-8")
+    sets = {"dev": read(HERE / "eval_sms.csv"), "heldout": read(HERE / "eval_sms_heldout.csv")}
+    server = subprocess.Popen([str(Path(server_path).resolve()), "-m", str(Path(model_path).resolve()), "--port", str(port), "-c", "2048",
+                               "-t", str(threads), "--jinja", "-np", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    base = f"http://127.0.0.1:{port}"
+    results = {}
+    try:
+        for _ in range(180):
+            try:
+                if requests.get(f"{base}/health", timeout=2).status_code == 200:
+                    break
+            except requests.RequestException:
+                pass
+            time.sleep(1)
+        for name, rows in sets.items():
+            predictions, latencies, prompt_ms, gen_ms, failures = {}, [], [], [], 0
+            for row in rows:
+                try:
+                    pred, elapsed, timings = ask(base, system, grammar, row["text"])
+                    predictions[row["id"]] = effective(pred)
+                    latencies.append(elapsed)
+                    prompt_ms.append(timings.get("prompt_ms", 0))
+                    gen_ms.append(timings.get("predicted_ms", 0))
+                except Exception as e:  # grammar makes this unlikely; count it rather than crash
+                    failures += 1
+                    predictions[row["id"]] = {k: "" for k in SLOTS}
+                    print("failed:", row["text"], e)
+            if save_predictions:
+                (ROOT / "ml/reports").mkdir(parents=True, exist_ok=True)
+                with open(ROOT / f"ml/reports/qwen_predictions_{name}.csv", "w", newline="", encoding="utf-8") as f:
+                    w = csv.DictWriter(f, fieldnames=["id"] + SLOTS)
+                    w.writeheader()
+                    for rid, pred in predictions.items():
+                        w.writerow({"id": rid, **pred})
+            results[name] = {
+                "qwen": score(rows, predictions),
+                "latency_s": {"median": round(statistics.median(latencies), 2), "max": round(max(latencies), 2)} if latencies else {},
+                "prompt_ms_median": round(statistics.median(prompt_ms)) if prompt_ms else None,
+                "gen_ms_median": round(statistics.median(gen_ms)) if gen_ms else None,
+                "failures": failures,
+            }
+            print(name, json.dumps({k: v for k, v in results[name]["qwen"].items() if k != "misses"}), results[name]["latency_s"])
+    finally:
+        server.terminate()
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--server")
@@ -132,56 +182,16 @@ def main():
         write_report(json.loads((ROOT / "ml/reports/nlu_eval.json").read_text(encoding="utf-8")), args.threads)
         return
 
-    system = (HERE / "system_prompt.txt").read_text(encoding="utf-8").strip()
-    grammar = (HERE / "slots.gbnf").read_text(encoding="utf-8")
+    results = evaluate_model(args.server, args.model, args.threads, args.port)
     sets = {"dev": read(HERE / "eval_sms.csv"), "heldout": read(HERE / "eval_sms_heldout.csv")}
-    server = subprocess.Popen([str(Path(args.server).resolve()), "-m", str(Path(args.model).resolve()), "--port", str(args.port), "-c", "2048", "-t", str(args.threads),
-                               "--jinja", "-np", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    base = f"http://127.0.0.1:{args.port}"
-    try:
-        for _ in range(120):
-            try:
-                if requests.get(f"{base}/health", timeout=2).status_code == 200:
-                    break
-            except requests.RequestException:
-                pass
-            time.sleep(1)
-        results = {}
-        for name, rows in sets.items():
-            predictions, latencies, prompt_ms, gen_ms, failures = {}, [], [], [], 0
-            for row in rows:
-                try:
-                    pred, elapsed, timings = ask(base, system, grammar, row["text"])
-                    predictions[row["id"]] = effective(pred)
-                    latencies.append(elapsed)
-                    prompt_ms.append(timings.get("prompt_ms", 0))
-                    gen_ms.append(timings.get("predicted_ms", 0))
-                except Exception as e:  # grammar makes this unlikely; count it rather than crash
-                    failures += 1
-                    predictions[row["id"]] = {k: "" for k in SLOTS}
-                    print("failed:", row["text"], e)
-            with open(ROOT / f"ml/reports/qwen_predictions_{name}.csv", "w", newline="", encoding="utf-8") as f:
-                w = csv.DictWriter(f, fieldnames=["id"] + SLOTS)
-                w.writeheader()
-                for rid, pred in predictions.items():
-                    w.writerow({"id": rid, **pred})
-            results[name] = {
-                "qwen": score(rows, predictions),
-                "latency_s": {"median": round(statistics.median(latencies), 2), "max": round(max(latencies), 2)},
-                "prompt_ms_median": round(statistics.median(prompt_ms)), "gen_ms_median": round(statistics.median(gen_ms)),
-                "failures": failures,
-            }
-            print(name, json.dumps({k: v for k, v in results[name]["qwen"].items() if k != "misses"}), results[name]["latency_s"])
-        if args.keyword_predictions:
-            for name, path in zip(("dev", "heldout"), args.keyword_predictions):
-                kw = {r["id"]: r for r in read(path)}
-                results[name]["keyword"] = score(sets[name], kw)
-                qwen = {r["id"]: r for r in read(ROOT / f"ml/reports/qwen_predictions_{name}.csv")}
-                results[name]["hybrid_fill"] = score(sets[name], {i: hybrid(kw[i], qwen[i], fill_all=True) for i in kw})
-                results[name]["hybrid_intent_crop"] = score(sets[name], {i: hybrid(kw[i], qwen[i], fill_all=False) for i in kw})
-                print(name, "keyword", json.dumps({k: v for k, v in results[name]["keyword"].items() if k != "misses"}))
-    finally:
-        server.terminate()
+    if args.keyword_predictions:
+        for name, path in zip(("dev", "heldout"), args.keyword_predictions):
+            kw = {r["id"]: r for r in read(path)}
+            results[name]["keyword"] = score(sets[name], kw)
+            qwen = {r["id"]: r for r in read(ROOT / f"ml/reports/qwen_predictions_{name}.csv")}
+            results[name]["hybrid_fill"] = score(sets[name], {i: hybrid(kw[i], qwen[i], fill_all=True) for i in kw})
+            results[name]["hybrid_intent_crop"] = score(sets[name], {i: hybrid(kw[i], qwen[i], fill_all=False) for i in kw})
+            print(name, "keyword", json.dumps({k: v for k, v in results[name]["keyword"].items() if k != "misses"}))
 
     write_report(results, args.threads)
 
