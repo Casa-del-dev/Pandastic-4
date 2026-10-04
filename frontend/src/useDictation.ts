@@ -13,7 +13,7 @@ type SpeechWindow = Window & {
   SpeechRecognition?: new () => Recognition
   webkitSpeechRecognition?: new () => Recognition
 }
-export type DictationError = 'unsupported' | 'permission' | 'network' | 'no-speech' | 'failed'
+export type DictationError = 'unsupported' | 'permission' | 'network' | 'language' | 'no-speech' | 'failed'
 
 // System WebView has no browser recognition API. Use the Android bridge there.
 class NativeRecognition implements Recognition {
@@ -102,7 +102,7 @@ export function useDictation({ lang, active, context, value, setValue }: {
     }
     instance.onerror = event => {
       if (!currentSession() || event.error === 'aborted') return
-      setError(event.error === 'unsupported' ? 'unsupported' : event.error === 'not-allowed' || event.error === 'service-not-allowed' ? 'permission' : event.error === 'network' ? 'network' : event.error === 'no-speech' ? 'no-speech' : 'failed')
+      setError(event.error === 'unsupported' ? 'unsupported' : event.error === 'not-allowed' || event.error === 'service-not-allowed' ? 'permission' : event.error === 'network' ? 'network' : event.error === 'language' || event.error === 'language-not-supported' ? 'language' : event.error === 'no-speech' ? 'no-speech' : 'failed')
       setListening(false); setInterim('')
     }
     instance.onend = () => {

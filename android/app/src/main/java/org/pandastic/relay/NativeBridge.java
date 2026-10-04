@@ -395,7 +395,7 @@ final class NativeBridge {
     }
 
     @JavascriptInterface public String dictationStatus() { return dictation.status().toString(); }
-    @JavascriptInterface public void startDictation(String id, String lang) { dictation.start(id, lang); }
+    @JavascriptInterface public void startDictation(String id, String lang) { stopSpeaking(); dictation.start(id, lang); }
     @JavascriptInterface public void stopDictation() { dictation.stop(); }
     @JavascriptInterface public void cancelDictation() { activity.runOnUiThread(dictation::cancel); }
 

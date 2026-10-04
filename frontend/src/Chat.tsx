@@ -37,7 +37,7 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
   const current = local ? localDraft : draft
   const dictation = useDictation({ lang, active: visible && !busy, context: local ? 'local' : `sms:${chat.peer}`, value: current, setValue: local ? setLocalDraft : setDraft })
   const readAloud = useReadAloud(lang, visible, local ? 'local' : `sms:${chat.peer}`)
-  const dictationError = dictation.error === 'unsupported' ? t.dictationUnsupported : dictation.error === 'permission' ? t.dictationPermission : dictation.error === 'network' ? t.dictationNetwork : dictation.error === 'no-speech' ? t.dictationNoSpeech : dictation.error ? t.dictationFailed : ''
+  const dictationError = dictation.error === 'unsupported' ? t.dictationUnsupported : dictation.error === 'permission' ? t.dictationPermission : dictation.error === 'network' ? t.dictationNetwork : dictation.error === 'language' ? t.dictationLanguage : dictation.error === 'no-speech' ? t.dictationNoSpeech : dictation.error ? t.dictationFailed : ''
   const messages = chat.messages.filter(message => native.sameNumber(message.number, chat.peer))
   const empty = local ? entries.length === 0 : messages.length === 0
   const lastId = local ? entries.at(-1)?.id : messages.at(-1)?.id

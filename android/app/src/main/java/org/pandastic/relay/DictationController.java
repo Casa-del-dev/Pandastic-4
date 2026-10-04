@@ -61,6 +61,7 @@ final class DictationController {
                             finish(id, code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ? "permission"
                                 : code == SpeechRecognizer.ERROR_NETWORK || code == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ? "network"
                                 : code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ? "no-speech"
+                                : code == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED || code == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ? "language"
                                 : "failed");
                         }
                         @Override public void onResults(Bundle results) {
@@ -76,12 +77,13 @@ final class DictationController {
                         }
                         @Override public void onEvent(int type, Bundle params) { }
                     });
+                    // EXTRA_PREFER_OFFLINE forces offline-only recognition in Google's provider.
+                    // Leave it unset so the service can fall back when a language pack is missing.
                     Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                         .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                         .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "sw".equals(lang) ? "sw-KE" : "en-US")
                         .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                        .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                        .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
+                        .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
                     recognizer.startListening(intent);
                     main.postDelayed(() -> { if (id.equals(activeId)) finish(id, "no-speech"); }, 45000);
                 } catch (Exception error) { finish(id, "failed"); }

@@ -2,7 +2,7 @@ import type { Lang } from './native'
 
 const en = {
   readAloud: 'Read aloud', stopReading: 'Stop reading', speechFailed: 'Couldn’t read aloud. Check the phone’s speech voices and media volume.',
-  nativeDictationNote: 'Uses your phone’s speech service. Offline support depends on installed languages. Review before sending.',
+  nativeDictationNote: 'Uses your phone’s speech service and may use internet. Offline support depends on installed languages. Review before sending.',
   localPhone: 'Local phone', simulatedSms: 'Simulated SMS', localSmsNote: 'Messages travel to the other local instance. No SIM or SMS charges.',
   localNumberHint: 'Use the other instance’s port as its phone number (for example, 5174).', localInvalidNumber: 'Enter a port between 1024 and 65535.', localOwnNumberHint: 'This instance’s port is its phone number.',
   localSendFailed: 'Couldn’t reach the other phone. Check that both local instances are running and the destination is the other port.',
@@ -12,6 +12,7 @@ const en = {
   dictationUnsupported: 'Dictation is unavailable here. Try a supported browser or your keyboard’s microphone.',
   dictationPermission: 'Allow microphone access in settings to dictate. Your draft is still here.',
   dictationNetwork: 'The speech service is unavailable. Check your connection or type your message.',
+  dictationLanguage: 'This speech language is unavailable. Install it in your phone’s speech settings or change the app language. Your draft is still here.',
   dictationNoSpeech: 'No speech detected. Tap the microphone and try again.', dictationFailed: 'Couldn’t dictate. Check your microphone or type your message.',
   chat: 'Chat', models: 'Models', attach: 'Add a picture', camera: 'Camera', gallery: 'Gallery', removePhoto: 'Remove picture',
   photoTooLarge: 'Choose an image smaller than 20 MB.', photoInvalid: 'Choose an image file.', attachmentAlt: 'Attached picture',
@@ -67,7 +68,7 @@ const en = {
 }
 const sw: typeof en = {
   readAloud: 'Sikiliza', stopReading: 'Acha kusoma', speechFailed: 'Sauti haipatikani. Kagua sauti za kusoma na kiwango cha sauti kwenye simu.',
-  nativeDictationNote: 'Inatumia huduma ya sauti ya simu. Bila intaneti inategemea lugha zilizowekwa. Kagua kabla ya kutuma.',
+  nativeDictationNote: 'Inatumia huduma ya sauti ya simu na inaweza kutumia intaneti. Bila intaneti inategemea lugha zilizowekwa. Kagua kabla ya kutuma.',
   localPhone: 'Simu ya ndani', simulatedSms: 'SMS ya kuiga', localSmsNote: 'Ujumbe unaenda kwa app nyingine ya ndani. Hakuna SIM wala gharama za SMS.',
   localNumberHint: 'Tumia port ya app nyingine kama namba ya simu (mfano, 5174).', localInvalidNumber: 'Weka port kati ya 1024 na 65535.', localOwnNumberHint: 'Port ya app hii ndiyo namba yake ya simu.',
   localSendFailed: 'Simu nyingine haipatikani. Kagua kama app zote mbili zinaendesha na namba ni port ya app nyingine.',
@@ -77,6 +78,7 @@ const sw: typeof en = {
   dictationUnsupported: 'Kusema ujumbe hakupatikani hapa. Jaribu kivinjari kinachoruhusu au kipaza sauti cha kibodi.',
   dictationPermission: 'Ruhusu kipaza sauti kwenye mipangilio. Ujumbe wako bado upo.',
   dictationNetwork: 'Huduma ya sauti haipatikani. Kagua intaneti au andika ujumbe.',
+  dictationLanguage: 'Lugha hii haipatikani kwa huduma ya sauti. Iweke kwenye mipangilio ya sauti ya simu au badili lugha ya app. Ujumbe wako bado upo.',
   dictationNoSpeech: 'Sauti haikusikika. Gusa kipaza sauti ujaribu tena.', dictationFailed: 'Ujumbe wa sauti haukupatikana. Kagua kipaza sauti au andika ujumbe.',
   chat: 'Mazungumzo', models: 'Modeli', attach: 'Ongeza picha', camera: 'Kamera', gallery: 'Picha zilizopo', removePhoto: 'Ondoa picha',
   photoTooLarge: 'Chagua picha ndogo kuliko MB 20.', photoInvalid: 'Chagua faili ya picha.', attachmentAlt: 'Picha iliyoambatishwa',

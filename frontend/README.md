@@ -70,7 +70,7 @@ corepack pnpm run build
 
 Open the Vite URL (normally `http://localhost:5173`). The browser supports mode selection and visual previews, with clearly marked sample model results. SMS sending is disabled because it needs the Android bridge. Phone mode, language and destination are stored locally. Browser conversations are not real carrier traffic.
 
-Fonts, icons and code are bundled offline. No cloud APIs or browser speech recognition are used. The Vite server is only a development tool.
+Fonts, icons and code are bundled offline. Dictation uses the phone or browser speech service, which may process audio online. The Vite server is only a development tool.
 
 ## Source map
 
@@ -126,7 +126,9 @@ The local lab binds to `127.0.0.1`; open the loopback URLs on this computer. Ord
 
 Tap the **microphone** beside Send, allow microphone access, speak, and tap **Stop**. Recognized words are appended to the existing draft, up to the composer's 480-character limit. Review or edit them, then press Send yourself. Dictation never sends automatically. Both the SMS and **This phone** composers support it; the app language selects English (`en-US`) or Swahili (`sw-KE`).
 
-Android uses the native `SpeechRecognizer` service and requests microphone permission on first use. The two-emulator launcher grants this permission automatically. It prefers offline recognition, but installed languages and the phone's speech provider determine availability; Swahili may need internet. Browser phones use `SpeechRecognition` / `webkitSpeechRecognition` when available. Speech providers may process audio online. Errors preserve your draft. Switching conversation, language, or screen cancels recognition and ignores late results.
+Android uses the native `SpeechRecognizer` service and requests microphone permission on first use. The two-emulator launcher grants this permission automatically and enables host microphone input. The phone's provider can use either installed offline languages or online recognition; missing offline packs no longer force dictation to fail. Swahili may need internet. Missing language support shows instructions to install the language or change the app language. Starting dictation stops read-aloud playback. Browser phones use `SpeechRecognition` / `webkitSpeechRecognition` when available. Speech providers may process audio online. Errors preserve your draft. Switching conversation, language, or screen cancels recognition and ignores late results.
+
+To verify the actual Android speech provider and composer together, open Chat in a debug emulator with microphone permission and run `DEVICE=emulator-5556 node scripts/dictation-e2e.mjs /path/to/speech.pcm 'expected words'` from the repository root. Use a phrase in the selected app language, encoded as mono 16 kHz signed 16-bit little-endian PCM (up to 30 seconds). The check injects silence and real audio into the emulator microphone, checks draft preservation, successful transcription without sending, and cancellation on navigation, then restores the draft and microphone setting.
 
 On Android, incoming SMS and local answer bubbles also have a **Read aloud** button when an installed offline voice supports the selected language. Network-only or not-yet-downloaded voices are excluded: Google TTS may advertise Swahili before its voice data is installed. Install the desired voice in Android’s text-to-speech settings when missing. Tap again to stop. Reading stops when leaving the conversation. The launcher sets emulator media volume to 11/15 (`DEMO_VOLUME=8 ./run.sh` changes it); check your computer's sound output too.
 
