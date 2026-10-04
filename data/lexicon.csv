@@ -187,3 +187,15 @@ sw,mistari,symptom,miner,prefix
 sw,michirizi,symptom,streak_virus,prefix
 sw,nakufa,intent,diagnose,substring
 sw,mekufa,intent,diagnose,substring
+sw,emmwanyi,crop,coffee,prefix
+en,emmwanyi,crop,coffee,prefix
+sw,emmwaanyi,crop,coffee,prefix
+en,emmwaanyi,crop,coffee,prefix
+sw,mmwanyi,crop,coffee,prefix
+en,mmwanyi,crop,coffee,prefix
+sw,kasooli,crop,maize,prefix
+en,kasooli,crop,maize,prefix
+sw,ebijanjaalo,crop,bean,prefix
+en,ebijanjaalo,crop,bean,prefix
+sw,bijanjaalo,crop,bean,prefix
+en,bijanjaalo,crop,bean,prefix

@@ -123,6 +123,15 @@ public class KeywordNluTest {
         assertEquals("planting", nlu.parse("can we plant beans next week", null).intent);
     }
 
+    @Test public void lugandaCropWordsGiveTheCropButNotTheLanguage() {
+        Slots coffee = nlu.parse("emmwanyi zange zirwadde amakoola gafuuse kyenvu", null);
+        assertEquals("coffee", coffee.crop);
+        assertEquals("sw", coffee.lang);  // replies stay Swahili-first (D3); the word counts for neither language
+        assertEquals("maize", nlu.parse("kasooli wange alina obuwuka", null).crop);
+        assertEquals("bean", nlu.parse("ebijanjaalo byange", null).crop);
+        assertEquals("en", nlu.parse("my kasooli has worms", null).lang);
+    }
+
     @Test public void normalizeKeepsQuestionMark() {
         assertEquals("bei ya kahawa ?", KeywordNlu.normalize("Bei ya KAHAWA ?!"));
     }
