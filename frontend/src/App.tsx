@@ -136,11 +136,12 @@ function readPhoto(decision: Decision, lang: Lang): Reading {
     case 'RETAKE':
       return { tone: 'calm', title: t.retakeTitle, detail: t.retake[decision.quality ?? 'blur'] ?? t.retake.blur, steps: [], saying: t.photoTips }
     case 'UNSUPPORTED':
-      return { tone: 'unsure', title: t.unsupportedTitle, detail: `${t.unsupported} ${t.askPerson}`, steps: [], saying: t.dontSprayYet }
+      return { tone: 'unsure', title: decision.title ?? t.unsupportedTitle, detail: decision.message ?? `${t.unsupported} ${t.askPerson}`, steps: [], saying: t.dontSprayYet }
     default:
+      // The Brain's message already starts with the safety sentence; the fallback builds one.
       return {
-        tone: 'unsure', title: t.notSure,
-        detail: [decision.label && !decision.label.endsWith('_healthy') && decision.label !== 'other' ? t.maybe(labelName(decision.label, lang)) + '.' : '', t.askPerson].filter(Boolean).join(' '),
+        tone: 'unsure', title: decision.title ?? t.notSure,
+        detail: decision.message ?? [decision.label && !decision.label.endsWith('_healthy') && decision.label !== 'other' ? t.maybe(labelName(decision.label, lang)) + '.' : '', t.askPerson].filter(Boolean).join(' '),
         steps: [], saying: t.dontSprayYet,
       }
   }
@@ -306,7 +307,7 @@ function PriceCard({ decision, lang }: { decision: Decision; lang: Lang }) {
   const t = strings[lang]
   const price = decision.price
   if (!price || (decision.status !== 'PRICE' && decision.status !== 'PRICE_STALE')) {
-    const reading: Reading = { tone: 'unsure', title: t.notSure, detail: `${t.noPrice} ${t.askPerson}`, steps: [] }
+    const reading: Reading = { tone: 'unsure', title: decision.title ?? t.notSure, detail: decision.message ?? `${t.noPrice} ${t.askPerson}`, steps: [] }
     return <>
       <Kanga tone="unsure" saying={t.sayingPrice}><ToneMark tone="unsure" /><h2>{reading.title}</h2><p className="detail">{reading.detail}</p></Kanga>
       <CardActions lang={lang} reading={reading} />
@@ -327,6 +328,7 @@ function PriceCard({ decision, lang }: { decision: Decision; lang: Lang }) {
   return <>
     <Kanga tone={tone} saying={t.sayingPrice}>
       <ToneMark tone={tone} />
+      {price.name && <p className="crop-name">{price.name}</p>}
       <h2>{title}</h2>
       <div className="price-bar" role="img" aria-label={`${t.marketPrice} ${range}${offer ? `, ${t.yourOffer} ${money(offer)}` : ''}`}>
         <span className="price-band" style={{ left: at(price.low), width: price.low === price.high ? '6px' : `calc(${at(price.high)} - ${at(price.low)})` }} />
@@ -336,9 +338,9 @@ function PriceCard({ decision, lang }: { decision: Decision; lang: Lang }) {
         <div><dt><span className="key key-band" />{t.marketPrice}</dt><dd>{range}</dd></div>
         {offer !== undefined && <div><dt><span className={`key key-pin ${low ? 'pin-low' : ''}`} />{t.yourOffer}</dt><dd>{money(offer)}</dd></div>}
       </dl>
-      <p className="detail">{price.currency} / kg, {monthYear(price.date, lang)}</p>
+      <p className="detail">{price.currency} / kg, {price.pricetype === 'Farm-gate' ? (lang === 'sw' ? 'bei ya shambani' : 'farm-gate') : (lang === 'sw' ? 'bei ya rejareja sokoni' : 'market retail')}, {monthYear(price.date, lang)}</p>
       {stale && <p className="detail warn">{t.priceOld(monthYear(price.date, lang))}</p>}
-      <p className="source">{t.source}: {price.source_id.startsWith('ucda') ? 'UCDA / MAAIF' : price.source_id.startsWith('wfp') ? 'WFP (HDX)' : price.source_id}</p>
+      <p className="source">{t.source}: {decision.source?.title ?? (price.source_id.startsWith('ucda') ? 'UCDA / MAAIF' : price.source_id.startsWith('wfp') ? 'WFP (HDX)' : price.source_id)}</p>
     </Kanga>
     <CardActions lang={lang} reading={reading} />
   </>

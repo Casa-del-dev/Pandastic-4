@@ -5,6 +5,9 @@ export type Lang = 'sw' | 'en'
 
 export type Price = {
   commodity: string
+  name?: string
+  market?: string | null
+  pricetype?: string
   low: number
   high: number
   currency: string
@@ -19,6 +22,10 @@ export type Price = {
 // Contracts §2 decision object. Fields are optional because the interim resolver sends fewer.
 export type Decision = {
   status: string
+  intent?: string
+  title?: string
+  message?: string
+  translation?: string
   crop?: string
   label?: string
   prob?: number
@@ -26,7 +33,7 @@ export type Decision = {
   runner_up_prob?: number
   advice_sms?: string
   advice_long?: string
-  source?: { id: string; title?: string; url?: string }
+  source?: { id: string; title?: string; publisher?: string; url?: string; licence?: string }
   price?: Price
   escalate?: boolean
   stub?: boolean

@@ -134,6 +134,7 @@ p { margin: 0; }
 .tone-unsure { background: var(--sun); color: var(--soil); }
 .tone-calm { background: var(--soil); color: var(--sun); }
 
+.crop-name { font-weight: 700; color: var(--soil-muted); }
 .detail { font-size: 18px; color: var(--soil-muted); }
 .detail.warn { color: var(--soil); background: var(--sun-soft); padding: 10px 12px; border-radius: 10px; }
 .source { font-size: 15px; color: var(--soil-muted); }

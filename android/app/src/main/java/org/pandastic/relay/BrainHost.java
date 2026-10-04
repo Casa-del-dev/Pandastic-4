@@ -9,9 +9,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.pandastic.relay.brain.Brain;
 import org.pandastic.relay.brain.ClassifierResult;
+import org.pandastic.relay.brain.Decision;
+import org.pandastic.relay.brain.Knowledge;
 import org.pandastic.relay.brain.LeafClassifier;
 import org.pandastic.relay.brain.QualityGate;
+import org.pandastic.relay.brain.SmsFormatter;
 import org.pandastic.relay.hub.Responder;
 
 /**
@@ -26,6 +30,8 @@ public final class BrainHost {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private LeafClassifier classifier;
     private String classifierError;
+    private Brain brain;
+    private String brainError;
 
     public static synchronized BrainHost get(Context context) {
         if (instance == null) instance = new BrainHost(context.getApplicationContext());
@@ -40,8 +46,12 @@ public final class BrainHost {
     public String photo(Bitmap bitmap, String text, String lang) throws Exception {
         String issue = QualityGate.check(bitmap);
         LeafClassifier model = classifier();
-        if (issue != null || model == null) return interimPhoto(issue, null, false, lang).toString();
-        return interimPhoto(null, model.classify(bitmap), model.stub, lang).toString();
+        Brain brain = brain();
+        ClassifierResult result = issue == null && model != null ? model.classify(bitmap) : null;
+        if (brain == null) return interimPhoto(issue, result, model != null && model.stub, lang).toString();
+        // Without a classifier the Brain sees no result and answers "not sure — ask a person".
+        JSONObject decision = new JSONObject(brain.answerPhoto(issue, result, text, lang).toJson());
+        return decision.put("stub", model != null && model.stub).toString();
     }
 
     /** Typed or SMS question → decision JSON. Call from the worker thread. */
@@ -51,7 +61,10 @@ public final class BrainHost {
 
     /** SMS question → reply text. Call from the worker thread. */
     public Responder.Reply smsReply(String text, String lang) throws Exception {
-        return new Responder.Fallback().answer(text, lang);
+        Brain brain = brain();
+        if (brain == null) return new Responder.Fallback().answer(text, lang);
+        Decision decision = brain.answerText(text, lang);
+        return new Responder.Reply(SmsFormatter.format(decision), decision.toJson());
     }
 
     public JSONObject info() throws JSONException {
@@ -59,7 +72,21 @@ public final class BrainHost {
         return new JSONObject()
             .put("classifier", model == null ? JSONObject.NULL : model.version)
             .put("classifierStub", model != null && model.stub)
-            .put("classifierError", classifierError == null ? JSONObject.NULL : classifierError);
+            .put("classifierError", classifierError == null ? JSONObject.NULL : classifierError)
+            .put("brain", brain() != null)
+            .put("brainError", brainError == null ? JSONObject.NULL : brainError);
+    }
+
+    /** Knowledge base + resolver. Null only if knowledge.sqlite cannot be opened; then replies stay safe fallbacks. */
+    private synchronized Brain brain() {
+        if (brain == null && brainError == null) {
+            try { brain = new Brain(Knowledge.open(context), null); }
+            catch (Exception e) {
+                brainError = e.getClass().getSimpleName();
+                Log.e(TAG, "Knowledge base unavailable", e);
+            }
+        }
+        return brain;
     }
 
     private synchronized LeafClassifier classifier() {
@@ -74,8 +101,8 @@ public final class BrainHost {
     }
 
     /**
-     * Resolver steps 1, 2 and 4 of contracts §2 without advice text. It is replaced by the Brain
-     * (T02) as soon as that lands; until then the UI shows statuses but no treatment advice.
+     * Resolver steps 1, 2 and 4 of contracts §2 without advice text, used only if the knowledge
+     * base fails to open, so the photo check still answers safely.
      */
     private static JSONObject interimPhoto(String issue, ClassifierResult result, boolean stub, String lang) throws JSONException {
         JSONObject decision = new JSONObject().put("lang", lang == null ? "sw" : lang).put("stub", stub);
