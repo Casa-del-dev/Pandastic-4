@@ -238,3 +238,5 @@ input[aria-invalid='true'] { border-color: #a7443f; }
 .dictate-active { background: #fae4df; color: #a7443f; }
 .dictation-status { color: var(--leaf); font-size: 13px; margin: 0 6px 10px; }
 .model-name { overflow-wrap: anywhere; }
+.read-aloud-button { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 6px 8px; margin: 5px -8px 0; border: 0; border-radius: 10px; background: transparent; color: var(--leaf); font-size: 12px; }
+.read-aloud-button[aria-pressed='true'] { background: var(--leaf-soft); }

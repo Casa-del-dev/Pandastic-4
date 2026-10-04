@@ -15,11 +15,41 @@ type SpeechWindow = Window & {
 }
 export type DictationError = 'unsupported' | 'permission' | 'network' | 'no-speech' | 'failed'
 
+// System WebView has no browser recognition API. Use the Android bridge there.
+class NativeRecognition implements Recognition {
+  lang = 'en-US'; continuous = false; interimResults = true; maxAlternatives = 1
+  onresult: Recognition['onresult'] = null
+  onerror: Recognition['onerror'] = null
+  onend: Recognition['onend'] = null
+  private id = crypto.randomUUID()
+  private receive = (event: Event) => {
+    const detail = (event as CustomEvent<{ id: string; state: string; text?: string; error?: string }>).detail
+    if (detail.id !== this.id) return
+    if (detail.state === 'partial' || detail.state === 'result') {
+      this.onresult?.({ results: [{ isFinal: detail.state === 'result', 0: { transcript: detail.text || '' } }] })
+    } else if (detail.state === 'error') {
+      this.onerror?.({ error: detail.error === 'permission' ? 'not-allowed' : detail.error || 'failed' })
+    } else if (detail.state === 'end') {
+      window.removeEventListener('pandastic:dictation', this.receive)
+      this.onend?.()
+    }
+  }
+  start() {
+    window.addEventListener('pandastic:dictation', this.receive)
+    window.PandasticNative!.startDictation!(this.id, this.lang.startsWith('sw') ? 'sw' : 'en')
+  }
+  stop() { window.PandasticNative!.stopDictation!() }
+  abort() {
+    window.removeEventListener('pandastic:dictation', this.receive)
+    window.PandasticNative!.cancelDictation!()
+  }
+}
+
 export function useDictation({ lang, active, context, value, setValue }: {
   lang: Lang; active: boolean; context: string; value: string; setValue: (value: string) => void
 }) {
   const browser = window as SpeechWindow
-  const Constructor = browser.SpeechRecognition || browser.webkitSpeechRecognition
+  const Constructor = window.PandasticNative?.startDictation ? NativeRecognition : browser.SpeechRecognition || browser.webkitSpeechRecognition
   const [listening, setListening] = useState(false)
   const [error, setError] = useState<DictationError>()
   const [interim, setInterim] = useState('')
@@ -72,7 +102,7 @@ export function useDictation({ lang, active, context, value, setValue }: {
     }
     instance.onerror = event => {
       if (!currentSession() || event.error === 'aborted') return
-      setError(event.error === 'not-allowed' || event.error === 'service-not-allowed' ? 'permission' : event.error === 'network' ? 'network' : event.error === 'no-speech' ? 'no-speech' : 'failed')
+      setError(event.error === 'unsupported' ? 'unsupported' : event.error === 'not-allowed' || event.error === 'service-not-allowed' ? 'permission' : event.error === 'network' ? 'network' : event.error === 'no-speech' ? 'no-speech' : 'failed')
       setListening(false); setInterim('')
     }
     instance.onend = () => {
@@ -81,7 +111,7 @@ export function useDictation({ lang, active, context, value, setValue }: {
       setListening(false); setInterim('')
     }
     try { setListening(true); instance.start() }
-    catch { recognition.current = undefined; setListening(false); setError('failed') }
+    catch { instance.abort(); recognition.current = undefined; setListening(false); setError('failed') }
   }
   return { supported: Boolean(Constructor), listening, interim, error, toggle }
 }

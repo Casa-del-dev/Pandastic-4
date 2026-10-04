@@ -91,6 +91,10 @@ type Native = {
   speak(text: string, lang: string): boolean
   voices(): string
   stopSpeaking(): void
+  dictationStatus?(): string
+  startDictation?(id: string, lang: string): void
+  stopDictation?(): void
+  cancelDictation?(): void
 }
 
 declare global {
@@ -343,6 +347,11 @@ export function share(text: string) {
 export function canSpeak(lang: Lang): boolean {
   if (!native) return false
   try { return Boolean(JSON.parse(native.voices())[lang]) } catch { return false }
+}
+
+export function speechStatus(): { ready?: boolean; sw?: boolean; en?: boolean; speaking?: boolean } {
+  if (!native) return { ready: false }
+  try { return JSON.parse(native.voices()) } catch { return { ready: false } }
 }
 
 export function speak(text: string, lang: Lang): boolean {

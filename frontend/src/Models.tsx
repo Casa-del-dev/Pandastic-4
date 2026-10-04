@@ -38,7 +38,7 @@ export default function Models({ lang }: { lang: Lang }) {
     <div className="model-list">
       <section className="model-card">
         <div className="model-title"><Icon name="message" size={21} /><h2>{t.languageModel}</h2><span className={`model-state ${status.language?.loaded ? 'model-loaded' : ''}`}>{state(status.language)}</span></div>
-        <p className="model-name">Qwen3.5-0.8B · Q4_K_M{size(status.language) && ` · ${size(status.language)}`}</p>
+        <p className="model-name">{status.language?.name || 'Qwen3.5-0.8B · Q4_K_M'}{size(status.language) && ` · ${size(status.language)}`}</p>
         <p className="field-hint">{t.languageHint}</p>
         {!native.isDemo && status.language && !status.language.runtimeAvailable && <p className="model-warning">{t.runtimeMissing}</p>}
         <button className="secondary compact" disabled={busy || native.isDemo} onClick={() => void manage('import')}><Icon name="plus" size={17} />{t.importModel}</button>

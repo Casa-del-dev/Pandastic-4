@@ -7,6 +7,7 @@ import { load, save } from './storage'
 import * as native from './native'
 import type { ChatStatus, HubStatus, Lang } from './native'
 import { useDictation } from './useDictation'
+import { useReadAloud } from './useReadAloud'
 
 export type LocalEntry = { id: string; body: string; direction: 'in' | 'out'; image?: string; source?: string; demo?: boolean }
 type Attachment = { file: File; url: string }
@@ -35,6 +36,7 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
   const mounted = useRef(true)
   const current = local ? localDraft : draft
   const dictation = useDictation({ lang, active: visible && !busy, context: local ? 'local' : `sms:${chat.peer}`, value: current, setValue: local ? setLocalDraft : setDraft })
+  const readAloud = useReadAloud(lang, visible, local ? 'local' : `sms:${chat.peer}`)
   const dictationError = dictation.error === 'unsupported' ? t.dictationUnsupported : dictation.error === 'permission' ? t.dictationPermission : dictation.error === 'network' ? t.dictationNetwork : dictation.error === 'no-speech' ? t.dictationNoSpeech : dictation.error ? t.dictationFailed : ''
   const messages = chat.messages.filter(message => native.sameNumber(message.number, chat.peer))
   const empty = local ? entries.length === 0 : messages.length === 0
@@ -127,12 +129,13 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
             {entry.body && <p>{entry.body}</p>}
             {entry.source && <small className="message-source">{strings[lang].source}: {entry.source}</small>}
             {entry.demo && <small className="message-source">{t.demo}</small>}
+            {entry.direction === 'in' && entry.body && readAloud.available && <button type="button" className="read-aloud-button" aria-label={readAloud.speaking === entry.id ? t.stopReading : t.readAloud} aria-pressed={readAloud.speaking === entry.id} onClick={() => readAloud.toggle(entry.id, entry.body)}><Icon name={readAloud.speaking === entry.id ? 'stop' : 'speaker'} size={18} /><span>{readAloud.speaking === entry.id ? t.stopReading : t.readAloud}</span></button>}
           </div>
         </li>) : messages.map(message => <li key={message.id} className={`message-row message-${message.direction}`}>
           <div className="message-bubble"><p>{message.body}</p><small className={message.status === 'failed' ? 'message-failed' : ''}>
             {new Date(message.time).toLocaleTimeString(lang === 'sw' ? 'sw' : 'en', { hour: '2-digit', minute: '2-digit' })}
             {message.direction === 'out' && ` · ${message.status === 'sending' ? t.sending : message.status === 'sent' ? t.sent : message.status === 'submitted' ? t.submitted : message.status === 'unknown' ? t.unknown : t.failed}`}
-          </small></div>
+          </small>{message.direction === 'in' && readAloud.available && <button type="button" className="read-aloud-button" aria-label={readAloud.speaking === `sms-${message.id}` ? t.stopReading : t.readAloud} aria-pressed={readAloud.speaking === `sms-${message.id}`} onClick={() => readAloud.toggle(`sms-${message.id}`, message.body)}><Icon name={readAloud.speaking === `sms-${message.id}` ? 'stop' : 'speaker'} size={18} /><span>{readAloud.speaking === `sms-${message.id}` ? t.stopReading : t.readAloud}</span></button>}</div>
         </li>)}
       </ol>}
       {busy && local && <p className="thinking" role="status">{t.thinking}</p>}
@@ -141,6 +144,7 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
     <div className="composer-area">
       {error && <p className="composer-error" role="alert">{error}</p>}
       {dictationError && <p className="composer-error" role="alert">{dictationError}</p>}
+      {readAloud.failed && <p className="composer-error" role="alert">{t.speechFailed}</p>}
       {dictation.listening && <p className="dictation-status" role="status">{t.listening}{dictation.interim && ` · ${dictation.interim}`}</p>}
       <form className="composer" onSubmit={event => void submit(event)}>
         {local && attachment && <div className="attachment-preview">
@@ -175,7 +179,7 @@ export default function Chat({ lang, capable, visible, chat, hub, entries, setEn
           <button className="send-button" type="submit" aria-label={local ? t.ask : t.send} title={t.keyboardHint} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={busy || dictation.listening || (!current.trim() && !(local && attachment)) || (!local && (!native.validNumber(chat.peer) || !native.canSms))}><Icon name="arrow" size={21} /></button>
         </div>
       </form>
-      <p className="composer-note" id="dictation-note">{t.dictationNote}</p>
+      <p className="composer-note" id="dictation-note">{native.isDemo ? t.dictationNote : t.nativeDictationNote}</p>
       {!local && <p className="composer-note">{native.isLocalPhone ? t.localSmsNote : native.isDemo ? t.browser : t.smsNote}</p>}
     </div>
     {capable && <>

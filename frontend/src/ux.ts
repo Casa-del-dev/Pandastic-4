@@ -1,6 +1,8 @@
 import type { Lang } from './native'
 
 const en = {
+  readAloud: 'Read aloud', stopReading: 'Stop reading', speechFailed: 'Couldn’t read aloud. Check the phone’s speech voices and media volume.',
+  nativeDictationNote: 'Uses your phone’s speech service. Offline support depends on installed languages. Review before sending.',
   localPhone: 'Local phone', simulatedSms: 'Simulated SMS', localSmsNote: 'Messages travel to the other local instance. No SIM or SMS charges.',
   localNumberHint: 'Use the other instance’s port as its phone number (for example, 5174).', localInvalidNumber: 'Enter a port between 1024 and 65535.', localOwnNumberHint: 'This instance’s port is its phone number.',
   localSendFailed: 'Couldn’t reach the other phone. Check that both local instances are running and the destination is the other port.',
@@ -8,7 +10,7 @@ const en = {
   dictate: 'Dictate message', stopDictation: 'Stop dictation', listening: 'Listening… Tap stop when you’re done.',
   dictationNote: 'Dictation may use your browser’s online speech service. Review the words before sending.',
   dictationUnsupported: 'Dictation is unavailable here. Try a supported browser or your keyboard’s microphone.',
-  dictationPermission: 'Allow microphone access in your browser to dictate. Your draft is still here.',
+  dictationPermission: 'Allow microphone access in settings to dictate. Your draft is still here.',
   dictationNetwork: 'The speech service is unavailable. Check your connection or type your message.',
   dictationNoSpeech: 'No speech detected. Tap the microphone and try again.', dictationFailed: 'Couldn’t dictate. Check your microphone or type your message.',
   chat: 'Chat', models: 'Models', attach: 'Add a picture', camera: 'Camera', gallery: 'Gallery', removePhoto: 'Remove picture',
@@ -20,7 +22,7 @@ const en = {
   installed: 'Installed', notInstalled: 'Not installed', loaded: 'Loaded', bundled: 'Included in app', preview: 'Preview',
   previewModel: 'Preview classifier', runtimeMissing: 'Language-model runtime is not included in this build.',
   loadModels: 'Load models', releaseModels: 'Release memory', importModel: 'Import model file', refresh: 'Refresh',
-  modelImportHint: 'Choose Qwen3.5-0.8B-Q4_K_M.gguf from your phone’s files (about 533 MB).',
+  modelImportHint: 'Import Qwen3.5-0.8B-pandastic-Q4_K_M.gguf (fine-tuned, preferred), or Qwen3.5-0.8B-Q4_K_M.gguf (about 533 MB).',
   modelReleaseHint: 'Releasing or importing turns off automatic SMS replies. Models load again with your next local question.',
   modelFailed: 'Couldn’t load the models. Check the installed file and available memory.',
   importFailed: 'Import failed. Check the filename, GGUF format and free storage.',
@@ -63,6 +65,8 @@ const en = {
   pendingSetup: 'Set up SMS in Settings to receive replies.', back: 'Back', priceTitle: 'Check a price',
 }
 const sw: typeof en = {
+  readAloud: 'Sikiliza', stopReading: 'Acha kusoma', speechFailed: 'Sauti haipatikani. Kagua sauti za kusoma na kiwango cha sauti kwenye simu.',
+  nativeDictationNote: 'Inatumia huduma ya sauti ya simu. Bila intaneti inategemea lugha zilizowekwa. Kagua kabla ya kutuma.',
   localPhone: 'Simu ya ndani', simulatedSms: 'SMS ya kuiga', localSmsNote: 'Ujumbe unaenda kwa app nyingine ya ndani. Hakuna SIM wala gharama za SMS.',
   localNumberHint: 'Tumia port ya app nyingine kama namba ya simu (mfano, 5174).', localInvalidNumber: 'Weka port kati ya 1024 na 65535.', localOwnNumberHint: 'Port ya app hii ndiyo namba yake ya simu.',
   localSendFailed: 'Simu nyingine haipatikani. Kagua kama app zote mbili zinaendesha na namba ni port ya app nyingine.',
@@ -70,7 +74,7 @@ const sw: typeof en = {
   dictate: 'Sema ujumbe', stopDictation: 'Acha kusikiliza', listening: 'Ninasikiliza… Gusa kuacha ukimaliza.',
   dictationNote: 'Kusema ujumbe kunaweza kutumia huduma ya sauti ya kivinjari mtandaoni. Kagua maneno kabla ya kutuma.',
   dictationUnsupported: 'Kusema ujumbe hakupatikani hapa. Jaribu kivinjari kinachoruhusu au kipaza sauti cha kibodi.',
-  dictationPermission: 'Ruhusu kipaza sauti kwenye kivinjari. Ujumbe wako bado upo.',
+  dictationPermission: 'Ruhusu kipaza sauti kwenye mipangilio. Ujumbe wako bado upo.',
   dictationNetwork: 'Huduma ya sauti haipatikani. Kagua intaneti au andika ujumbe.',
   dictationNoSpeech: 'Sauti haikusikika. Gusa kipaza sauti ujaribu tena.', dictationFailed: 'Ujumbe wa sauti haukupatikana. Kagua kipaza sauti au andika ujumbe.',
   chat: 'Mazungumzo', models: 'Modeli', attach: 'Ongeza picha', camera: 'Kamera', gallery: 'Picha zilizopo', removePhoto: 'Ondoa picha',
@@ -82,7 +86,7 @@ const sw: typeof en = {
   installed: 'Imewekwa', notInstalled: 'Haijawekwa', loaded: 'Imepakiwa', bundled: 'Ipo kwenye app', preview: 'Onyesho',
   previewModel: 'Modeli ya picha ya onyesho', runtimeMissing: 'Kiendeshi cha modeli ya lugha hakipo kwenye app hii.',
   loadModels: 'Pakia modeli', releaseModels: 'Achia kumbukumbu', importModel: 'Ingiza faili ya modeli', refresh: 'Sasisha',
-  modelImportHint: 'Chagua Qwen3.5-0.8B-Q4_K_M.gguf kwenye faili za simu (takriban MB 533).',
+  modelImportHint: 'Ingiza Qwen3.5-0.8B-pandastic-Q4_K_M.gguf (iliyofunzwa, inapendekezwa), au Qwen3.5-0.8B-Q4_K_M.gguf (takriban MB 533).',
   modelReleaseHint: 'Kuachia au kuingiza huzima majibu ya SMS yenyewe. Modeli zitapakiwa tena ukiuliza swali kwenye simu hii.',
   modelFailed: 'Modeli hazikupakiwa. Kagua faili na kumbukumbu iliyopo.',
   importFailed: 'Faili haikuingizwa. Kagua jina, aina ya GGUF na nafasi ya kuhifadhi.',

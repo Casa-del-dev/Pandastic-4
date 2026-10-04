@@ -40,6 +40,7 @@ public final class FrontendActivity extends Activity {
     private static final int PICK_IMAGE = 20;
     private static final int HUB_PERMISSION = 22;
     private static final int PICK_MODEL = 23;
+    private static final int MICROPHONE_PERMISSION = 24;
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
@@ -47,6 +48,8 @@ public final class FrontendActivity extends Activity {
     private NativeBridge bridge;
     private Runnable afterHubPermissions;
     private String modelRequest;
+    private final List<Runnable> afterAudioPermission = new ArrayList<>();
+    private PermissionRequest webAudioRequest;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -129,8 +132,26 @@ public final class FrontendActivity extends Activity {
                 }
                 return true;
             }
-            // The page never needs the camera stream, microphone or location; photos come from the picker.
-            @Override public void onPermissionRequest(PermissionRequest request) { runOnUiThread(request::deny); }
+            // Only the bundled app may request audio capture. Other WebView resources stay denied.
+            @Override public void onPermissionRequest(PermissionRequest request) {
+                runOnUiThread(() -> {
+                    if (!isLocalOrigin(request.getOrigin())) { request.deny(); return; }
+                    boolean audio = false;
+                    for (String resource : request.getResources()) if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) audio = true;
+                    if (!audio) { request.deny(); return; }
+                    webAudioRequest = request;
+                    requestMicrophonePermission(() -> {
+                        if (webAudioRequest != request || isDestroyed()) return;
+                        webAudioRequest = null;
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                            request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                        else request.deny();
+                    });
+                });
+            }
+            @Override public void onPermissionRequestCanceled(PermissionRequest request) {
+                runOnUiThread(() -> { if (webAudioRequest == request) webAudioRequest = null; });
+            }
             @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage message) {
                 if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
                     android.util.Log.d("PandasticWeb", message.messageLevel() + " " + message.message() + " @" + message.lineNumber());
@@ -176,8 +197,19 @@ public final class FrontendActivity extends Activity {
         requestPermissions(missing.toArray(new String[0]), HUB_PERMISSION);
     }
 
+    void requestMicrophonePermission(Runnable done) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { done.run(); return; }
+        afterAudioPermission.add(done);
+        if (afterAudioPermission.size() == 1) requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, MICROPHONE_PERMISSION);
+    }
+
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == MICROPHONE_PERMISSION) {
+            List<Runnable> callbacks = new ArrayList<>(afterAudioPermission);
+            afterAudioPermission.clear();
+            for (Runnable callback : callbacks) callback.run();
+        }
         if (requestCode == HUB_PERMISSION && afterHubPermissions != null) {
             Runnable done = afterHubPermissions;
             afterHubPermissions = null;
@@ -207,6 +239,7 @@ public final class FrontendActivity extends Activity {
 
     @Override protected void onPause() {
         if (bridge != null) bridge.stopSpeaking();
+        if (bridge != null && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) bridge.cancelDictation();
         webView.onPause();
         super.onPause();
     }
@@ -217,7 +250,14 @@ public final class FrontendActivity extends Activity {
         if (bridge != null) { bridge.announceHub(); bridge.announceChat(); bridge.announceModels(); }
     }
 
+    @Override protected void onStop() {
+        if (bridge != null) bridge.cancelDictation();
+        super.onStop();
+    }
+
     @Override protected void onDestroy() {
+        afterAudioPermission.clear();
+        webAudioRequest = null;
         if (modelRequest != null) bridge.finishModelImport(modelRequest, null);
         if (fileCallback != null) { fileCallback.onReceiveValue(null); fileCallback = null; }
         bridge.close();

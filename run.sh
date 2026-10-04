@@ -26,7 +26,9 @@ the helper's installed image). EMULATOR_NAME selects the helper; BASIC_AVD selec
 the Basic phone. Both run the actual APK with separate storage.
 Ctrl+C stops the browser pair or Android relay. Android emulators remain open.
 Node 22.13+ is required for browser phones. Android also needs the SDK, JDK 17,
-NDK and CMake described in README.md. Import Qwen separately in the Android app.
+NDK and CMake described in README.md. Missing Qwen weights are downloaded (533 MB)
+and installed on the helper; SKIP_QWEN=1 skips this. DEMO_VOLUME sets media volume
+(default 11/15). Microphone access is enabled on both local emulator phones.
 HELP
             exit 0 ;;
         *) printf 'Unknown option: %s. See ./run.sh --help.\n' "$option" >&2; exit 2 ;;
@@ -175,9 +177,16 @@ BASIC=$(bash scripts/android-emulator.sh start --adb "$adb_command" --emulator "
 export HUB BASIC
 make build SDK_DIR="$sdk_directory"
 node scripts/sms-lab.mjs setup --install
+if [[ ${SKIP_QWEN:-0} != 1 ]]; then
+    node scripts/install-qwen.mjs --device "$HUB"
+fi
 # Setup changes native preferences; restart the activities so React reads the chosen
 # roles on first render, rather than leaving a stale onboarding/local-chat screen.
 for phone_serial in "$HUB" "$BASIC"; do
+    # These are our local emulator phones; enable the requested microphone demo.
+    "$adb_command" -s "$phone_serial" shell pm grant org.pandastic.relay android.permission.RECORD_AUDIO
+    node scripts/emulator-audio.mjs "$phone_serial" || printf 'Enable host microphone input in the emulator Extended controls → Microphone.\n'
+    "$adb_command" -s "$phone_serial" shell cmd media_session volume --stream 3 --set "${DEMO_VOLUME:-11}"
     "$adb_command" -s "$phone_serial" shell am start -W -S -n org.pandastic.relay/.FrontendActivity
 done
 printf '\nBoth Android phones are ready. Send P 1 12000 in the Basic phone chat.\nCtrl+C stops the carrier; the emulators stay open.\n'

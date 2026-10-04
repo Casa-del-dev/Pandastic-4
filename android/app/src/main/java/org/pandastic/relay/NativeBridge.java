@@ -11,6 +11,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.database.Cursor;
 import android.net.Uri;
+import android.media.AudioAttributes;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
@@ -46,7 +47,9 @@ final class NativeBridge {
     private final FrontendActivity activity;
     private final WebView webView;
     private TextToSpeech tts;
+    private final DictationController dictation;
     private volatile boolean ttsReady;
+    private volatile String speechId = "";
     private static final AtomicBoolean modelBusy = new AtomicBoolean();
     private final BroadcastReceiver chatChanges = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) { announceChat(); announceHub(); }
@@ -55,6 +58,8 @@ final class NativeBridge {
     NativeBridge(FrontendActivity activity, WebView webView) {
         this.activity = activity;
         this.webView = webView;
+        this.dictation = new DictationController(activity, event -> webView.post(() -> webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('pandastic:dictation', {detail: " + event.toString() + "}))", null)));
         ContextCompat.registerReceiver(activity, chatChanges, new IntentFilter(ChatStore.CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
@@ -340,6 +345,11 @@ final class NativeBridge {
         activity.runOnUiThread(() -> activity.startActivity(Intent.createChooser(send, null)));
     }
 
+    @JavascriptInterface public String dictationStatus() { return dictation.status().toString(); }
+    @JavascriptInterface public void startDictation(String id, String lang) { dictation.start(id, lang); }
+    @JavascriptInterface public void stopDictation() { dictation.stop(); }
+    @JavascriptInterface public void cancelDictation() { activity.runOnUiThread(dictation::cancel); }
+
     /**
      * Reads text aloud with an installed offline voice. Returns false if no voice fits the language (the UI
      * then hides its button) or the engine is still starting. Progress is announced with a
@@ -354,7 +364,8 @@ final class NativeBridge {
         tts.setSpeechRate(0.9f);  // a little slower: many listeners read little and hear the advice once
         String clipped = text.length() > TextToSpeech.getMaxSpeechInputLength()
             ? text.substring(0, TextToSpeech.getMaxSpeechInputLength()) : text;
-        return tts.speak(clipped, TextToSpeech.QUEUE_FLUSH, null, "pandastic") == TextToSpeech.SUCCESS;
+        speechId = java.util.UUID.randomUUID().toString();
+        return tts.speak(clipped, TextToSpeech.QUEUE_FLUSH, null, speechId) == TextToSpeech.SUCCESS;
     }
 
     /** {ready, sw, en, speaking}: which offline voices exist. Starts the engine if it is not running yet. */
@@ -369,7 +380,7 @@ final class NativeBridge {
     }
 
     @JavascriptInterface public void stopSpeaking() {
-        if (ttsReady && tts.isSpeaking()) { tts.stop(); announceSpeech("stopped"); }
+        if (ttsReady) { speechId = ""; tts.stop(); announceSpeech("stopped"); }
     }
 
     // ---- Internals -------------------------------------------------------------------------
@@ -383,11 +394,14 @@ final class NativeBridge {
             tts = new TextToSpeech(activity, status -> {
                 ttsReady = status == TextToSpeech.SUCCESS;
                 if (!ttsReady) { Log.w(TAG, "No text-to-speech engine"); return; }
+                tts.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
+                announceSpeech("ready");
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String id) { announceSpeech("start"); }
-                    @Override public void onDone(String id) { announceSpeech("done"); }
-                    @Override public void onError(String id) { announceSpeech("error"); }
-                    @Override public void onStop(String id, boolean interrupted) { announceSpeech("stopped"); }
+                    @Override public void onStart(String id) { if (id.equals(speechId)) announceSpeech("start"); }
+                    @Override public void onDone(String id) { if (id.equals(speechId)) announceSpeech("done"); }
+                    @Override public void onError(String id) { if (id.equals(speechId)) announceSpeech("error"); }
+                    @Override public void onStop(String id, boolean interrupted) { if (id.equals(speechId)) announceSpeech("stopped"); }
                 });
             });
         });
@@ -399,6 +413,7 @@ final class NativeBridge {
     }
 
     void close() {
+        dictation.close();
         activity.unregisterReceiver(chatChanges);
         if (tts != null) tts.shutdown();
     }
