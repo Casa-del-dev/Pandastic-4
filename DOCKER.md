@@ -29,8 +29,11 @@ small stand-ins for the Android APIs (`desktop/`). It also loads:
   release and checks its size and SHA-256 against `ml/llm/model.json`.
 - the EfficientNet-B0 leaf model and `knowledge.sqlite` from the APK's assets.
 
-Like the app, personal messages ("Habari mwanangu, shule inaendaje?") get no
-automatic reply. Dictation (Whisper) only runs in the Android app; in the
+In the demo the helper answers every SMS from Noor: a message that is not
+about farming ("hello") gets the menu. The app itself leaves personal messages
+and plain greetings unanswered (`HubPolicy`); set `PANDASTIC_HUB_ANSWER_ALL: "0"`
+in `docker-compose.yml` for that behaviour. Answered SMS stay out of the
+helper's chat (they are in its helper log in Settings). Dictation (Whisper) only runs in the Android app; in the
 browser the microphone uses the browser's own speech service.
 
 The leaf photo path follows the app (640 px JPEG, bilinear resize to 224 px

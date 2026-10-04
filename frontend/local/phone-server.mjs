@@ -14,6 +14,8 @@ export function localPhonePlugin() {
   const directory = resolve(process.env.PANDASTIC_PHONE_STATE_DIR || '.local-phones')
   // Docker: the helper phone's real Java brain (desktop/BrainServer.java). Without it, the labelled local demo answers.
   const brainUrl = process.env.PANDASTIC_BRAIN_URL?.replace(/\/$/, '')
+  // Docker demo: answer every allowlisted SMS, personal ones with the menu. The app (HubPolicy) leaves those unanswered.
+  const answerAll = process.env.PANDASTIC_HUB_ANSWER_ALL === '1'
   async function brain(path, body) {
     const response = await fetch(`${brainUrl}${path}`, {
       method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' },
@@ -149,7 +151,7 @@ export function localPhonePlugin() {
                     try { answer = await brain('/sms', { text: data.body }) }
                     catch (error) { console.error(`Brain unavailable (${error.message}); local demo answer sent.`) }
                     // A personal message is not answered and shows in the chat like any SMS.
-                    if (answer && !answer.farming) { entry.status = 'personal'; entry.question = ''; show(); return }
+                    if (answer && !answer.farming && !answerAll) { entry.status = 'personal'; entry.question = ''; show(); return }
                     entry.reply = answer ? answer.reply : localAnswer(db, data.body, state.hub.lang)
                   } else entry.reply = localAnswer(db, data.body, state.hub.lang)
                   const result = await send(`reply-${data.id}`, data.from, entry.reply, true)

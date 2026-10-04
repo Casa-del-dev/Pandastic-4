@@ -10,6 +10,9 @@ services:
     image: pandastic-phones
     environment:
       PANDASTIC_BRAIN_URL: http://brain:8090
+      # Every SMS from Noor gets an answer; non-farming ones get the menu. "0" = the app's rule (HubPolicy:
+      # personal messages and plain greetings get no reply).
+      PANDASTIC_HUB_ANSWER_ALL: "1"
     depends_on:
       brain: { condition: service_healthy }
     ports: ["8080:8080", "5173:5173", "5174:5174"]
