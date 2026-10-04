@@ -12,9 +12,9 @@ import java.util.Set;
 import org.json.JSONObject;
 
 /**
- * Qwen3.5-0.8B (llama.cpp) reads messy SMS text into slots (contracts §5). It only fills what the
- * keyword NLU could not find, its output is forced into JSON by a GBNF grammar and then checked
- * against fixed lists here, and it never writes advice or prices. Any failure falls back to keywords.
+ * Qwen3.5-0.8B (llama.cpp) reads messy SMS text (contracts §5). It only names the intent when the
+ * keyword NLU found none; its output is forced into JSON by a GBNF grammar and then checked against a
+ * fixed list here, and it never writes advice or prices. Any failure falls back to keywords.
  */
 public final class LlmNlu implements Nlu, AutoCloseable {
     private static final String TAG = "PandasticLlm";
@@ -24,7 +24,6 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     /** The SMS hub waits up to 60 s per question; the model gets a third of that, then keywords answer. */
     private static final int TIME_BUDGET_MS = 20_000;
     private static final Set<String> INTENTS = new HashSet<>(Arrays.asList("diagnose", "price", "planting", "help", "other"));
-    private static final Set<String> CROPS = new HashSet<>(Arrays.asList("coffee", "maize", "bean"));
 
     private static final String DEFAULT_SYSTEM = "You read one short SMS from a smallholder farmer in Uganda. "
         + "It may be Swahili, English or Luganda, and may be misspelled. Reply with JSON only. "
@@ -84,19 +83,30 @@ public final class LlmNlu implements Nlu, AutoCloseable {
     }
 
     /**
-     * Hybrid policy measured by B (ml/reports/nlu_eval.md, held-out SMS: keywords 68%, Qwen alone 34%,
-     * hybrid 78%): keywords first; the model only fills the intent and the crop the keywords missed.
-     * It is never trusted for the symptom, the offer, the language or the commodity.
+     * Hybrid policy measured by B (ml/reports/nlu_eval.md, all slots right: keywords 0.68 on held-out and
+     * fresh SMS; keywords + model intent 0.78 / 0.68; also taking the model's crop 0.78 / 0.62, because it says
+     * coffee or maize when the farmer wrote cassava, tomato or tea). So: keywords first, and the model only
+     * names the intent of a message the keywords could not read. It is never trusted for the crop, the
+     * symptom, the offer, the language or the commodity.
      */
     @Override public Slots parse(String text, String lang) {
         Slots slots = keywords.parse(text, lang);
-        if (slots.intentProb > 0 && slots.crop != null) return slots;
+        if (!needsModel(slots)) return slots;
         JSONObject json = complete(text);
-        if (json == null) return slots;
-        String intent = json.optString("intent", null), crop = json.optString("crop", null);
-        if (slots.intentProb == 0 && INTENTS.contains(intent)) { slots.intent = intent; slots.intentProb = 0.8f; }
-        if (slots.crop == null && CROPS.contains(crop)) slots.crop = crop;
-        return slots;
+        return merge(slots, json == null ? null : json.optString("intent", null));
+    }
+
+    static boolean needsModel(Slots keywordSlots) {
+        return keywordSlots.intentProb == 0;
+    }
+
+    /** Takes the model's intent only if the keywords found none and it is one of the known intents. */
+    static Slots merge(Slots keywordSlots, String modelIntent) {
+        if (keywordSlots.intentProb == 0 && INTENTS.contains(modelIntent)) {
+            keywordSlots.intent = modelIntent;
+            keywordSlots.intentProb = 0.8f;
+        }
+        return keywordSlots;
     }
 
     /** Fixed part of the chat prompt; evaluated once and cached (B's T31 note). */
