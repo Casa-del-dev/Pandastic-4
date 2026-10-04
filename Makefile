@@ -35,7 +35,7 @@ release:
 
 # Quick UI development in the computer's browser.
 web:
-	@cd frontend && corepack pnpm run dev
+	@cd frontend && $(if $(shell command -v corepack 2>/dev/null),corepack pnpm,pnpm) run dev
 
 # Run on an emulator. Reuse an existing emulator when possible.
 run:

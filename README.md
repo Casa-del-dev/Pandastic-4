@@ -58,7 +58,7 @@ All sources, licences and sizes, the evidence for the problem, and **what the da
 
 ## Run it
 
-Requirements: JDK 17, Android SDK 35, NDK `28.2.13676358` with CMake 3.22.1 (for llama.cpp), Node 20+ and **Corepack**. Gradle uses Corepack to run the pnpm version pinned in `frontend/package.json`; a global `pnpm` executable is not required.
+Requirements: JDK 17, Android SDK 35, NDK `28.2.13676358` with CMake 3.22.1 (for llama.cpp), Node 20+ and **Corepack** (Gradle runs the pnpm version pinned in `frontend/package.json`) or, on Node 25+ where Corepack is no longer bundled, a global **pnpm**.
 
 ```sh
 make run            # start/select emulator, build + install + launch; plain make does the same

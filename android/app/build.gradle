@@ -3,11 +3,15 @@ plugins { id 'com.android.application' }
 // Keep React source separate; package its production build inside the APK.
 def frontendDirectory = rootProject.file('../frontend')
 def generatedFrontendAssets = layout.buildDirectory.dir('generated/frontendAssets')
-def corepackCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'corepack.cmd' : 'corepack'
+def onWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+def onPath = { String exe -> (System.getenv('PATH') ?: '').split(File.pathSeparator).any { new File(it, exe).canExecute() } }
+// Corepack runs the pnpm pinned in package.json; Node 25+ no longer ships Corepack, so fall back to pnpm.
+def pnpm = onPath(onWindows ? 'corepack.cmd' : 'corepack') ? [onWindows ? 'corepack.cmd' : 'corepack', 'pnpm'] : [onWindows ? 'pnpm.cmd' : 'pnpm']
 
 def installFrontend = tasks.register('installFrontend', Exec) {
     workingDir frontendDirectory
-    commandLine corepackCommand, 'pnpm', 'install', '--frozen-lockfile'
+    commandLine(*pnpm, 'install', '--frozen-lockfile')
+    environment 'CI', 'true'  // never wait on a pnpm prompt (e.g. purge node_modules after a pnpm version switch)
     inputs.files(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'].collect { new File(frontendDirectory, it) })
     outputs.dir(new File(frontendDirectory, 'node_modules'))
 }
@@ -15,7 +19,8 @@ def installFrontend = tasks.register('installFrontend', Exec) {
 def buildFrontend = tasks.register('buildFrontend', Exec) {
     dependsOn installFrontend
     workingDir frontendDirectory
-    commandLine corepackCommand, 'pnpm', 'run', 'build'
+    commandLine(*pnpm, 'run', 'build')
+    environment 'CI', 'true'
     inputs.dir(new File(frontendDirectory, 'src'))
     inputs.files(['package.json', 'pnpm-lock.yaml', 'index.html', 'tsconfig.json', 'vite.config.ts'].collect { new File(frontendDirectory, it) })
     outputs.dir(new File(frontendDirectory, 'dist'))
