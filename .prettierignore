@@ -1,0 +1,2 @@
+# Shared coordination file: append-only, never reformat (a format-on-save rewrite dropped entries once).
+LEDGER.md
